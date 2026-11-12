@@ -20,6 +20,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - Base `529e073f8`; prepare an exact globally scaled ten-second input and its final five-second window for an original fused CUDA versus audited non-fused adapter comparison with retained CPU intermediates. Reuse verified wheels and the existing reference archive; require the original T4/CPython/Torch ABI. The user reports GPU unavailable until the 2026-11-14 refresh, so no model result is claimed. An earlier quota reading omitted the SDK duration's day component; use `total_seconds()` on the structured response. A one-second crop alone does not preserve the failing context.
 
+### Deferred RE-USE GPU diagnostic launcher — Codex (2026-11-12)
+
+- Prepare a one-shot launcher for committed candidate `8c2503d21` after 2026-11-14 00:00 UTC. Implemented exact source/artifact pins, stable completed producer, private authenticated account, structured quota including reservations and a persistent duplicate-attempt claim. All 13 model-free guard tests pass. Immutable candidate and cached evidence hashes, plus read-only live producer/target metadata checks, pass. Operator review and scheduling remain; no schedule or GPU submission during preparation.
+
 ### Kaggle output streamed recovery — Codex (2026-11-12)
 
 - Base `529e073f8`; `tools/kaggle/recover_output.py` recovers an exact latest-session output with bounded-memory streaming, explicit byte/hash verification and atomic publication. Its 19 model-free controls cover paginated selection, failure preservation and redacted errors. A live manifest download passed byte and hash verification. The unsupported SDK version selector returned HTTP 404 and was removed; usage and trust requirements are in the Kaggle README.

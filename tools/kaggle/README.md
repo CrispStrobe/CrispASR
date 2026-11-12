@@ -233,3 +233,79 @@ Model-free mocked controls (no network, credentials or weights):
 ```bash
 python -m unittest discover -s tests -p test_kaggle_output_recovery.py -v
 ```
+
+## One deferred RE-USE GPU diagnostic
+
+`launch_reuse_followup.py` is a task-specific one-shot launcher, not a recurring
+scheduler. The frozen candidate is `8c2503d21e2f983254a75e85dbc1e8d0e0e79da0`,
+with script SHA-256
+`5264912f1d2851b123849c4451e2b62d9029c9f98eef9de8b152cbb81e81452d`.
+It reads script/metadata from immutable Git objects, checks their hashes and
+runtime source pin, and verifies the cached window-2 reference, native log and
+manifest in bounded-memory local reads. It never downloads the large archive.
+The script and metadata are staged privately for exactly one submission.
+
+Execution requires `--execute-once`, `--repo`, `--evidence-dir` and `--receipt`.
+It refuses outside **2026-11-14 00:00 through 2026-11-15 00:00 UTC**, regardless
+of currently available quota. The authenticated username must equal the one
+private configured account. Structured SDK quota durations use `.total_seconds()`:
+SDK representations can drop `timedelta` days (`1 day + 21600 s` is 30 hours,
+not 6). Allowed minus used minus reserved must be at least 4500 seconds, and
+the weekly quota window must have advanced past the November 14 refresh.
+Missing/malformed data, stale quota, API failures and uncertain states refuse.
+Only the reviewed Kaggle 2.2.2 / kagglesdk 0.1.37 adapter versions are accepted;
+SDK changes require review of submission retry behavior. The submission requests
+a **3600-second** session timeout through the documented
+SDK argument; platform enforcement is not guaranteed. Existing worker time and
+resource guards still apply. This is actual fused CUDA versus reference GPU
+work, with no CPU fallback, alternate account, retry, redraw or polling loop.
+
+Two preflight snapshots require the producer to remain COMPLETE at version 1,
+with the same ID/timestamp and all three required output filenames. The target
+must be absent from the authenticated `mine=True` search for its exact slug;
+failed or truncated searches and results from other accounts refuse. A direct
+lookup of a nonexistent target returned 403, and broad paginated listings
+repeated entries, so neither is used to infer target absence. Producer metadata
+uses an exact lookup. Search indexing and a different client submitting after
+the last check remain races; the local claim cannot lock Kaggle globally.
+Remote metadata exposes filenames,
+not archive hashes; local evidence hashes and the worker's mounted-archive check
+provide that verification. `kernel_sources` attaches the latest output and has
+no supported version pin here: a producer rerun after the last check can race
+attachment. Do not rerun the producer while this queued diagnostic is pending;
+the worker checks its archive before inference.
+
+A persistent exclusive claim in the repository's **Git common directory** blocks
+duplicate manual invocations across its worktrees, even when a different receipt
+path is supplied. Once remote preflight starts, any failure or unknown submission
+outcome consumes that claim. Inspect the receipt and remote state manually;
+never delete the claim to retry automatically. Use one canonical repository for
+this job. A private JSONL receipt records safe states and pins, not usernames,
+credentials, signed URLs or machine paths. A hard kill preserves the claim and
+last flushed receipt event, including submission intent if its outcome is unknown.
+
+An operator may schedule one reviewed private shell job with local `at` after
+00:00 UTC on November 14, for example at 00:05. Freeze and hash the launcher and
+its `recover_output.py` dependency before queuing; do not execute mutable branch
+files on the scheduled date. The private job should set `umask 077`, source its
+private environment without tracing, and invoke the frozen launcher under a
+300-second local `timeout`, with absolute Python/repository/evidence/receipt
+paths. No credentials should be in the shell command, output, or tracked files.
+`at` snapshots its environment; enqueue from a clean environment so credential
+values are not copied into its spool:
+
+```bash
+env -i HOME="$HOME" PATH=/usr/bin:/bin TZ=UTC \
+  at -M -t 202611140005 -f "$PRIVATE_JOB"
+atq
+```
+
+Check the daemon, single queued entry, private job hashes and local receipt
+location when scheduling. `atd` must remain available; a late job refuses after
+the one-day window. The launcher does not enqueue anything itself, and its
+preparation tests neither schedule nor submit a job. Terminal GPU output still
+requires separate recovery and review; submission is not model acceptance.
+
+```bash
+python -m unittest discover -s tests -p test_kaggle_deferred_launch.py -v
+```
