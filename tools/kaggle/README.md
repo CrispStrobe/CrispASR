@@ -211,8 +211,12 @@ python tools/kaggle/recover_output.py kernel-slug \
 ```
 
 Supply the byte count and SHA-256 from a trusted producer receipt, not from the
-failed placeholder or the download response. The optional `--version LABEL`
-selects a Kaggle version; otherwise metadata describes the latest session. Use
+failed placeholder or the download response. Only the latest session is supported;
+there is no version-selection option. The SDK exposes a `version_label` field,
+but setting it to a completed kernel's numeric version returned HTTP 404 with
+Kaggle 2.2.2; the official output downloader also leaves this field unset. Keep
+the expected producer receipt when a kernel is rerun: if the current session
+serves different bytes, verification fails and preserves the destination. Use
 the full output name including directories, not a basename or regular expression.
 The destination parent must already exist on storage with sufficient free space
 for a complete temporary copy. A unique sibling `.part` file is flushed and

@@ -15,7 +15,7 @@ class RecoveryError(Exception):
     """A safe diagnostic that contains no remote URLs or credentials."""
 
 
-def find_artifact(api, request_factory, owner, kernel, artifact, version=None):
+def find_artifact(api, request_factory, owner, kernel, artifact):
     """List all pages and require one exact file_name, never a basename/regex match."""
     matches = []
     token = ""
@@ -30,8 +30,6 @@ def find_artifact(api, request_factory, owner, kernel, artifact, version=None):
                 request.kernel_slug = kernel
                 request.page_size = 100
                 request.page_token = token
-                if version:
-                    request.version_label = version
                 response = client.kernels.kernels_api_client.list_kernel_session_output(request)
                 matches.extend(item.url for item in response.files or [] if item.file_name == artifact)
                 token = response.next_page_token
@@ -43,7 +41,7 @@ def find_artifact(api, request_factory, owner, kernel, artifact, version=None):
     except RecoveryError:
         raise
     except Exception:
-        raise RecoveryError("output listing failed; check authentication, access and kernel/version") from None
+        raise RecoveryError("output listing failed; check authentication, access and kernel") from None
     if len(matches) != 1:
         raise RecoveryError(f"expected one exact artifact match; found {len(matches)}")
     return matches[0]
@@ -143,7 +141,6 @@ def authenticated_api():
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("kernel", help="kernel slug only; account comes from KAGGLE_ACCOUNT/KAGGLE_USERNAME")
-    parser.add_argument("--version", help="optional Kaggle version label; default is latest session")
     parser.add_argument("--artifact", required=True, help="exact output file_name, including any directories")
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--expected-bytes", required=True, type=int)
@@ -156,7 +153,7 @@ def main(argv=None):
         if not re.fullmatch(r"[A-Za-z0-9_-]+", args.kernel):
             raise RecoveryError("kernel must be a slug without an account or URL")
         api, request_factory = authenticated_api()
-        url = find_artifact(api, request_factory, owner, args.kernel, args.artifact, args.version)
+        url = find_artifact(api, request_factory, owner, args.kernel, args.artifact)
         count, digest = stream_artifact(url, args.destination, args.expected_bytes, args.sha256)
         print(f"Verified and published {count} bytes; SHA-256 {digest}")
         return 0

@@ -173,7 +173,7 @@ class ListingTests(unittest.TestCase):
             list_kernel_session_output=endpoint)))
         api = Mock()
         api.build_kaggle_client.return_value = contextlib.nullcontext(client)
-        result = recovery.find_artifact(api, SimpleNamespace, "private-owner", "kernel", artifact, "7")
+        result = recovery.find_artifact(api, SimpleNamespace, "private-owner", "kernel", artifact)
         return result, endpoint.call_args_list
 
     @staticmethod
@@ -181,7 +181,7 @@ class ListingTests(unittest.TestCase):
         return SimpleNamespace(files=[SimpleNamespace(file_name=name, url=URL) for name in names],
                                next_page_token=token)
 
-    def test_exact_selection_on_later_page_and_version_forwarding(self):
+    def test_exact_selection_on_later_page_uses_latest_session(self):
         url, calls = self.list_with([self.page(["artifact.tar", "nested/artifact.tar.bak"], "next"),
                                      self.page(["nested/artifact.tar"])])
         self.assertEqual(url, URL)
@@ -190,7 +190,7 @@ class ListingTests(unittest.TestCase):
             request = call.args[0]
             self.assertEqual(request.user_name, "private-owner")
             self.assertEqual(request.kernel_slug, "kernel")
-            self.assertEqual(request.version_label, "7")
+            self.assertFalse(hasattr(request, "version_label"))
             self.assertEqual(request.page_token, "next" if index else "")
 
     def test_missing_duplicate_or_repeating_page_is_rejected(self):
@@ -233,6 +233,16 @@ class CLITests(unittest.TestCase):
             self.assertEqual(recovery.authenticated_api(), (api, SimpleNamespace))
             self.assertEqual(os.environ["KAGGLE_API_TOKEN"], "private-token")
         self.assertEqual(output.getvalue(), "")
+
+    def test_unsupported_version_option_is_rejected_before_authentication(self):
+        with patch.object(recovery, "authenticated_api") as authenticate, \
+             contextlib.redirect_stderr(io.StringIO()) as error:
+            with self.assertRaises(SystemExit) as caught:
+                recovery.main(["kernel", "--artifact", "archive.tar", "--destination", "archive.tar",
+                               "--expected-bytes", "1", "--sha256", SHA, "--version", "2"])
+        self.assertEqual(caught.exception.code, 2)
+        authenticate.assert_not_called()
+        self.assertIn("unrecognized arguments: --version", error.getvalue())
 
     def test_cli_error_is_safe_and_nonzero(self):
         with patch.dict(os.environ, {}, clear=True), contextlib.redirect_stderr(io.StringIO()) as output:
