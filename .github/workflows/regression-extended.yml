@@ -42,8 +42,11 @@ jobs:
       actions: read
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
+      coverage: ${{ steps.pick.outputs.coverage }}
     steps:
       - uses: actions/checkout@v6
+      - name: Test coverage outcome reporting
+        run: python3 tests/test_extended_regression_report.py
       - id: pick
         env:
           GH_TOKEN: ${{ github.token }}
@@ -63,6 +66,7 @@ jobs:
             if [ "$queued" != 0 ] || [ "$nightly" != 0 ]; then
               echo 'Actions queue busy - skipping this daily extended sweep'
               echo 'matrix=[]' >> "$GITHUB_OUTPUT"
+              echo 'coverage=deferred' >> "$GITHUB_OUTPUT"
               exit 0
             fi
           fi
@@ -81,6 +85,7 @@ jobs:
           PY
           )
           echo "matrix=$m" >> "$GITHUB_OUTPUT"
+          echo "coverage=selected" >> "$GITHUB_OUTPUT"
           echo "selected: $m"
 
   regression:
@@ -133,3 +138,24 @@ jobs:
         run: |
           rm -rf "${{ runner.temp }}/regression-${{ matrix.backend }}" 2>/dev/null || true
           df -h /
+
+  coverage:
+    # A deferred run remains successful, but is visibly labelled zero coverage.
+    # An unexpectedly skipped or failed selected matrix is a failure.
+    name: "${{ needs.select.outputs.coverage == 'deferred' && 'Coverage: DEFERRED (queue busy)' || 'Coverage: selected regression' }}"
+    needs: [select, regression]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      outcome: ${{ steps.report.outputs.outcome }}
+      selected_count: ${{ steps.report.outputs.selected_count }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: report
+        env:
+          SELECTION_RESULT: ${{ needs.select.result }}
+          COVERAGE_SELECTION: ${{ needs.select.outputs.coverage }}
+          COVERAGE_MATRIX: ${{ needs.select.outputs.matrix }}
+          REGRESSION_RESULT: ${{ needs.regression.result }}
+        run: python3 tools/extended_regression_report.py

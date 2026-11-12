@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Extended regression coverage outcome — Codex (2026-11-12)
+
+- Source `30d03c393`. A queue-deferred scheduled extended run currently appears successful while testing no backends. Add a visible, machine-readable outcome that distinguishes deferred, executed and failed coverage without turning intentional deferral into a failed regression; test outcome selection and inspect current-source subset run [43228397799](https://github.com/CrispStrobe/CrispASR/actions/runs/43228397799), currently queued at `30d03c393`. Preserve the weekly and queue-aware scheduling policy.
+
 ### Model documentation and issues #577/#579 — Codex (2026-11-07)
 
 - Source `0c39103756be95576202985e9972479648b4b5c9`. First document shipped Haas-ja usage and the actual Ultra/RE-USE support boundaries against the registry and runtime. Then review draft PR #580 and continue the pinned Ultra local-head and RE-USE work with unit and original-model parity tests; assess Nemotron 3.5 30B conversion, resource and Q3/Q4 quality feasibility. Preserve the #568 Metal CPU fallback and defer physical Metal work as requested.
