@@ -1,7 +1,3 @@
-## NOW — CPU quality audit (2026-11-12)
-
-Claimed/completed preparation: independent saved-waveform analysis found same-region context disagreement (SI-SDR 6.39 vs −9.03 dB on 5–7.5 s); offline CPU multi-speaker harness prepared with 71-stage fingerprints plus raw input. Local metric/dependency controls pass. Broader 16-case corpus run pending; no native/GPU model jobs or pushes. See tools/kaggle/reuse-quality-cpu-20261112/README.md.
-
 # CrispASR — Current work plan
 
 Updated 2026-11-07. Start with [the maintainer handoff](docs/maintenance-handoff.md).
@@ -19,6 +15,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 ### RE-USE CPU corpus quality and deferred fused check — Codex (2026-11-12)
 
 - Offline CPU kernel `crispasr-re-use-quality-cpu-20261112` version 1 completed a 16-case, four-speaker LibriSpeech test-clean matrix. Source `8145ad0cb8b13faebf082cf08799cb5311618414` and uploaded script SHA-256 `e5bb069a930745389e180d393dcbfd00d8903c8ec49ec3011505a1936c0e13e9` match; all cases, waveform hashes, fingerprints and independently recomputed metrics passed verification against official OpenSLR inputs. The [receipt](docs/historical/reuse-quality-cpu-20261112.json) reports improvements on all 12 synthetic-noise cases, but one clean output and the separate JFK proxy show limitations. Fingerprints are not native comparisons; representative noise, listening and native corpus parity remain open.
+- A separate [CPU ASR proxy](docs/historical/reuse-quality-cpu-asr-proxy-20261112.json) completed all 36 tiny.en invocations and compares each condition with the recognizer's clean-audio transcript. It is not human-reference WER or a product acceptance test.
 - The exact final-window original fused GPU diagnostic remains unexecuted. A single guarded local scheduler attempt is queued for 2026-11-14 00:05 UTC, subject to quota, authenticated account, source, producer and duplicate checks; it requires the host and scheduler to remain available and can refuse safely. Recover and review the terminal result before making any model or parity claim.
 
 ### Kaggle output streamed recovery — Codex (2026-11-12)
@@ -27,7 +24,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### RE-USE rebuilt C ABI qualification — Codex (2026-11-12)
 
-- Source `529e073f8`; qualify an isolated shared-library build with the pinned real research GGUF, positive/null controls and architecture-map suite. No production RE-USE backend is registered. After explicit CPU authorization, the isolated shared-library build completed all 533 steps with two jobs. Real-GGUF detection/open rejection, Whisper metadata and null controls pass against the newly built library; the architecture-map suite passes 630 assertions across seven cases, with 11 alternate-mapping assertions across two further cases. The [candidate receipt](docs/historical/reuse-c-abi-candidate-20261112.json) pins source, libraries, model and logs. No CI launch, Kaggle submission or push.
+- Source `529e073f8`; qualify an isolated shared-library build with the pinned real research GGUF, positive/null controls and architecture-map suite. No production RE-USE backend is registered. After explicit CPU authorization, the isolated shared-library build completed all 533 steps with two jobs. Real-GGUF detection/open rejection, Whisper metadata and null controls pass against the newly built library; the architecture-map suite passes 630 assertions across seven cases, with 11 alternate-mapping assertions across two further cases. The [candidate receipt](docs/historical/reuse-c-abi-candidate-20261112.json) pins source, libraries, model and logs. No CI or Kaggle job was required for this interface qualification.
 
 ### RE-USE ten-second candidate — Codex (2026-11-12)
 

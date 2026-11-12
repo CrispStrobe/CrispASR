@@ -198,3 +198,8 @@ removed. Use a fresh output directory for a new run. This optional proxy measure
 ASR disagreement with the same-speaker clean-ASR output, not human-reference WER,
 intelligibility or product quality. No real ASR/model execution is part of its
 model-free controls: `python tests/test_reuse_asr_proxy_runner.py -v`.
+
+The [four-speaker proxy receipt](../../../docs/historical/reuse-quality-cpu-asr-proxy-20261112.json)
+records a completed run, its pinned historical recognizer and model, per-case
+edit counts, and verified transcript hashes. The clean-ASR references are not
+human transcriptions.

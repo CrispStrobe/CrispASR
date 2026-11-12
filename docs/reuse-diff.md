@@ -91,6 +91,11 @@ all 12 synthetic-noise cases; clean inputs were also altered. These are short
 read-speech diagnostics, not a listening test or a native-parity result. The
 separate 72 [reference fingerprints per case](historical/reuse-quality-cpu-stage-fingerprints-20261112.json)
 record intermediate magnitudes and hashes but do not compare native stages.
+An additional [CPU ASR proxy](historical/reuse-quality-cpu-asr-proxy-20261112.json)
+compares each condition with the same recognizer's clean-audio transcript. Across
+48 reference words per condition, disagreement changed from 18 to 17 edits for
+white 0 dB, 15 to 8 for white 10 dB and 15 to 10 for pink 5 dB; clean output
+introduced 2 edits. These are recognizer-agreement diagnostics, not human WER.
 
 The `reuse` GGUF architecture is intentionally not registered as a product
 backend. The published v0.8.51 Linux shared library rejected the pinned real RE-USE

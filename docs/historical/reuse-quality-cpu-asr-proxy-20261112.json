@@ -1,0 +1,676 @@
+{
+  "date": "2026-11-12",
+  "scope": "Four LibriSpeech test-clean speakers and 16 five-second clean/synthetic-noise cases. Transcript disagreement against the same recognizer output on each clean clip; not human-reference WER, perceptual quality, or product acceptance.",
+  "attribution": "LibriSpeech test-clean, OpenSLR 12, CC BY 4.0, https://www.openslr.org/12",
+  "runtime": {
+    "reported_version": "0.8.43",
+    "reported_git_revision": "369029c9",
+    "identity_note": "Historical binary-reported source identity; clean build provenance not independently established. Binary/model and dynamically loaded library hashes were verified before and after this run.",
+    "binary_sha256": "cc82d15e78a50262b3071cd436addf25f80bef7051a32d5e38fa1db8a44b6076",
+    "model_sha256": "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
+    "dynamic_libraries_sha256": {
+      "libcrispasr.so.1": "14820c72aa73b6a6d96b296d189654914abbf721c67ae6b0a49182d022a23a18",
+      "libggml.so.0": "22a376ceab42bfeb318f4b9c40472ab2d96d72b3b9c5b5a64ab74444758416d1",
+      "libgomp.so.1": "135f3c8f006d2fe5e68e51281c7974cb991a03de3bfb3593d68d174dfcf854d1",
+      "libggml-cpu.so.0": "22ecdd81002d0a0554a259f7c7576a89d7b86a59700d23b7c18be4878d6290a3",
+      "libggml-base.so.0": "4eb267af228d9c2a1f46160d989d9316505c51b5c9344c3cfbd797c0ea7ac2b9",
+      "libstdc++.so.6": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11",
+      "libm.so.6": "fce00b6f25f459cf4ae0b7fae4257909a1a8a86f9149e7c029a5d617baf1ccd0",
+      "libgcc_s.so.1": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "libc.so.6": "3a15d66867d83762c7f2f1e37359cb8f6c5743edb369c65285cb0b1c4f7498bf",
+      "ld-linux-x86-64.so.2": "c20a2dc8917c755f02b94049356320fe1f62ac7d9f8994731f807d9df39302da",
+      "libopencore-amrnb.so.0": "1a16409b03785025901abd70ba9574dbe4c9250575915f77c56c60b81ca21f4a",
+      "libopencore-amrwb.so.0": "e6d832bde4172c4e7d0170b5e9df09d851da161a71f0acbf489ab13fd8fde939",
+      "libsentencepiece.so.0": "a80984e38c70bcfabec6974f1a9bcacb2f46d7c5b6a3d70637b8ae7d4cff4d58",
+      "libopenblas.so.0": "bfc7492adbf84a8f567720a9e1fae2afc18f3d817da233e7f4d453683485308e",
+      "libgfortran.so.5": "342618ccfebe840446e4ef2b7893f4161b2084845e570f42d68a70bfde58a58d"
+    },
+    "threads": 2,
+    "timeout_seconds": 180.0
+  },
+  "input_quality_report_sha256": "13f61fa5b5dc694e257628cbc3ff3cbec64d686b4bb226949c8bd2ea40e848fd",
+  "complete_cases": 16,
+  "successful_cpu_invocations": 36,
+  "conditions": {
+    "clean": {
+      "completed_cases": 4,
+      "input": {
+        "edits": 0,
+        "reference_words": 48,
+        "micro_wer": 0.0
+      },
+      "output": {
+        "edits": 2,
+        "reference_words": 48,
+        "micro_wer": 0.041666666666666664
+      }
+    },
+    "white-0db": {
+      "completed_cases": 4,
+      "input": {
+        "edits": 18,
+        "reference_words": 48,
+        "micro_wer": 0.375
+      },
+      "output": {
+        "edits": 17,
+        "reference_words": 48,
+        "micro_wer": 0.3541666666666667
+      }
+    },
+    "white-10db": {
+      "completed_cases": 4,
+      "input": {
+        "edits": 15,
+        "reference_words": 48,
+        "micro_wer": 0.3125
+      },
+      "output": {
+        "edits": 8,
+        "reference_words": 48,
+        "micro_wer": 0.16666666666666666
+      }
+    },
+    "pink-5db": {
+      "completed_cases": 4,
+      "input": {
+        "edits": 15,
+        "reference_words": 48,
+        "micro_wer": 0.3125
+      },
+      "output": {
+        "edits": 10,
+        "reference_words": 48,
+        "micro_wer": 0.20833333333333334
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "speaker-121-clean",
+      "speaker": 121,
+      "condition": "clean",
+      "input": {
+        "correct": 10,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 10,
+        "hypothesis_words": 10,
+        "edits": 0,
+        "wer": 0.0
+      },
+      "output": {
+        "correct": 8,
+        "substitutions": 1,
+        "deletions": 1,
+        "insertions": 0,
+        "reference_words": 10,
+        "hypothesis_words": 9,
+        "edits": 2,
+        "wer": 0.2
+      }
+    },
+    {
+      "case_id": "speaker-121-white-0db",
+      "speaker": 121,
+      "condition": "white-0db",
+      "input": {
+        "correct": 9,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 10,
+        "hypothesis_words": 10,
+        "edits": 1,
+        "wer": 0.1
+      },
+      "output": {
+        "correct": 9,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 2,
+        "reference_words": 10,
+        "hypothesis_words": 12,
+        "edits": 3,
+        "wer": 0.3
+      }
+    },
+    {
+      "case_id": "speaker-121-white-10db",
+      "speaker": 121,
+      "condition": "white-10db",
+      "input": {
+        "correct": 8,
+        "substitutions": 2,
+        "deletions": 0,
+        "insertions": 3,
+        "reference_words": 10,
+        "hypothesis_words": 13,
+        "edits": 5,
+        "wer": 0.5
+      },
+      "output": {
+        "correct": 9,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 2,
+        "reference_words": 10,
+        "hypothesis_words": 12,
+        "edits": 3,
+        "wer": 0.3
+      }
+    },
+    {
+      "case_id": "speaker-121-pink-5db",
+      "speaker": 121,
+      "condition": "pink-5db",
+      "input": {
+        "correct": 6,
+        "substitutions": 3,
+        "deletions": 1,
+        "insertions": 3,
+        "reference_words": 10,
+        "hypothesis_words": 12,
+        "edits": 7,
+        "wer": 0.7
+      },
+      "output": {
+        "correct": 8,
+        "substitutions": 2,
+        "deletions": 0,
+        "insertions": 3,
+        "reference_words": 10,
+        "hypothesis_words": 13,
+        "edits": 5,
+        "wer": 0.5
+      }
+    },
+    {
+      "case_id": "speaker-237-clean",
+      "speaker": 237,
+      "condition": "clean",
+      "input": {
+        "correct": 14,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 14,
+        "hypothesis_words": 14,
+        "edits": 0,
+        "wer": 0.0
+      },
+      "output": {
+        "correct": 14,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 14,
+        "hypothesis_words": 14,
+        "edits": 0,
+        "wer": 0.0
+      }
+    },
+    {
+      "case_id": "speaker-237-white-0db",
+      "speaker": 237,
+      "condition": "white-0db",
+      "input": {
+        "correct": 6,
+        "substitutions": 7,
+        "deletions": 1,
+        "insertions": 0,
+        "reference_words": 14,
+        "hypothesis_words": 13,
+        "edits": 8,
+        "wer": 0.5714285714285714
+      },
+      "output": {
+        "correct": 8,
+        "substitutions": 6,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 14,
+        "hypothesis_words": 14,
+        "edits": 6,
+        "wer": 0.42857142857142855
+      }
+    },
+    {
+      "case_id": "speaker-237-white-10db",
+      "speaker": 237,
+      "condition": "white-10db",
+      "input": {
+        "correct": 9,
+        "substitutions": 5,
+        "deletions": 0,
+        "insertions": 1,
+        "reference_words": 14,
+        "hypothesis_words": 15,
+        "edits": 6,
+        "wer": 0.42857142857142855
+      },
+      "output": {
+        "correct": 12,
+        "substitutions": 2,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 14,
+        "hypothesis_words": 14,
+        "edits": 2,
+        "wer": 0.14285714285714285
+      }
+    },
+    {
+      "case_id": "speaker-237-pink-5db",
+      "speaker": 237,
+      "condition": "pink-5db",
+      "input": {
+        "correct": 10,
+        "substitutions": 3,
+        "deletions": 1,
+        "insertions": 0,
+        "reference_words": 14,
+        "hypothesis_words": 13,
+        "edits": 4,
+        "wer": 0.2857142857142857
+      },
+      "output": {
+        "correct": 11,
+        "substitutions": 3,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 14,
+        "hypothesis_words": 14,
+        "edits": 3,
+        "wer": 0.21428571428571427
+      }
+    },
+    {
+      "case_id": "speaker-61-clean",
+      "speaker": 61,
+      "condition": "clean",
+      "input": {
+        "correct": 15,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 15,
+        "hypothesis_words": 15,
+        "edits": 0,
+        "wer": 0.0
+      },
+      "output": {
+        "correct": 15,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 15,
+        "hypothesis_words": 15,
+        "edits": 0,
+        "wer": 0.0
+      }
+    },
+    {
+      "case_id": "speaker-61-white-0db",
+      "speaker": 61,
+      "condition": "white-0db",
+      "input": {
+        "correct": 12,
+        "substitutions": 3,
+        "deletions": 0,
+        "insertions": 4,
+        "reference_words": 15,
+        "hypothesis_words": 19,
+        "edits": 7,
+        "wer": 0.4666666666666667
+      },
+      "output": {
+        "correct": 11,
+        "substitutions": 4,
+        "deletions": 0,
+        "insertions": 2,
+        "reference_words": 15,
+        "hypothesis_words": 17,
+        "edits": 6,
+        "wer": 0.4
+      }
+    },
+    {
+      "case_id": "speaker-61-white-10db",
+      "speaker": 61,
+      "condition": "white-10db",
+      "input": {
+        "correct": 12,
+        "substitutions": 3,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 15,
+        "hypothesis_words": 15,
+        "edits": 3,
+        "wer": 0.2
+      },
+      "output": {
+        "correct": 12,
+        "substitutions": 2,
+        "deletions": 1,
+        "insertions": 0,
+        "reference_words": 15,
+        "hypothesis_words": 14,
+        "edits": 3,
+        "wer": 0.2
+      }
+    },
+    {
+      "case_id": "speaker-61-pink-5db",
+      "speaker": 61,
+      "condition": "pink-5db",
+      "input": {
+        "correct": 12,
+        "substitutions": 2,
+        "deletions": 1,
+        "insertions": 0,
+        "reference_words": 15,
+        "hypothesis_words": 14,
+        "edits": 3,
+        "wer": 0.2
+      },
+      "output": {
+        "correct": 14,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 1,
+        "reference_words": 15,
+        "hypothesis_words": 16,
+        "edits": 2,
+        "wer": 0.13333333333333333
+      }
+    },
+    {
+      "case_id": "speaker-260-clean",
+      "speaker": 260,
+      "condition": "clean",
+      "input": {
+        "correct": 9,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 9,
+        "hypothesis_words": 9,
+        "edits": 0,
+        "wer": 0.0
+      },
+      "output": {
+        "correct": 9,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 9,
+        "hypothesis_words": 9,
+        "edits": 0,
+        "wer": 0.0
+      }
+    },
+    {
+      "case_id": "speaker-260-white-0db",
+      "speaker": 260,
+      "condition": "white-0db",
+      "input": {
+        "correct": 8,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 1,
+        "reference_words": 9,
+        "hypothesis_words": 10,
+        "edits": 2,
+        "wer": 0.2222222222222222
+      },
+      "output": {
+        "correct": 8,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 1,
+        "reference_words": 9,
+        "hypothesis_words": 10,
+        "edits": 2,
+        "wer": 0.2222222222222222
+      }
+    },
+    {
+      "case_id": "speaker-260-white-10db",
+      "speaker": 260,
+      "condition": "white-10db",
+      "input": {
+        "correct": 8,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 9,
+        "hypothesis_words": 9,
+        "edits": 1,
+        "wer": 0.1111111111111111
+      },
+      "output": {
+        "correct": 9,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 9,
+        "hypothesis_words": 9,
+        "edits": 0,
+        "wer": 0.0
+      }
+    },
+    {
+      "case_id": "speaker-260-pink-5db",
+      "speaker": 260,
+      "condition": "pink-5db",
+      "input": {
+        "correct": 8,
+        "substitutions": 1,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 9,
+        "hypothesis_words": 9,
+        "edits": 1,
+        "wer": 0.1111111111111111
+      },
+      "output": {
+        "correct": 9,
+        "substitutions": 0,
+        "deletions": 0,
+        "insertions": 0,
+        "reference_words": 9,
+        "hypothesis_words": 9,
+        "edits": 0,
+        "wer": 0.0
+      }
+    }
+  ],
+  "transcript_sha256": {
+    "000-clean-reference-121": "bbd4c6145a0889e2856ed12730d81b21b229ac8b58b9e08401faa1a750fb8da3",
+    "001-clean-reference-237": "e486002ead040c2e4d50e2880826be3a53ea18c0f47ba066c68c13b06827a608",
+    "002-clean-reference-61": "e7a5e4fc1640922427011a205b67a82ff8d4baeb96ad6336fae93b0b932a6a7b",
+    "003-clean-reference-260": "6321201fed27442d4e6693f4a4540f054c0b6a709e5fda21541962c047bd91f3",
+    "004-speaker-121-clean-input": "bbd4c6145a0889e2856ed12730d81b21b229ac8b58b9e08401faa1a750fb8da3",
+    "005-speaker-121-clean-output": "256827d7dbf0121ad09e8209e3ed4a286f9116011947312a0e8f95dd38a5e594",
+    "006-speaker-121-white-0db-input": "0abe1e95aae53a8f850f38d7c199782ecf007feeafcfc0d9816eee0859e9e58a",
+    "007-speaker-121-white-0db-output": "a4de24b804d2545b9137e2c8979cbedba018aeb9d8df87ce9bda8783c7cb17a9",
+    "008-speaker-121-white-10db-input": "cdf739733add39de2bf1ca088139091c365ef4a7a5b2cda0c6ae3db9887cf8fc",
+    "009-speaker-121-white-10db-output": "9664ca44677a0a2430360715f96f4de319c665be7052594689b868baa8e3bd75",
+    "010-speaker-121-pink-5db-input": "6d93b2768a2ea41622df4b4f5b551cfed22abc135b265745b6ce9d36d24e9ec5",
+    "011-speaker-121-pink-5db-output": "ca0f34ddba33bc356a02b646ea1fcbae8f1af90e930993a2d464c3d330724c6c",
+    "012-speaker-237-clean-input": "e486002ead040c2e4d50e2880826be3a53ea18c0f47ba066c68c13b06827a608",
+    "013-speaker-237-clean-output": "e486002ead040c2e4d50e2880826be3a53ea18c0f47ba066c68c13b06827a608",
+    "014-speaker-237-white-0db-input": "b9a932faa36f487b313197e44daa420e1668cab39d05d87806a9495060761b45",
+    "015-speaker-237-white-0db-output": "83ff9f0f776504196b6c9774d4cf1718fba001b61a2bd5861af6329d9b94eb77",
+    "016-speaker-237-white-10db-input": "1a19fd116a34235a52b4aa66315b2447cb090a8a3f947be0d3c4ce00485a793c",
+    "017-speaker-237-white-10db-output": "b17071c4c733982474a309eaf22f76bf5eb99b0be8b612d9e5598ebd12522edf",
+    "018-speaker-237-pink-5db-input": "742f21cdae8f5d1927f7a00fa0d50bed7c7a349b5d597244652804fcce015e62",
+    "019-speaker-237-pink-5db-output": "83bf15de51ab21459862125267e188b3304d8fdc0c3b77e434cecb60fc6bc300",
+    "020-speaker-61-clean-input": "e7a5e4fc1640922427011a205b67a82ff8d4baeb96ad6336fae93b0b932a6a7b",
+    "021-speaker-61-clean-output": "e7a5e4fc1640922427011a205b67a82ff8d4baeb96ad6336fae93b0b932a6a7b",
+    "022-speaker-61-white-0db-input": "073071b6fbe46a2cd4cbbc20dac1c041c5723f4cc147f118ae0ab921e6729d77",
+    "023-speaker-61-white-0db-output": "8fcf6d19299570a580927ddcaee6bb2cb585fffdc39992884ec352cf59cb7e91",
+    "024-speaker-61-white-10db-input": "1b43a73f57e98e380635de429ff102e8ad48e60a1268d35d2d4ca35d8431b2e1",
+    "025-speaker-61-white-10db-output": "5cfc1c9d349e68695d53d684036fbc2a666ffd2318014fb64d253ddb9d955286",
+    "026-speaker-61-pink-5db-input": "8085a06ba7a24e853298a03d3bee746c83e2bfcfe43eb3c1c33824ee1a8930d5",
+    "027-speaker-61-pink-5db-output": "4fcc3cf729e9bb077bfdc7b5a721ca82762bf0dedc2c2d2109059af016440d7e",
+    "028-speaker-260-clean-input": "6321201fed27442d4e6693f4a4540f054c0b6a709e5fda21541962c047bd91f3",
+    "029-speaker-260-clean-output": "6321201fed27442d4e6693f4a4540f054c0b6a709e5fda21541962c047bd91f3",
+    "030-speaker-260-white-0db-input": "7dc08b1ed70b15a8449ec29aec54078c3cc7732df1980f555d7a97aff930a48b",
+    "031-speaker-260-white-0db-output": "8d9b74c661ea27ef005c2184d559fce7a20400de0aacae3e8882d4602f0b60bc",
+    "032-speaker-260-white-10db-input": "094b85a40f0f8259d4ee11a460ab7868c8239594921b5c033f213ef604c71dac",
+    "033-speaker-260-white-10db-output": "6321201fed27442d4e6693f4a4540f054c0b6a709e5fda21541962c047bd91f3",
+    "034-speaker-260-pink-5db-input": "094b85a40f0f8259d4ee11a460ab7868c8239594921b5c033f213ef604c71dac",
+    "035-speaker-260-pink-5db-output": "6321201fed27442d4e6693f4a4540f054c0b6a709e5fda21541962c047bd91f3"
+  },
+  "raw_log_sha256": {
+    "000-clean-reference-121": {
+      "stdout": "181b3f03e12367dfe0edba12ca8c83febe956d50fd4c52789ab0fe46d5370029",
+      "stderr": "90b5938fd0193d8dce2a6145e36654efb82d1a6816a96f4d9b1dda0e8328ba5a"
+    },
+    "001-clean-reference-237": {
+      "stdout": "0fb6712561a64df70b1ad22f4d80606e4a3e3cbb68ec5086a30885391b84ece7",
+      "stderr": "0557025bb5686f146ad0f59405622abea58315bd91bc56fdd88362dbdfda30a8"
+    },
+    "002-clean-reference-61": {
+      "stdout": "d3c1e5dd0e37de1308b8e65dc7ae072f3674fd6f99a06924789b7716f3cb3a0d",
+      "stderr": "ad4ee83ce45166b195c8240574fcfc0e26c7e53489d694c211b963427a8c9185"
+    },
+    "003-clean-reference-260": {
+      "stdout": "11bd5ac077b75d031723d61606dad9a0be40c1b30ef613172485ac247cca493a",
+      "stderr": "c2fcc1cf03abeefe54e54fcd7969a2a435f63d61bb84306d0b78d5bcc336a8e8"
+    },
+    "004-speaker-121-clean-input": {
+      "stdout": "181b3f03e12367dfe0edba12ca8c83febe956d50fd4c52789ab0fe46d5370029",
+      "stderr": "ac3259247c29a07247c2ba0fcfd5f4b2c4dfcc3e77ff7c2d69908272f3f267e4"
+    },
+    "005-speaker-121-clean-output": {
+      "stdout": "b2c2dd3778f3b977dcc2cf6a70ca5f5492d28035e8dfab3287d8efce77e94c1a",
+      "stderr": "85da227acc4ee9b3a59873e8354433cfd199a3f28a3b821e66f0c115b8b16f8f"
+    },
+    "006-speaker-121-white-0db-input": {
+      "stdout": "9b56a33841ff5ca2d80ef38605aebf9496bddfa889ae50331ea6e72efc3e6362",
+      "stderr": "18ddec51bef7a5c561a529402da5f3ecc2a2c1423e4a9fe561a8a664f1faad61"
+    },
+    "007-speaker-121-white-0db-output": {
+      "stdout": "2e1c98335c37c801eb2232fe6abc0c052013794b2dc469445e93af1be415030d",
+      "stderr": "c6238470b4d8849071acd722f7c99648db7a6e5e20afd3d3e91cab992ea1becd"
+    },
+    "008-speaker-121-white-10db-input": {
+      "stdout": "92edc78f54aea7837a8cc5f863586a1c975a5cb470b4a92732bae69ff4a77929",
+      "stderr": "8cde6ff861c0d94b1a6821250dcf9e8509c4273f8f1c4a8a82c273b4d75cf5e9"
+    },
+    "009-speaker-121-white-10db-output": {
+      "stdout": "20b8dced5bc6397927d5bcf184c6980be78c67768332b4f2b28716a0ed87956e",
+      "stderr": "13987c999caa0dc89dab19ab49a926139198adf33e53a7ddf7b08f857caf4a5e"
+    },
+    "010-speaker-121-pink-5db-input": {
+      "stdout": "c35138e068f85e79506d0aca95ce43a986fad0e8e2e348f50323ed1fd5b9d98a",
+      "stderr": "d7e8edc8685da2e234b221c2466c5db912133f68b2eec5ac80c6fcfb11407d5d"
+    },
+    "011-speaker-121-pink-5db-output": {
+      "stdout": "6e9b4ea368098940c4af40a80876074ed4630ac56966ce493c07f7d5b0e23be1",
+      "stderr": "bd4bb6f2a4cb8cc86cda52afd3f71542d2588db08a7620bb9e60ed20dac7543c"
+    },
+    "012-speaker-237-clean-input": {
+      "stdout": "0fb6712561a64df70b1ad22f4d80606e4a3e3cbb68ec5086a30885391b84ece7",
+      "stderr": "d1ca311f57dd942978109cd608e9943aa85263b0a7e092231893dbaf12a1e9a6"
+    },
+    "013-speaker-237-clean-output": {
+      "stdout": "0fb6712561a64df70b1ad22f4d80606e4a3e3cbb68ec5086a30885391b84ece7",
+      "stderr": "a3e68e5f10d0de91e7d637da6eff8b73513bd544aaa1719ee58af96482811f7e"
+    },
+    "014-speaker-237-white-0db-input": {
+      "stdout": "9722409ac44110f94fd6120b7bdd4849abfc04cce7b74dcacd1c835085d9e14c",
+      "stderr": "02b723de6771bb16a9c6197c0bf19bc342e6e92d6a4cec1aa783683fce636dd2"
+    },
+    "015-speaker-237-white-0db-output": {
+      "stdout": "231a54f57ab7ee58278c8b936b8c6df6facd3d347c20830e4600aa19ae7589ef",
+      "stderr": "1a8fbf01f86709750db5d279aa52cd63a0784f8eefcfd9659d42c6d5b7f41c5f"
+    },
+    "016-speaker-237-white-10db-input": {
+      "stdout": "3f24f542416627902a208930ae41773eba81bbcf00df9cbf905aa456ecfc69d7",
+      "stderr": "15f822ede2ed6d50211551ec199d5e05b6e9d5344fe7581443308e0ae6608619"
+    },
+    "017-speaker-237-white-10db-output": {
+      "stdout": "ecee29df5d4c16b0ea54943a15607b79530eef169cb717ce2edc3e1b5a2782b8",
+      "stderr": "22d22b5a231ca9fd48ad8925850d8f70973458201d77ecfddb234f82003287af"
+    },
+    "018-speaker-237-pink-5db-input": {
+      "stdout": "9bf7b048ad3787a8ffbe7502a63c7d5028490a9da8a680da4ef3ee7dfd5538bf",
+      "stderr": "9e35073ac62f9d782d04ca47c8cfeaf5e2593289489d7695eafcadff082e526a"
+    },
+    "019-speaker-237-pink-5db-output": {
+      "stdout": "f011f9327c719dcdc95c9e4deb4db4e13488dbd5a280d180a8ed195c804d6fa0",
+      "stderr": "d3cb1079d63feeb7bfd359e9fa29d66ae76698633aa7d771d0bdcc9ab0a15eb0"
+    },
+    "020-speaker-61-clean-input": {
+      "stdout": "d3c1e5dd0e37de1308b8e65dc7ae072f3674fd6f99a06924789b7716f3cb3a0d",
+      "stderr": "23870c3360a1f3cd53171b2772579fdb0b75023b8e62c177487bd10ca4eae13a"
+    },
+    "021-speaker-61-clean-output": {
+      "stdout": "d3c1e5dd0e37de1308b8e65dc7ae072f3674fd6f99a06924789b7716f3cb3a0d",
+      "stderr": "dbfa4755f1a7d435f672f2205883587dac0a502203fd2b35634846f3d453962d"
+    },
+    "022-speaker-61-white-0db-input": {
+      "stdout": "1f554651330b6eaa0c044e19cf1e5607288eace92064a78dab5db8befaa19a99",
+      "stderr": "6dbb3ac43a549a983979cfc8889d5e001ed4d7be3341f77449d73fcbcf006317"
+    },
+    "023-speaker-61-white-0db-output": {
+      "stdout": "fc8f300a7e90e662bd70564c90d101c9f72a8723f888f8139b3ee5834d5dd231",
+      "stderr": "81f7456d4ef2fb71d96c1c53c0e3a4d979cbf237255f67f5a822dbae7d13f0b2"
+    },
+    "024-speaker-61-white-10db-input": {
+      "stdout": "803ce51de15d874b1734e50a6a18515c03885ffc99868af526015888bd0a863d",
+      "stderr": "b1f2ac8b5073cdb6b82c21aaad20c2c4ec2a4cad2444db595d0da725c85d4b88"
+    },
+    "025-speaker-61-white-10db-output": {
+      "stdout": "c8d33062ad39d4b7e57881b564de4a4fdf1f606d2b1325159d4642c850a13978",
+      "stderr": "e4ba890097212b5fc3327c797f37cea9439e894f8528735822c3716909c84176"
+    },
+    "026-speaker-61-pink-5db-input": {
+      "stdout": "3de1ba8ce445e24707010c61c67371c38764cb0bfefb36764e32a8cbc470a9ef",
+      "stderr": "b9cde4be389c251abf392ca243a053477ec49140a246e9f77ed1ee95cf08a35d"
+    },
+    "027-speaker-61-pink-5db-output": {
+      "stdout": "4d1bd979ddfa7788b5cc5533cf863c759333cdf6ba84d612bc0b67c334e94835",
+      "stderr": "539bf23cfbfcf8c184b7aad0a54c4e83af4f53b95b895be75423caa6b5662317"
+    },
+    "028-speaker-260-clean-input": {
+      "stdout": "11bd5ac077b75d031723d61606dad9a0be40c1b30ef613172485ac247cca493a",
+      "stderr": "a608490be564549ccdc658c3bcae7f9f00e7cde3e5eb486a3c4f1faaf17da1f1"
+    },
+    "029-speaker-260-clean-output": {
+      "stdout": "11bd5ac077b75d031723d61606dad9a0be40c1b30ef613172485ac247cca493a",
+      "stderr": "01a82d1d3f718cb664133aece2131500e442cdc9a1f010753bedf88ec6f25ef2"
+    },
+    "030-speaker-260-white-0db-input": {
+      "stdout": "51685ee0bddb1e504cf11f71da13b719300d1a789dc52da0c685c0829e88328b",
+      "stderr": "975b9b18727da739fc19ae70302ee6d48b11299c62095c84671b9be47b5f6d17"
+    },
+    "031-speaker-260-white-0db-output": {
+      "stdout": "2b352dcf477bd9d96d28d84ace2bf868f86c6d5bde4a76b494b71c008fbd5533",
+      "stderr": "630709188f87dd317bc7b875134f5ed5f53d6bdc3cc1a9251e1a56609fad3d65"
+    },
+    "032-speaker-260-white-10db-input": {
+      "stdout": "a86ec2e3d0a71193f4f05eb388aba20a38bd533a7f0446f203e9c83439381d00",
+      "stderr": "14f6fd57be8c38eeb887594265ea0f3eec9223091a286a68fa368c0b298c75fc"
+    },
+    "033-speaker-260-white-10db-output": {
+      "stdout": "11bd5ac077b75d031723d61606dad9a0be40c1b30ef613172485ac247cca493a",
+      "stderr": "8c7330bd7f82032c6b74c1b83a37152233003a531bdd242dc985d6dfb86e4922"
+    },
+    "034-speaker-260-pink-5db-input": {
+      "stdout": "a86ec2e3d0a71193f4f05eb388aba20a38bd533a7f0446f203e9c83439381d00",
+      "stderr": "833bfc44b74f18b4b332bf4ab23715dc3ec33961d2a6ae6259b883ebcadf8d20"
+    },
+    "035-speaker-260-pink-5db-output": {
+      "stdout": "11bd5ac077b75d031723d61606dad9a0be40c1b30ef613172485ac247cca493a",
+      "stderr": "6a22d2b5455d7756cf4913bd59a5931e5a38c5066961a216cfe6cd36affebe5d"
+    }
+  },
+  "full_private_report_sha256": "cd75eabc3edc665250b1adda7c4bfe11e68c063b65506600d2065fcca12dc1f7",
+  "verification": "All 36 transcript and raw log hashes and all 32 case alignments independently rechecked; clean inputs were separately transcribed and matched their reference transcripts."
+}
