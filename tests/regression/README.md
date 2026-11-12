@@ -353,3 +353,11 @@ The nightly regression workflow needs one GitHub secret:
   Set via: Settings → Secrets and variables → Actions → New repository secret.
   The token is passed as `HF_TOKEN` env var; `huggingface_hub` picks it up
   automatically. `run_one.py` also retries with exponential backoff on 429.
+
+
+The extended workflow reports its coverage outcome in the run summary and a
+separate coverage job. A queue-deferred schedule explicitly reports zero
+backends tested; it is not a passing model regression. A selected matrix must
+finish successfully, otherwise coverage fails. The selected backend count and
+list are recorded in the summary; the coverage job also emits machine-readable
+`outcome` and `selected_count` outputs.
