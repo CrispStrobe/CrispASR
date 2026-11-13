@@ -206,6 +206,7 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             arch = gguf_get_val_str(ctx_in, key);
     }
     const bool is_firered = (arch.find("firered") != std::string::npos);
+    const bool is_nemotron_h_moe = (arch == "nemotron_h_moe");
     const bool is_ecapa = (arch.find("ecapa") != std::string::npos);
     // DAC-44kHz: pure convolutional audio codec (Descript Audio Codec).
     // ALL weight tensors store the kernel_size as ne[0] (ggml conv layout:
@@ -882,6 +883,14 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     std::vector<int> override_hits(g_type_overrides.size(), 0);
     std::vector<int> override_skips(g_type_overrides.size(), 0);
 
+    // Report structural substitutions separately from intentional architecture rules.
+    std::map<ggml_type, std::pair<int, int64_t>> row_fallbacks;
+    std::map<std::pair<ggml_type, ggml_type>, std::pair<int, int64_t>> override_fallbacks;
+    int skipped_expert_banks = 0;
+    int64_t skipped_expert_elements = 0;
+    int n_type_changed = 0;
+    int n_quantized_output = 0;
+
     // Allocate a scratch ggml context for creating modified tensor descriptors.
     ggml_init_params scratch_params = {ggml_tensor_overhead() * (size_t)n_tensors + 1024, nullptr, true};
     ggml_context* ctx_scratch = ggml_init(scratch_params);
@@ -928,8 +937,12 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         // matmul row. See the is_crepe note above for why.
         const bool crepe_conv3d =
             is_crepe && ggml_n_dims(t) == 3 && sname.rfind("conv", 0) == 0 && ends_with(".weight");
-        const bool ok_dims =
-            (ggml_n_dims(t) == 2) || pw_conv3d || crepe_conv3d || ((is_firered || is_ecapa) && ggml_n_dims(t) >= 2);
+        // Nemotron-H MoE banks are [input, output, expert], not convolution
+        // kernels. Each expert row has the same quantization layout as a 2-D
+        // matrix; retain all dimensions and process every row in the writer.
+        const bool moe_expert3d = is_nemotron_h_moe && ggml_n_dims(t) == 3 && ends_with("_exps.weight");
+        const bool ok_dims = (ggml_n_dims(t) == 2) || pw_conv3d || crepe_conv3d || moe_expert3d ||
+                             ((is_firered || is_ecapa) && ggml_n_dims(t) >= 2);
         const int64_t ncols = pw_conv3d ? t->ne[1] : t->ne[0];
         row_lens[i] = ncols;
 
@@ -1144,6 +1157,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
 
         // Determine actual quant type with row-size fallback
         ggml_type qt = qtype;
+        bool row_fallback = false;
+        bool unsupported_row = false;
         if (should_quantize && ncols % ggml_blck_size(qt) != 0) {
             ggml_type fallback = GGML_TYPE_COUNT;
             switch (qtype) {
@@ -1174,8 +1189,10 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                 fallback = GGML_TYPE_Q8_0;
             if (fallback != GGML_TYPE_COUNT && ncols % ggml_blck_size(fallback) == 0) {
                 qt = fallback;
+                row_fallback = true;
             } else {
                 should_quantize = false;
+                unsupported_row = true;
             }
         }
 
@@ -1274,6 +1291,7 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         // (#461: '^locdit\.=f16' turned the LocDiT biases F16 and CPU
         // synthesis crashed; Vulkan happened to tolerate it). An ill-tiled row
         // under a quant override is skipped the same way.
+        bool override_applied = false;
         for (size_t r = 0; r < g_type_overrides.size(); r++) {
             if (!std::regex_search(sname, g_type_overrides[r].first))
                 continue;
@@ -1288,12 +1306,34 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                     override_skips[r]++;
                     break;
                 }
+                if (fit != ov) {
+                    auto& count = override_fallbacks[{ov, fit}];
+                    count.first++;
+                    count.second += ggml_nelements(t);
+                }
                 ov = fit;
             }
             target_types[i] = ov;
+            override_applied = true;
             override_hits[r]++;
             break;
         }
+
+        // Count only fallbacks still selected after precision floors and overrides.
+        if (row_fallback && !override_applied && target_types[i] == qt) {
+            auto& count = row_fallbacks[qt];
+            count.first++;
+            count.second += ggml_nelements(t);
+        }
+        // GGUF MoE expert banks use these names. Do not diagnose intentionally
+        // preserved conv tensors or an already-matching quantized source as skips.
+        if (ggml_is_quantized(qtype) && src_ok && (!ok_dims || unsupported_row) && ggml_n_dims(t) == 3 &&
+            ends_with("_exps.weight") && !override_applied && target_types[i] == t->type && t->type != qtype) {
+            skipped_expert_banks++;
+            skipped_expert_elements += ggml_nelements(t);
+        }
+        n_type_changed += target_types[i] != t->type;
+        n_quantized_output += ggml_is_quantized(target_types[i]);
 
         // Create a tensor descriptor with the target type for ctx_out
         if (target_types[i] != t->type) {
@@ -1317,6 +1357,27 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         if (override_skips[r])
             printf(" (%d skipped: <2-D or row width)", override_skips[r]);
         printf("\n");
+    }
+
+    for (const auto& entry : row_fallbacks) {
+        fprintf(stderr,
+                "%s: WARNING — row-width fallback: %d tensors (%lld elements) use %s instead of requested %s; "
+                "their rows do not fit %lld-element blocks.\n",
+                __func__, entry.second.first, (long long)entry.second.second, ggml_type_name(entry.first),
+                ggml_type_name(qtype), (long long)ggml_blck_size(qtype));
+    }
+    for (const auto& entry : override_fallbacks) {
+        fprintf(stderr,
+                "%s: WARNING — tensor-type row-width fallback: %d tensors (%lld elements) use %s instead of "
+                "override %s; their rows do not fit %lld-element blocks.\n",
+                __func__, entry.second.first, (long long)entry.second.second, ggml_type_name(entry.first.second),
+                ggml_type_name(entry.first.first), (long long)ggml_blck_size(entry.first.first));
+    }
+    if (skipped_expert_banks) {
+        fprintf(stderr,
+                "%s: WARNING — copied %d 3-D expert banks (%lld elements) at source precision; "
+                "unsupported dimensions or row widths prevent requested %s quantization.\n",
+                __func__, skipped_expert_banks, (long long)skipped_expert_elements, ggml_type_name(qtype));
     }
 
     // Allocate output file
@@ -1498,15 +1559,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         }
     }
 
-    if (n_quantized == 0) {
+    printf("%s: quantized %d / %d tensors; %d tensor types changed; %d output tensors use quantized storage\n",
+           __func__, n_quantized, n_tensors, n_type_changed, n_quantized_output);
+    if (ggml_is_quantized(qtype) && n_quantized_output == 0) {
         fprintf(stderr,
-                "%s: WARNING — 0 of %d tensors were quantized. The output file is the\n"
-                "  same size as the input. Check that the architecture supports block\n"
-                "  quantization (ne[0] must be ≥32 for Q8_0, ≥256 for Q4_K) and that\n"
-                "  weight tensors are 2-D (or a supported conv architecture).\n",
-                __func__, n_tensors);
-    } else {
-        printf("%s: quantized %d / %d tensors\n", __func__, n_quantized, n_tensors);
+                "%s: WARNING — no output tensors use quantized storage. Tensors were copied or converted "
+                "to floating point; check weight selection, row widths and tensor-type overrides.\n",
+                __func__);
     }
 
     // Rewrite metadata header. Since tensor types were set correctly in

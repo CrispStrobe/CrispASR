@@ -100,7 +100,7 @@ elements). Neither row width fits a 256-element K block. The IQ4_NL header
 confirms that those 48 banks use the compatible 32-element format while the
 other 125 quantized matrices retain Q8_0.
 
-The current generic CrispASR quantizer also excludes these 3D expert banks
+The pre-fix released CrispASR quantizer excludes these 3D expert banks
 from its normal 2D weight selection. A 516,320-byte synthetic F32 GGUF with
 one `[2688,16,2]` expert bank and one `[2688,16]` shared-expert matrix was run
 through the released CPU quantizer with both `q3_k` and `q4_k`. Both outputs
@@ -110,7 +110,7 @@ these are execution controls, not speech-quality measurements. The quantizer
 source matches main `bf4b88ce1`.
 
 A block-32 four-bit representation is therefore structurally feasible and
-already present in the published IQ4_NL file. A plain `q3_k`/`q4_k` invocation
+already present in the published IQ4_NL file. In that pre-fix release, a plain `q3_k`/`q4_k` invocation
 does not establish the requested conversion: it skips the dominant expert
 banks, and a `q3_k` fallback may actually be four-bit. No new quantization
 recipe or backend change is justified by header inspection alone.
@@ -126,3 +126,28 @@ representation. No new GPU or CI job was dispatched for this follow-up.
 The diagnostic reuses the existing GGUF header parser. Its parser self-tests
 and two model-free layout tests pass; the layout tests distinguish row-width
 compatibility from total-element divisibility and count all expert dimensions.
+
+## Bounded quantizer implementation follow-up (2026-11-13)
+
+The quantizer now recognizes `nemotron_h_moe` 3D `*_exps.weight` banks as
+row-wise matrices. It preserves the expert dimension and processes all rows
+through the existing quantization writer. This selection change is limited to
+that architecture and tensor naming convention; convolution tensors retain
+their existing rules. The writer buffers an entire tensor, including F32
+conversion and quantized output buffers, so a large expert bank can require
+substantial temporary memory.
+
+Rows still use the existing compatible-type fallback: 2688- and 1856-wide
+banks requested as Q3_K or Q4_K become **Q4_0**, not three-bit or K-quant
+storage. Aggregate warnings report the actual fallback type and affected
+tensor/element counts separately for the global target and explicit tensor-type
+overrides. Unsupported expert dimensions or row widths produce a
+separate copy warning, while explicit overrides and architecture precision
+floors retain their authority. The final summary reports changed tensor types
+and quantized output storage, including idempotent and floating-point casts.
+
+Model-free controls compare every output byte of synthetic 3D banks with
+identical flattened 2D matrices for both real row widths and a 256-wide control,
+including Q8-source requantization. This establishes storage behavior only.
+The full 30B speech pipeline, large-bank memory use and quantized recognition
+or translation quality remain unvalidated.

@@ -6873,6 +6873,17 @@ if (Python3_Interpreter_FOUND)
     set_tests_properties(scnet-reference PROPERTIES LABELS "unit;scnet" TIMEOUT 120)
 endif()
 
+# Quantizer diagnostics and row-wise Nemotron-H expert-bank storage. Uses
+# synthetic GGUFs and compares all bank bytes with equivalent 2-D matrices.
+if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)
+    add_test(NAME test-quantizer-reporting
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-quantizer-reporting.py
+            $<TARGET_FILE:crispasr-quantize>)
+    set_tests_properties(test-quantizer-reporting PROPERTIES
+        LABELS "unit;gh;quantization"
+        TIMEOUT 120)
+endif()
+
 # SCNet routing and exact quantizer policy are model-free. Actual CLI/Session
 # inference requires explicitly supplied checkpoint bytes and skips if absent.
 if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)
