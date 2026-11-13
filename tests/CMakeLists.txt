@@ -5160,6 +5160,15 @@ catch_discover_tests(test-audio-formats
     PROPERTIES LABELS "unit;audio"
 )
 
+# Shared voice-reference WAV parser: header-only, no models or library linkage.
+add_executable(test-wav-reader test-wav-reader.cpp)
+target_include_directories(test-wav-reader PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-wav-reader PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-wav-reader
+    TEST_SPEC "[wav-reader]"
+    PROPERTIES LABELS "unit;audio"
+)
+
 # ─── test-audio-chunking — Catch2 unit tests for audio_chunking::find_energy_min_split
 #
 # Covers the energy-minimum detection helper directly: quiet window selection,
