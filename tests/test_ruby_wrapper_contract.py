@@ -74,7 +74,7 @@ void Init_wrapper_probe(void) {
             lib = tmp/'wrapper_probe.so'
             subprocess.run(['cc','-shared',*flags,str(obj),str(probe),str(metadata),str(audio),str(chat),str(aux),str(parakeet),str(titanet),str(db),str(speaker),str(stream),str(text),str(mic),str(vad),str(stub),str(init),'-lpthread','-o',str(lib)],check=True)
             program = tmp/'probe.rb';program.write_text(PROGRAM)
-            result = subprocess.run([RUBY,str(program),str(lib)],text=True,capture_output=True,env=env,
+            result = subprocess.run([RUBY,str(program),str(lib)],text=True,capture_output=True,env=env,timeout=60,
                 preexec_fn=(lambda: __import__('resource').setrlimit(__import__('resource').RLIMIT_CORE,(0,0))) if os.name=='posix' else None)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             self.assertIn('PASS Ruby ABI:',result.stdout)

@@ -114,6 +114,11 @@ static VALUE mic_call_proc(VALUE raw) {
     struct mic_call_args* a = (void*)(uintptr_t)raw;
     return rb_funcall(a->proc, rb_intern("call"), 1, a->arg);
 }
+static VALUE mic_callback_error(VALUE error, VALUE unused) {
+    (void)error;
+    (void)unused;
+    return Qnil;
+}
 static VALUE mic_pump_body(VALUE raw) {
     mic_handle_t* h = (void*)(uintptr_t)raw;
     for (;;) {
@@ -132,11 +137,9 @@ static VALUE mic_pump_body(VALUE raw) {
         mic_chunk_free(h->pending);
         h->pending = NULL;
         struct mic_call_args args = {h->user_proc, arr};
-        int state = 0;
-        rb_protect(mic_call_proc, (VALUE)(uintptr_t)&args, &state);
-        // Preserve the existing callback-exception policy; do not retain errinfo.
-        if (state)
-            rb_set_errinfo(Qnil);
+        // Ignore callback exceptions, but let Thread.kill reach the outer ensure.
+        // rb_protect also catches non-exception tags and can swallow cancellation.
+        rb_rescue2(mic_call_proc, (VALUE)(uintptr_t)&args, mic_callback_error, Qnil, rb_eException, (VALUE)0);
     }
     return Qnil;
 }

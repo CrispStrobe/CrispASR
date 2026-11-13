@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Ruby microphone cancellation stall — complete Codex (2026-11-13)
+
+- Base `08446098a`; isolated `diag/ruby-mic-close-20261113`. Full-contract repetition reproduced the stall; Ruby/native thread stacks located it at pump cancellation inside a callback, rather than concurrent close. `rb_protect` swallowed `Thread.kill` along with callback exceptions, leaving the pump waiting for more audio. Pausing the callback with `Thread.stop` made the old wrapper stall on the first run. Exception-specific rescue now lets cancellation reach the existing cleanup. The complete native-recorder contract passes 387 assertions, including forced callback cancellation, idle-wait cancellation, ordinary/non-StandardError callback exceptions, callback/external/concurrent close, exactly-once native cleanup and no live chunks; 100 complete program repetitions pass using one tiny fixture. Both kill joins and the subprocess have timeouts. clang-format 18 and whitespace checks pass. No model, full build, GPU, push or hosted dispatch.
+
 ### Ultra local-head Ruby binding — complete Codex (2026-11-13)
 
 - Base `309830a48`; isolated `feat/ultra-ruby-20261113`. Added the missing experimental Ruby local-head API with owned UTF-8 text, double-second boundaries and deterministic native cleanup, including Ruby exceptions during result conversion. The native-recorder contract first failed on the missing method; the full strict Ruby contract now passes 379 assertions, covering argument transport, fractional timing, output lifetime, null/empty/invalid-count results, injected conversion exceptions and invalid input. Existing CTest and strict binding runner discover these tests; context guards are synchronized. clang-format 18 and whitespace checks pass. No model, full-library build, GPU, push or hosted job; broader model quality remains unqualified.

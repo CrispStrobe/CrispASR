@@ -510,11 +510,27 @@ mh=mic.open(16000,1) do |pcm|
 end
 mic.start(mh);Timeout.timeout(5){finished.pop};mic.stop(mh);mic.close(mh)
 eq(seen,(39..69).map(&:to_f));eq(c.test_mic_live,0);eq(mic.test_live_chunks,0);c.test_mic_mode(0)
-# Killing an idle pump still closes the native microphone and retires its ticket.
+# Non-StandardError callback exceptions are also ignored, with delivery continuing.
+c.test_mic_mode(0);delivered=Queue.new;calls=0
+mh=mic.open(16000,1) do |pcm|
+  calls+=1
+  raise Exception,'expected callback exception' if calls==1
+  delivered << true
+end
+mic.start(mh);mic.start(mh);Timeout.timeout(5){delivered.pop};mic.close(mh)
+eq(calls,2);eq(c.test_mic_live,0);eq(mic.test_live_chunks,0)
+# Killing a pump inside its callback must propagate through exception handling.
 threads=Queue.new
-mh=mic.open(16000,1){|pcm|threads << Thread.current};mic.start(mh)
-pump=Timeout.timeout(5){threads.pop};pump.kill;pump.join
+mh=mic.open(16000,1){|pcm|threads << Thread.current;Thread.stop};mic.start(mh)
+pump=Timeout.timeout(5){threads.pop};closed_before=c.test_mic_closes
+pump.kill;Timeout.timeout(5){pump.join}
+eq(c.test_mic_closes,closed_before+1);eq(mic.test_live_chunks,0)
 eq(c.test_mic_live,0);reject(RuntimeError){mic.start(mh)};mic.close(mh)
+# Killing an idle native wait also runs cleanup.
+mh=mic.open(16000,1){};pump=mic.test_pump(mh)
+Timeout.timeout(5){Thread.pass until pump.status=='sleep'}
+closed_before=c.test_mic_closes;pump.kill;Timeout.timeout(5){pump.join}
+eq(c.test_mic_closes,closed_before+1);eq(c.test_mic_live,0);eq(mic.test_live_chunks,0)
 # New owners cannot revive old tickets, even if native malloc reuses an address.
 old=mh;mh=mic.open(16000,1){};eq(mh==old,false);reject(RuntimeError){mic.start(old)}
 mic.close(old);eq(c.test_mic_live,1);mic.close(mh);eq(c.test_mic_live,0)
