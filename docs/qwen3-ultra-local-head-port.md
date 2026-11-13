@@ -7,8 +7,8 @@ F16 aligner and CPU head matched the upstream full path in
 [run 42320992672](https://github.com/CrispStrobe/CrispASR/actions/runs/42320992672):
 the maximum and mean timing errors over 22 words were 0.00460 ms and 0.00078 ms.
 Broader audio/language coverage and GPU acceptance remain open. The separate
-experimental CLI, C ABI, Python, Go and Rust entrypoints below retain refined precision;
-the existing generic aligner continues to store centiseconds.
+experimental CLI, C ABI, Python, Go, Rust and Java entrypoints below retain refined
+precision; the existing generic aligner continues to store centiseconds.
 
 ## Experimental interface
 
@@ -37,6 +37,13 @@ returns `Result<Vec<UltraAlignedWord>, String>`. Its owned `text` and `f64`
 `start`/`end` seconds preserve the same precision and result lifetime guarantees.
 Invalid input and native failure return errors; successful empty alignment returns
 an empty vector. Use a native library exporting the Ultra local-head C ABI.
+
+For Java, `CrispasrSession.alignWordsUltra(basePath, headPath, text, pcm, nThreads)`
+returns `UltraAlignedWord[]` with owned UTF-8 `text` and `double` `start`/`end`
+seconds. Invalid input throws `IllegalArgumentException`; native failure or an
+invalid native word count throws `IllegalStateException`. Successful empty
+alignment returns an empty array, and the wrapper frees the native result before
+returning. Use a native library exporting the Ultra local-head C ABI.
 
 These paths reject audio longer than 120 seconds rather than returning partial
 results. Word-level JSON retains refined timing; subtitle output is rounded to

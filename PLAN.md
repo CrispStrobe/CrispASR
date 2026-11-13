@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Ultra local-head Java binding — complete Codex (2026-11-13)
+
+- Base `c63d07ce9`; isolated `feat/ultra-binding-next-20261113`. Added the missing experimental Java local-head wrapper with owned UTF-8 text, double-second boundaries and deterministic native cleanup. The new contract first failed on the missing API; all three native-stub execution tests now pass 56 checks across UTF-8 and legacy JNA default encodings, covering argument transport, precision, null/empty/invalid-count cleanup and invalid input. The full strict Java contract passes all seven tests (385 checks), including older-library compatibility and the alignment worker UTF-8 preflight. Existing CTest and strict binding runner discover the new tests. Whitespace checks pass; no model, GPU, full-library build or CI dispatch and no broader model-quality claim.
+
 ### Ultra local-head C# binding — complete Codex (2026-11-13)
 
 - Base `fc6950aca`; isolated `feat/ultra-csharp-interface-20261113`. Added the missing experimental C# local-head wrapper using the existing C ABI, owned UTF-8 text, fractional-second boundaries and deterministic native-result cleanup. Three new managed/native-stub execution tests first failed on the missing method and now pass 29 checks covering transport, precision, null/empty/invalid-count cleanup and invalid input. The full strict C# contract passes all 11 tests (357 checks), including older-library compatibility. The new tests run through the existing CTest and strict binding runner. Whitespace checks pass; no model, GPU, full-library build or CI dispatch and no broader model-quality claim.

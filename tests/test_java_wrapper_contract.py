@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import unittest
 
+from test_java_ultra_contract import JavaUltraContract
+
 ROOT=Path(__file__).resolve().parents[1]
 JAR=os.environ.get('CRISPASR_JNA_JAR')
 JAVA=os.environ.get('JAVA') or shutil.which('java')

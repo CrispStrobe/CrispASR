@@ -186,3 +186,18 @@ mutate the parameter object or its borrowed pointer fields while inference runs.
 The legacy full-parameter struct requires a 64-bit JVM; 32-bit legacy decode is
 explicitly refused. Actual target/model validation remains in the repository
 PLAN.md, alongside the generic `CrispasrSession` API and remaining callable audit.
+
+### Experimental Ultra local-head alignment
+
+```java
+CrispasrSession.UltraAlignedWord[] words = CrispasrSession.alignWordsUltra(
+    "qwen3-forced-aligner-ultra-f16.gguf", "ultra-local-head.gguf",
+    "Words to align", pcm16khzMono, 4);
+// words[i].text is owned UTF-8 text; start and end are double seconds.
+```
+
+This separate method preserves the local head's fractional-millisecond timing.
+Audio is limited to 120 seconds. It requires a native library exporting the
+Ultra local-head C ABI and both converted GGUF files; see the
+[experimental guide](../../docs/qwen3-ultra-local-head-port.md) for conversion
+and the bounded model-validation scope.

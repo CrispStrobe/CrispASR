@@ -189,6 +189,13 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
         long crispasr_align_result_character_t0(Pointer result, int word, int i);
         long crispasr_align_result_character_t1(Pointer result, int word, int i);
         void   crispasr_align_result_free(Pointer result);
+        Pointer crispasr_align_words_ultra_abi(String alignerModel, String headModel,
+                String transcript, float[] pcm, int nSamples, int nThreads);
+        int crispasr_ultra_align_result_n_words(Pointer result);
+        String crispasr_ultra_align_result_word_text(Pointer result, int i);
+        double crispasr_ultra_align_result_word_start_ms(Pointer result, int i);
+        double crispasr_ultra_align_result_word_end_ms(Pointer result, int i);
+        void crispasr_ultra_align_result_free(Pointer result);
 
         // --- Standalone LID (PLAN #59) ---
         int crispasr_detect_language_pcm(float[] samples, int nSamples, int method,
@@ -1474,6 +1481,48 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
         AlignedWord(String text, long t0, long t1) { this(text, t0, t1, new AlignedCharacter[0]); }
         AlignedWord(String text, long t0, long t1, AlignedCharacter[] characters) {
             this.text = text; this.t0 = t0; this.t1 = t1; this.characters = characters;
+        }
+    }
+
+    /** One experimental Ultra local-head word with owned text and times in seconds. */
+    public static final class UltraAlignedWord {
+        public final String text;
+        public final double start, end;
+        UltraAlignedWord(String text, double start, double end) {
+            this.text = text; this.start = start; this.end = end;
+        }
+    }
+
+    /**
+     * Experimental Ultra local-head alignment using base and sidecar GGUF paths.
+     * Audio must be mono 16 kHz PCM, at most 120 seconds. Returned times retain
+     * fractional-millisecond precision as seconds; no character spans are produced.
+     * Requires a native library exporting the Ultra local-head C ABI.
+     */
+    public static UltraAlignedWord[] alignWordsUltra(String alignerModel, String headModel,
+            String transcript, float[] pcm, int nThreads) {
+        for (String value : new String[]{alignerModel, headModel, transcript}) {
+            if (value == null || value.isEmpty() || value.indexOf('\0') >= 0)
+                throw new IllegalArgumentException("Model paths and transcript must be nonempty without NUL");
+        }
+        if (pcm == null || pcm.length == 0 || pcm.length > 120 * 16000)
+            throw new IllegalArgumentException("Audio must contain 1 to 1920000 mono 16 kHz samples");
+        Pointer result = Lib.INSTANCE.crispasr_align_words_ultra_abi(
+                alignerModel, headModel, transcript, pcm, pcm.length, nThreads);
+        if (result == null) throw new IllegalStateException("Ultra local-head alignment failed");
+        try {
+            int count = Lib.INSTANCE.crispasr_ultra_align_result_n_words(result);
+            if (count < 0) throw new IllegalStateException("Invalid Ultra alignment word count");
+            UltraAlignedWord[] words = new UltraAlignedWord[count];
+            for (int i = 0; i < count; i++) {
+                String text = Lib.INSTANCE.crispasr_ultra_align_result_word_text(result, i);
+                words[i] = new UltraAlignedWord(text == null ? "" : text,
+                        Lib.INSTANCE.crispasr_ultra_align_result_word_start_ms(result, i) / 1000.0,
+                        Lib.INSTANCE.crispasr_ultra_align_result_word_end_ms(result, i) / 1000.0);
+            }
+            return words;
+        } finally {
+            Lib.INSTANCE.crispasr_ultra_align_result_free(result);
         }
     }
 
