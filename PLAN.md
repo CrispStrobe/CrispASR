@@ -12,13 +12,13 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
-### RNNoise native input bounds — Codex (2026-11-13)
+### RNNoise native input bounds — complete Codex (2026-11-13)
 
-- Audit and fix overflow in native 16 kHz-to-48 kHz frame counts; verify boundary handling with small model-free tests.
+- Native RNNoise now rejects inputs before allocation when resampling or padding counts cannot fit native frame and buffer limits. A production-source test passes 59 checks under ASan/UBSan and optimized builds, covering exact bounds, simulated 32-bit capacities and small successful inputs; no large buffers are allocated. Actual 32-bit and real-DSP validation were not run.
 
 ### Python separation and denoising transport — complete Codex (2026-11-13)
 
-- Base `bd0ded624`; isolated `fix/next-product-20261113`. Stereo separation now validates frame counts before reshape, dtype or contiguity copies; shared mono transport also checks counts before dtype conversion, and RNNoise rejects non-mono input. Corrected Python/Go/Java/C# and public-header RNNoise documentation to its actual 16 kHz input/output contract. The prior separation guard first failed on an oversized virtual view. Three new native-probe tests cover strided/reversed PCM, owned output, errors and oversized float32/float64 views without large allocation. All 19 executable wrapper tests, eight resampling, six audio utility and seven auxiliary PCM tests pass; one optional full-library test skips. Existing CTest/CI discovers the tests. Shared fixture audio symbols are Python-macro-only and absent in the default compiled fixture; Java/Ruby execution skips without their SDKs. Formatting and whitespace checks pass. No model/full build/GPU/hosted job or push. Native RNNoise internal large-buffer arithmetic remains a separate unqualified limit.
+- Base `bd0ded624`; isolated `fix/next-product-20261113`. Stereo separation now validates frame counts before reshape, dtype or contiguity copies; shared mono transport also checks counts before dtype conversion, and RNNoise rejects non-mono input. Corrected Python/Go/Java/C# and public-header RNNoise documentation to its actual 16 kHz input/output contract. The prior separation guard first failed on an oversized virtual view. Three new native-probe tests cover strided/reversed PCM, owned output, errors and oversized float32/float64 views without large allocation. All 19 executable wrapper tests, eight resampling, six audio utility and seven auxiliary PCM tests pass; one optional full-library test skips. Existing CTest/CI discovers the tests. Shared fixture audio symbols are Python-macro-only and absent in the default compiled fixture; The full Java and Ruby wrapper contracts also pass against the shared fixture. Formatting and whitespace checks pass. No model/full build/GPU/hosted job or push. Native RNNoise large-input bounds are handled in the related lane above.
 
 ### Standalone VAD binding timestamps — complete Codex (2026-11-13)
 
