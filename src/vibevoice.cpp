@@ -992,6 +992,10 @@ static std::vector<float> run_encoder_stage(vibevoice_context* ctx, const char* 
         vibevoice_normalize_ref_pcm(normalized);
         samples = normalized.data();
     }
+    if (std::strcmp(prefix, "at_enc") == 0) {
+        if (const char* dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_DUMP"))
+            vibevoice_dump_f32(dir, "tts_voice_encoder_input", samples, n_samples);
+    }
     const int max_chunk = vibevoice_encoder_max_chunk_samples();
     const int left_ctx = vibevoice_encoder_left_context_samples();
     const int n_chunks = (n_samples + max_chunk - 1) / max_chunk;
