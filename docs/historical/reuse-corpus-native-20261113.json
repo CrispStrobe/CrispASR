@@ -1,0 +1,61 @@
+{
+  "date": "2026-11-13",
+  "kernel": "crispasr-reuse-corpus-native-20261113",
+  "version": 3,
+  "status": "complete/pass",
+  "source": "8d3b6aa393046b048643709555efc76719ee0bcc",
+  "scope": "Two data-informed five-second LibriSpeech diagnostics; original upstream non-fused CPU reference versus native mkl-avx2 research comparator. No corpus-wide, perceptual, product or GPU qualification.",
+  "sample_rate": 16000,
+  "samples": 80000,
+  "retained_output": "CRISPASR_STORAGE/reuse-corpus-native-20261113/v3-output",
+  "worker_controls": {
+    "frontend_tests": 9,
+    "native_diff_ctest": "pass"
+  },
+  "cases": [
+    {
+      "case_id": "speaker-61-white-10db",
+      "unconditioned": 71,
+      "conditioned": 71,
+      "archive_tensor_count": 75,
+      "archive_waveform_matches_wav": true,
+      "fresh_original_matches_retained_exactly": true,
+      "native_reference_rel_rms": 4.6716389074212944e-07,
+      "native_reference_max_abs": 1.2665987014770508e-07,
+      "stage_max_rel_rms": 1.6996458e-06,
+      "stage_min_cosine": 1.0,
+      "stage_norm_ratio_range": [
+        0.99999988,
+        1.0000001
+      ],
+      "reference": {
+        "name": "speaker-61-white-10db-reference.gguf",
+        "sha256": "894dba7ecf1a0d1bcd5d48bed7a46d2aca329f182243f9467f5f8adfcad8e112",
+        "bytes": 1054097472
+      }
+    },
+    {
+      "case_id": "speaker-121-white-0db",
+      "unconditioned": 71,
+      "conditioned": 71,
+      "archive_tensor_count": 75,
+      "archive_waveform_matches_wav": true,
+      "fresh_original_matches_retained_exactly": true,
+      "native_reference_rel_rms": 5.576173518293553e-07,
+      "native_reference_max_abs": 3.213062882423401e-07,
+      "stage_max_rel_rms": 3.0553115e-06,
+      "stage_min_cosine": 1.0,
+      "stage_norm_ratio_range": [
+        0.99999988,
+        1.0000002
+      ],
+      "reference": {
+        "name": "speaker-121-white-0db-reference.gguf",
+        "sha256": "9a2a5832cc22f8078b66d735640133abaa5f92579cf71247e7834af2018f8b18",
+        "bytes": 1054097472
+      }
+    }
+  ],
+  "verification": "Independently checked exact stage sets and PASS rows in both full logs, 75-tensor archive inventories, archive waveform versus saved WAV, native raw versus WAV, retained-original sample equality and float64 waveform metrics. Stage extrema are as printed by the comparator.",
+  "remaining": "Representative real noise, listening, longer native corpus inputs and product surfaces remain open."
+}

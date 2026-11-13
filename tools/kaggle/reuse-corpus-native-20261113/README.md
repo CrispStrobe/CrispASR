@@ -1,7 +1,10 @@
 # RE-USE corpus intermediate diagnostic
 
 CPU kernel `crispasr-reuse-corpus-native-20261113` version 3 was submitted on
-2026-11-13. Its numerical result is pending. No GPU, CI, dataset upload or
+2026-11-13 and completed successfully. Both cases pass all 71 unconditioned and
+71 conditioned gates; independent archive/waveform checks confirm native/reference
+relRMS of `4.67e-7` and `5.58e-7`. See the [bounded result](../../../docs/historical/reuse-corpus-native-20261113.json).
+No GPU, CI, dataset upload or
 concurrency-policy change is involved.
 
 The job captures new full original-reference GGUF archives for
@@ -28,7 +31,7 @@ added that existing header and passed the actual-worker native build and diff
 controls, then exposed a missing inherited Python path in the converter child.
 Version 3 supplies the bundled package path to child processes. A focused local
 test imports the real bundled `gguf` package in a child; all 13 controls pass
-with the wheel fixture configured. Model comparisons remain pending.
+with the wheel fixture configured. The version 3 model comparisons now pass.
 
 Only the optional frontend is precompiled. Build the unchanged
 `frontend_mkl.cpp` as `libreuse-frontend.so` using GCC 11, C++17, `-O2 -shared
