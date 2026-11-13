@@ -12,6 +12,21 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Python SpeakerDB float32 threshold parity — complete Codex (2026-11-13)
+
+- Base `c695da8a0`; isolated `fix/speaker-threshold-float32`. Match now normalizes
+  thresholds to the native float32 precision before validation and score
+  comparison. Two native boundary matches first failed because Python compared
+  against an unrounded double; finite `+/-1e100` also first failed pre-dispatch
+  rejection. Native-recorder controls cover both boundaries, scores one float32
+  step below threshold, overflow/nonfinite rejection without native dispatch,
+  and the largest finite float32 threshold. Both speaker suites pass (18 tests),
+  including existing close-during-coercion guards; the related wrapper suite
+  passes 19 tests with one optional full-library test skipped. All three exact
+  production CTest registrations pass in an isolated CMake configuration.
+  clang-format 18, Python compilation and whitespace checks pass. No model,
+  full-library build, GPU, push or hosted dispatch; speaker quality was not tested.
+
 ### Python speaker-vector transport bounds — complete Codex (2026-11-13)
 
 - Base `c8388400e`; isolated `fix/product-guards-20261113`. TitaNet, SpeakerDB match/enroll and clustering now validate shape and native int32 counts before dtype conversion or contiguous copying. Twelve oversized float32/float64 virtual-view controls first failed against the prior wrappers without allocating large buffers. Both complete native-recorder suites pass (16 tests), including no native dispatch for oversized views, invalid shapes and valid strided/reversed transport. Clustering rejects nonzero rows with zero-dimensional embeddings while preserving zero-row results; both dtype controls first failed before the fix. TitaNet and SpeakerDB recheck lifetime after caller-controlled coercion; five close-during-conversion probes cover all three embedding operations plus threshold conversion and enrollment-name encoding without native dispatch. The related wrapper suite passes 19 tests with one optional full-library test skipped. Existing CI executes both speaker suites; the generic speaker suite is now also registered in CTest. All three production registrations pass in an isolated CMake configuration. clang-format 18, Python compilation and whitespace checks pass. No model, full-library build, GPU, push or hosted dispatch; speaker quality was not tested.

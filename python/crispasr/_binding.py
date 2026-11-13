@@ -3834,13 +3834,18 @@ class SpeakerDB:
         return self._lib.crispasr_speaker_db_count(self._db) if self._db else 0
 
     def match(self, embedding, threshold=0.7):
-        """Return (name, score); a negative native score always means no match."""
+        """Return (name, score), comparing at native float32 threshold precision.
+
+        The threshold must remain finite as float32. A negative native score
+        always means no match.
+        """
         if not self._db:
             raise RuntimeError("SpeakerDB is closed")
         import numpy as np
         emb = _speaker_vector(embedding)
+        threshold = ctypes.c_float(float(threshold)).value
         if not np.isfinite(threshold):
-            raise ValueError("Expected a finite threshold")
+            raise ValueError("Expected a finite float32 threshold")
         native_threshold = ctypes.c_float(threshold)
         name_buf = ctypes.create_string_buffer(256)
         if not self._db:

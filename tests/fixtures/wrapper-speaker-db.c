@@ -43,6 +43,13 @@ float crispasr_speaker_db_match(const void* db, const float* emb, int32_t dim, f
         abort();
     if (db_mode == 1)
         return -1.f;
+    if (db_mode == 4 || db_mode == 5) {
+        // Independent score lets the wrapper exercise the native float boundary.
+        float score = db_mode == 4 ? .7f : .875f;
+        if (score >= threshold)
+            strcpy(name, "Alice");
+        return score;
+    }
     const char text[] = "\xe3\x82\xa2\xe3\x83\xaa\xe3\x82\xb9";
     memcpy(name, text, sizeof(text));
     return .875f;

@@ -124,6 +124,44 @@ class LegacyPointerContract(unittest.TestCase):
             with self.assertRaises(RuntimeError):db.enroll('Alice',emb)
             self.assertEqual(lib.probe_db_calls(),before)
 
+    def test_speaker_threshold_float32_boundary(self):
+        with tempfile.TemporaryDirectory(prefix='python-speaker-threshold-') as tmp:
+            path = Path(tmp) / 'libcrispasr.so'
+            subprocess.run(['cc', '-shared', '-fPIC', '-Werror', '-I' + str(ROOT / 'include'),
+                            str(ROOT / 'tests/fixtures/wrapper-speaker-db.c'), '-o', str(path)], check=True)
+            db = SpeakerDB('db', 'Alice,Bob', True, lib_path=str(path))
+            try:
+                for mode, threshold in ((4, .7), (5, np.nextafter(.875, 1.0))):
+                    with self.subTest(threshold=threshold):
+                        db._lib.probe_db_mode(mode)
+                        score = C.c_float(threshold).value
+                        self.assertLess(score, threshold)  # native float rounds down
+                        self.assertEqual(db.match([1, 3, 5], threshold=threshold), ('Alice', score))
+                        above = float(np.nextafter(np.float32(score), np.float32(1)))
+                        self.assertEqual(db.match([1, 3, 5], threshold=above), (None, score))
+            finally:
+                db.close()
+            self.assertEqual(db._lib.probe_db_live(), 0)
+
+    def test_speaker_threshold_overflow_rejected_before_dispatch(self):
+        with tempfile.TemporaryDirectory(prefix='python-speaker-threshold-') as tmp:
+            path = Path(tmp) / 'libcrispasr.so'
+            subprocess.run(['cc', '-shared', '-fPIC', '-Werror', '-I' + str(ROOT / 'include'),
+                            str(ROOT / 'tests/fixtures/wrapper-speaker-db.c'), '-o', str(path)], check=True)
+            db = SpeakerDB('db', 'Alice,Bob', True, lib_path=str(path))
+            try:
+                for threshold in (1e100, -1e100, float('inf'), -float('inf'), float('nan')):
+                    with self.subTest(threshold=threshold):
+                        before = db._lib.probe_db_calls()
+                        with self.assertRaises(ValueError):
+                            db.match([1, 3, 5], threshold=threshold)
+                        self.assertEqual(db._lib.probe_db_calls(), before)
+                # Existing API allows finite out-of-cosine-range thresholds.
+                self.assertEqual(db.match([1, 3, 5], threshold=float(np.finfo(np.float32).max)), (None, .875))
+            finally:
+                db.close()
+            self.assertEqual(db._lib.probe_db_live(), 0)
+
     def test_speaker_vectors_reject_large_views_before_copy_and_dispatch(self):
         with tempfile.TemporaryDirectory(prefix='python-speaker-bounds-') as tmp:
             titan_path = Path(tmp) / 'titan.so'
