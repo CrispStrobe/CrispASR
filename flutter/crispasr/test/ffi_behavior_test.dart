@@ -185,6 +185,115 @@ void main() {
       if (dir.existsSync()) dir.deleteSync(recursive: true);
     }
   });
+  test('Ultra local head transports UTF-8 and owns fractional-second results',
+      () {
+    final lib = _openProbe();
+    final mode = lib.lookupFunction<Void Function(Int32), void Function(int)>(
+        'probe_ultra_mode');
+    int counter(String name) =>
+        lib.lookupFunction<Int32 Function(), int Function()>(name)();
+    List<AlignedWord> align({Float32List? pcm, int threads = 7}) =>
+        alignWordsUltra(
+            alignerModel: '基础.gguf',
+            headModel: '头.gguf',
+            transcript: '你好',
+            pcm: pcm ?? _pcm123(),
+            nThreads: threads,
+            lib: lib);
+    mode(0);
+    final before = counter('probe_ultra_frees');
+    final words = align();
+    expect(words.single.text, '你好');
+    expect(words.single.start, closeTo(.123456789, 1e-12));
+    expect(words.single.end, closeTo(.987654321, 1e-12));
+    expect(words.single.characters, isEmpty);
+    expect(counter('probe_ultra_threads'), 7);
+    expect(counter('probe_ultra_frees'), before + 1);
+    expect(_getLive(), 0);
+    for (final threads in [-2147483648, 2147483647]) {
+      expect(align(threads: threads).single.text, '你好');
+      expect(counter('probe_ultra_threads'), threads);
+    }
+    final maximum = Float32List(1920000)..setRange(0, 3, _pcm123());
+    expect(align(pcm: maximum).single.text, '你好');
+    expect(counter('probe_ultra_samples'), 1920000);
+    expect(words.single.text, '你好');
+    expect(_getLive(), 0);
+  });
+  test(
+      'Ultra local head frees empty and invalid results including decode errors',
+      () {
+    final lib = _openProbe();
+    final mode = lib.lookupFunction<Void Function(Int32), void Function(int)>(
+        'probe_ultra_mode');
+    final frees = lib
+        .lookupFunction<Int32 Function(), int Function()>('probe_ultra_frees');
+    List<AlignedWord> align() => alignWordsUltra(
+        alignerModel: '基础.gguf',
+        headModel: '头.gguf',
+        transcript: '你好',
+        pcm: _pcm123(),
+        lib: lib);
+    final before = frees();
+    mode(1);
+    expect(align(), isEmpty);
+    expect(frees(), before + 1);
+    mode(2);
+    expect(align, throwsStateError);
+    expect(frees(), before + 1);
+    mode(3);
+    expect(align, throwsStateError);
+    expect(frees(), before + 2);
+    mode(4);
+    expect(align().single.text, '');
+    expect(frees(), before + 3);
+    mode(5);
+    expect(align, throwsFormatException);
+    expect(frees(), before + 4);
+    expect(_getLive(), 0);
+    mode(0);
+    expect(align().single.text, '你好');
+    expect(_getLive(), 0);
+  });
+  test('Ultra local head validates inputs and tolerates older libraries', () {
+    final lib = _openProbe();
+    final calls = lib
+        .lookupFunction<Int32 Function(), int Function()>('probe_ultra_calls');
+    List<AlignedWord> align(
+            {String base = '基础.gguf',
+            String head = '头.gguf',
+            String text = '你好',
+            Float32List? pcm,
+            int threads = 7,
+            DynamicLibrary? library}) =>
+        alignWordsUltra(
+            alignerModel: base,
+            headModel: head,
+            transcript: text,
+            pcm: pcm ?? _pcm123(),
+            nThreads: threads,
+            lib: library ?? lib);
+    final before = calls();
+    for (final invalid in ['', 'embedded\u0000nul']) {
+      expect(() => align(base: invalid), throwsArgumentError);
+      expect(() => align(head: invalid), throwsArgumentError);
+      expect(() => align(text: invalid), throwsArgumentError);
+    }
+    for (final pcm in [Float32List(0), Float32List(1920001)]) {
+      expect(() => align(pcm: pcm), throwsArgumentError);
+    }
+    for (final threads in [-2147483649, 2147483648]) {
+      expect(() => align(threads: threads), throwsArgumentError);
+    }
+    expect(calls(), before);
+    expect(() => align(library: _openProbe(old: true)), throwsArgumentError);
+    expect(
+        _openProbe(old: true).lookupFunction<Int32 Function(), int Function()>(
+            'probe_ultra_calls')(),
+        0);
+    expect(_getLive(old: true), 0);
+    expect(_getLive(), 0);
+  });
   test('generic speaker exact success and resource lifetime', () {
     final lib = _openProbe();
     final mode = lib.lookupFunction<Void Function(Int32), void Function(int)>(

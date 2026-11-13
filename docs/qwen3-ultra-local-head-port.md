@@ -7,7 +7,7 @@ F16 aligner and CPU head matched the upstream full path in
 [run 42320992672](https://github.com/CrispStrobe/CrispASR/actions/runs/42320992672):
 the maximum and mean timing errors over 22 words were 0.00460 ms and 0.00078 ms.
 Broader audio/language coverage and GPU acceptance remain open. The separate
-experimental CLI, C ABI, Python, Go, Rust and Java entrypoints below retain refined
+experimental CLI, C ABI, Python, Go, Rust, Java, C#, Ruby and Dart entrypoints retain refined
 precision; the existing generic aligner continues to store centiseconds.
 
 ## Experimental interface
@@ -65,6 +65,26 @@ Successful empty alignment returns `[]`. The wrapper releases the native result
 before returning and if Ruby result conversion raises. Use a native library
 exporting the Ultra local-head C ABI; broader language and device qualification
 remain as described below.
+
+For Dart/Flutter, `alignWordsUltra` returns `List<AlignedWord>` with owned UTF-8
+text, double-precision `start`/`end` seconds and empty character spans:
+
+```dart
+final words = alignWordsUltra(
+  alignerModel: 'qwen3-forced-aligner-ultra-f16.gguf',
+  headModel: 'ultra-local-head-f32.gguf',
+  transcript: 'Words to align',
+  pcm: pcm, // Float32List of mono 16 kHz samples
+  nThreads: 4,
+);
+```
+
+Empty paths/text, embedded NULs, empty/oversized audio and thread counts outside
+int32 raise `ArgumentError`. Missing native symbols also raise `ArgumentError`;
+native failure or an invalid count raises `StateError`. Successful empty alignment
+returns `[]`. Malformed native UTF-8 raises `FormatException`, with native input
+and result buffers released on every path. Supply a library exporting the complete
+Ultra local-head C ABI (optionally through the `lib` argument).
 
 These paths reject audio longer than 120 seconds rather than returning partial
 results. Word-level JSON retains refined timing; subtitle output is rounded to

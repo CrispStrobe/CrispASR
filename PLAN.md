@@ -12,6 +12,21 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Ultra local-head Dart binding — complete Codex (2026-11-13)
+
+- Base `8b7d95403`; isolated `feat/ultra-dart-20261113`. Added the missing
+  experimental local-head API with owned UTF-8 text and double-second timings.
+  Three native-recorder tests first failed on the absent API; all 44 Dart FFI
+  tests now pass through the strict runner and the existing production CTest
+  registration in an isolated configuration. Controls cover exact arguments,
+  fractional timing, the 120-second limit, int32 thread bounds, empty/null/invalid
+  results, malformed UTF-8 cleanup and partial older-library symbols before native
+  dispatch. Arena/finally releases inputs and native results on all paths.
+  Dart analysis, Dart format, clang-format 18 and whitespace checks pass. An initial
+  analyzer run was slow on shared storage; a local analyzer cache completes the
+  strict contract in 11 seconds. No model, full-library build, GPU, push or hosted
+  dispatch; broader model quality remains unqualified.
+
 ### Python SpeakerDB float32 threshold parity — complete Codex (2026-11-13)
 
 - Base `c695da8a0`; isolated `fix/speaker-threshold-float32`. Match now normalizes

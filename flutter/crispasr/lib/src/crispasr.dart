@@ -978,6 +978,90 @@ List<AlignedWord> alignWords({
   return out;
 }
 
+/// Experimental Qwen Ultra local-head word alignment on CPU.
+///
+/// Both converted base [alignerModel] and local [headModel] GGUFs are required.
+/// [pcm] must contain 1 to 1,920,000 mono 16 kHz samples (at most 120 seconds).
+/// Returned words own their UTF-8 text and retain double-precision seconds;
+/// character spans are empty. This does not qualify other languages or GPUs.
+///
+/// Throws [ArgumentError] for invalid input or missing native ABI symbols,
+/// [StateError] for native failure or an invalid result count, and
+/// [FormatException] for malformed native UTF-8. A successful empty result
+/// returns an empty list. All native buffers are released on these paths.
+List<AlignedWord> alignWordsUltra({
+  required String alignerModel,
+  required String headModel,
+  required String transcript,
+  required Float32List pcm,
+  int nThreads = 4,
+  DynamicLibrary? lib,
+}) {
+  for (final text in [alignerModel, headModel, transcript]) {
+    if (text.isEmpty || text.contains('\u0000')) {
+      throw ArgumentError(
+          'Alignment paths and transcript must be nonempty and contain no NUL');
+    }
+  }
+  if (pcm.isEmpty || pcm.length > 120 * 16000) {
+    throw ArgumentError(
+        'Ultra alignment requires 1 to 1920000 mono 16 kHz samples');
+  }
+  if (nThreads < -2147483648 || nThreads > 2147483647) {
+    throw ArgumentError.value(nThreads, 'nThreads', 'must fit int32');
+  }
+  lib ??= DynamicLibrary.open(CrispASR.defaultLibName());
+  // Resolve the complete interface before allocating or invoking native code.
+  final align = lib.lookupFunction<
+      Pointer<Void> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>,
+          Pointer<Float>, Int32, Int32),
+      Pointer<Void> Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>,
+          Pointer<Float>, int, int)>('crispasr_align_words_ultra_abi');
+  final count = lib.lookupFunction<Int32 Function(Pointer<Void>),
+      int Function(Pointer<Void>)>('crispasr_ultra_align_result_n_words');
+  final text = lib.lookupFunction<
+      Pointer<Utf8> Function(Pointer<Void>, Int32),
+      Pointer<Utf8> Function(
+          Pointer<Void>, int)>('crispasr_ultra_align_result_word_text');
+  final start = lib.lookupFunction<
+      Double Function(Pointer<Void>, Int32),
+      double Function(
+          Pointer<Void>, int)>('crispasr_ultra_align_result_word_start_ms');
+  final end = lib.lookupFunction<
+      Double Function(Pointer<Void>, Int32),
+      double Function(
+          Pointer<Void>, int)>('crispasr_ultra_align_result_word_end_ms');
+  final free = lib.lookupFunction<Void Function(Pointer<Void>),
+      void Function(Pointer<Void>)>('crispasr_ultra_align_result_free');
+  final arena = Arena();
+  try {
+    final samples = arena<Float>(pcm.length);
+    samples.asTypedList(pcm.length).setAll(0, pcm);
+    final result = align(
+        alignerModel.toNativeUtf8(allocator: arena),
+        headModel.toNativeUtf8(allocator: arena),
+        transcript.toNativeUtf8(allocator: arena),
+        samples,
+        pcm.length,
+        nThreads);
+    if (result == nullptr) throw StateError('Ultra alignment failed');
+    try {
+      final n = count(result);
+      if (n < 0) throw StateError('Invalid native alignment word count');
+      return List<AlignedWord>.generate(
+          n,
+          (i) => AlignedWord(
+              text: _decodeCString(text(result, i)),
+              start: start(result, i) / 1000.0,
+              end: end(result, i) / 1000.0));
+    } finally {
+      free(result);
+    }
+  } finally {
+    arena.releaseAll();
+  }
+}
+
 /// Language identification result from [detectLanguagePcm]. `langCode`
 /// is an ISO 639-1 code ("en", "de", …) or empty on failure.
 class LidResult {

@@ -1482,3 +1482,65 @@ void crispasr_stream_set_live_decode(crispasr_stream* s, int enabled) {
     (void)s;
     (void)enabled;
 }
+
+struct crispasr_ultra_align_result {
+    char text[16];
+};
+static int ultra_mode, ultra_calls, ultra_frees, ultra_threads, ultra_samples;
+void probe_ultra_mode(int mode) {
+    ultra_mode = mode;
+}
+int probe_ultra_calls(void) {
+    return ultra_calls;
+}
+int probe_ultra_frees(void) {
+    return ultra_frees;
+}
+int probe_ultra_threads(void) {
+    return ultra_threads;
+}
+int probe_ultra_samples(void) {
+    return ultra_samples;
+}
+crispasr_ultra_align_result* crispasr_align_words_ultra_abi(const char* base, const char* head, const char* text,
+                                                            const float* pcm, int32_t n, int32_t threads) {
+    ++ultra_calls;
+    ultra_threads = threads;
+    ultra_samples = n;
+    if (ultra_mode == 2 || strcmp(base, "基础.gguf") || strcmp(head, "头.gguf") || strcmp(text, "你好") ||
+        (n != 3 && n != 1920000) || pcm[0] != 1 || pcm[1] != 3 || pcm[2] != 5)
+        return NULL;
+    crispasr_ultra_align_result* r = tracked_malloc(sizeof(*r));
+    strcpy(r->text, text);
+    if (ultra_mode == 5) {
+        r->text[0] = (char)0xff;
+        r->text[1] = 0;
+    }
+    return r;
+}
+int crispasr_ultra_align_result_n_words(const crispasr_ultra_align_result* r) {
+    (void)r;
+    return ultra_mode == 1 ? 0 : ultra_mode == 3 ? -1 : 1;
+}
+const char* crispasr_ultra_align_result_word_text(const crispasr_ultra_align_result* r, int i) {
+    (void)i;
+    return ultra_mode == 4 ? NULL : r->text;
+}
+double crispasr_ultra_align_result_word_start_ms(const crispasr_ultra_align_result* r, int i) {
+    (void)r;
+    (void)i;
+    return 123.456789;
+}
+double crispasr_ultra_align_result_word_end_ms(const crispasr_ultra_align_result* r, int i) {
+    (void)r;
+    (void)i;
+    return 987.654321;
+}
+// A partial older interface ensures all symbols resolve before native dispatch.
+#ifndef CRISPASR_PROBE_OLD_TOKENS
+void crispasr_ultra_align_result_free(crispasr_ultra_align_result* r) {
+    ++ultra_frees;
+    memset(r->text, 'X', sizeof(r->text));
+    tracked_free(r);
+}
+#endif
