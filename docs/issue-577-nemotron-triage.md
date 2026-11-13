@@ -133,9 +133,12 @@ The quantizer now recognizes `nemotron_h_moe` 3D `*_exps.weight` banks as
 row-wise matrices. It preserves the expert dimension and processes all rows
 through the existing quantization writer. This selection change is limited to
 that architecture and tensor naming convention; convolution tensors retain
-their existing rules. The writer buffers an entire tensor, including F32
-conversion and quantized output buffers, so a large expert bank can require
-substantial temporary memory.
+their existing rules. The writer streams complete rows in chunks of at most
+1,048,576 elements (or one row when a row is wider), including source
+conversion, quantization
+and floating-point casts. Copied tensors use a 1 MiB buffer. Tensor padding
+is written once at the end, and a partial final chunk preserves the same bytes
+as the previous whole-tensor writer. Importance vectors remain per column.
 
 Rows still use the existing compatible-type fallback: 2688- and 1856-wide
 banks requested as Q3_K or Q4_K become **Q4_0**, not three-bit or K-quant
@@ -149,5 +152,9 @@ and quantized output storage, including idempotent and floating-point casts.
 Model-free controls compare every output byte of synthetic 3D banks with
 identical flattened 2D matrices for both real row widths and a 256-wide control,
 including Q8-source requantization. This establishes storage behavior only.
-The full 30B speech pipeline, large-bank memory use and quantized recognition
-or translation quality remain unvalidated.
+A 64 MiB synthetic bank succeeds within startup mappings plus 32 MiB of
+address-space headroom for quantization, F16 conversion and copying; the
+previous writer fails each control. Exact complete-file comparisons cover
+F32/F16 and Q8 sources, pointwise convolution reshaping, importance matrices,
+and partial final chunks. The full 30B speech pipeline, actual large-bank
+execution and quantized recognition or translation quality remain unvalidated.

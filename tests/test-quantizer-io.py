@@ -65,6 +65,25 @@ class QuantizerIO(unittest.TestCase):
                 self.assert_failed(run)
                 self.assertIn('output', run.stderr)
 
+    def test_failure_after_successful_chunk(self):
+        # Three writes after metadata: two full chunks and one partial tail.
+        name = 'linear.weight'
+        header = b'GGUF' + struct.pack('<IQQ', 3, 1, 1)
+        header += string('general.architecture') + struct.pack('<I', 8) + string('test')
+        header += string(name) + struct.pack('<IQQIQ', 2, 256, 8193, 0, 0)
+        with self.source.open('wb') as output:
+            output.write(header + bytes(-len(header) % 32))
+            row = struct.pack('<256f', *range(256))
+            for _ in range(8193):
+                output.write(row)
+        self.original = self.source.read_bytes()
+        for target in ('q8_0', 'f16', 'f32'):
+            with self.subTest(target=target):
+                extra = () if target == 'q8_0' else ('--tensor-type', '.*=' + target)
+                run = self.run_quant(self.root / 'late.gguf', 'tensor-after-chunk', extra)
+                self.assertIn('injected tensor-after-chunk failure', run.stderr)
+                self.assert_failed(run)
+
     def test_input_seek_failure(self):
         run = self.run_quant(self.root / 'failed.gguf', 'input-seek')
         self.assertIn('injected input-seek failure', run.stderr)

@@ -1477,51 +1477,33 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             return false;
         }
 
-        if (quantize) {
-            n_quantized++;
-            printf("quantizing to %s... ", ggml_type_name(qtype_used));
-
-            const int64_t nelements = ggml_nelements(t);
-            f32_data.resize(nelements);
-
-            if (type == GGML_TYPE_F32) {
-                if (fread(f32_data.data(), sizeof(float), nelements, fin) != (size_t)nelements) {
-                    fprintf(stderr, "failed to read f32 data\n");
-                    return false;
-                }
-            } else if (type == GGML_TYPE_F16) {
-                std::vector<ggml_fp16_t> f16_data(nelements);
-                if (fread(f16_data.data(), sizeof(ggml_fp16_t), nelements, fin) != (size_t)nelements) {
-                    fprintf(stderr, "failed to read f16 data\n");
-                    return false;
-                }
-                for (int j = 0; j < nelements; j++)
-                    f32_data[j] = ggml_fp16_to_fp32(f16_data[j]);
+        if (quantize || ((qtype_used == GGML_TYPE_F16 || qtype_used == GGML_TYPE_F32) && qtype_used != type)) {
+            if (quantize) {
+                n_quantized++;
+                printf("quantizing to %s... ", ggml_type_name(qtype_used));
             } else {
-                // Quantized source: read the raw quantized bytes and dequantize
-                // to F32 via the type's traits, then re-quantize to the target.
-                const size_t src_bytes = ggml_nbytes(t);
-                std::vector<uint8_t> qbuf(src_bytes);
-                if (fread(qbuf.data(), 1, src_bytes, fin) != src_bytes) {
-                    fprintf(stderr, "failed to read quantized source data\n");
-                    return false;
-                }
-                const ggml_type_traits* tr = ggml_get_type_traits(type);
-                if (!tr || !tr->to_float) {
-                    fprintf(stderr, "no dequantizer for source type %s\n", ggml_type_name(type));
-                    return false;
-                }
-                tr->to_float(qbuf.data(), f32_data.data(), nelements);
+                printf("%s -> %s... ", ggml_type_name(type), ggml_type_name(qtype_used));
+            }
+            const int64_t nelements = ggml_nelements(t);
+            const int64_t n_per_row = row_lens[i] > 0 ? row_lens[i] : t->ne[0];
+            if (n_per_row <= 0 || nelements <= 0 || nelements % n_per_row != 0) {
+                fprintf(stderr, "invalid tensor row layout for %s\n", name);
+                return false;
+            }
+            // Keep complete rows, including flattened pointwise convolutions and
+            // every expert in a 3-D bank. One unusually wide row is the minimum
+            // working set; ordinary tensors use at most 1M F32 elements at once.
+            const int64_t rows_per_chunk = std::max<int64_t>(1, (1 << 20) / n_per_row);
+            const int64_t nrows = nelements / n_per_row;
+            std::vector<uint8_t> source_data;
+            const ggml_type_traits* traits = ggml_get_type_traits(type);
+            if (type != GGML_TYPE_F32 && type != GGML_TYPE_F16 && (!traits || !traits->to_float)) {
+                fprintf(stderr, "no dequantizer for source type %s\n", ggml_type_name(type));
+                return false;
             }
 
-            const int64_t n_per_row = row_lens[i] > 0 ? row_lens[i] : t->ne[0];
-            const size_t max_q_size = ggml_row_size(qtype_used, n_per_row) * (nelements / n_per_row);
-            q_data.resize(max_q_size);
-
-            // Importance matrix (if loaded and shape-matched): steers k-quant/IQ
-            // precision toward the columns the calibration data actually used.
             const float* imatrix = nullptr;
-            if (!g_imatrix.empty()) {
+            if (quantize && !g_imatrix.empty()) {
                 auto it = g_imatrix.find(name);
                 if (it != g_imatrix.end()) {
                     if ((int64_t)it->second.size() == n_per_row) {
@@ -1533,70 +1515,74 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                 }
             }
 
-            size_t q_size = ggml_quantize_chunk(qtype_used, f32_data.data(), q_data.data(), 0, nelements / n_per_row,
-                                                n_per_row, imatrix);
-
-            if (!write_output(q_data.data(), q_size, "write quantized tensor to") || !write_padding(q_size))
-                return false;
-
-            printf("done\n");
-        } else if ((qtype_used == GGML_TYPE_F16 || qtype_used == GGML_TYPE_F32) && qtype_used != type) {
-            // Up/down-cast to F16 or F32 from ANY source (F32/F16/quantized):
-            // e.g. the granite encoder F32→F16 downcast, or a --tensor-type
-            // override pinning a quantized tensor to F16. Read → F32 → write.
-            printf("%s -> %s... ", ggml_type_name(type), ggml_type_name(qtype_used));
-            const int64_t nelements = ggml_nelements(t);
-            std::vector<float> f32(nelements);
-            if (type == GGML_TYPE_F32) {
-                if (fread(f32.data(), sizeof(float), nelements, fin) != (size_t)nelements) {
-                    fprintf(stderr, "failed to read f32 data\n");
-                    return false;
+            size_t out_bytes = 0;
+            for (int64_t row = 0; row < nrows; row += rows_per_chunk) {
+                const int64_t rows = std::min(rows_per_chunk, nrows - row);
+                const int64_t count = rows * n_per_row;
+                f32_data.resize(count);
+                if (type == GGML_TYPE_F32) {
+                    if (fread(f32_data.data(), sizeof(float), count, fin) != (size_t)count) {
+                        fprintf(stderr, "failed to read f32 data\n");
+                        return false;
+                    }
+                } else {
+                    const size_t src_bytes = ggml_row_size(type, n_per_row) * rows;
+                    source_data.resize(src_bytes);
+                    if (fread(source_data.data(), 1, src_bytes, fin) != src_bytes) {
+                        fprintf(stderr, "failed to read %s data\n", ggml_type_name(type));
+                        return false;
+                    }
+                    if (type == GGML_TYPE_F16) {
+                        // memcpy avoids imposing alignment on a byte buffer.
+                        for (int64_t j = 0; j < count; j++) {
+                            ggml_fp16_t value;
+                            memcpy(&value, source_data.data() + j * sizeof(value), sizeof(value));
+                            f32_data[j] = ggml_fp16_to_fp32(value);
+                        }
+                    } else {
+                        traits->to_float(source_data.data(), f32_data.data(), count);
+                    }
                 }
-            } else if (type == GGML_TYPE_F16) {
-                std::vector<ggml_fp16_t> f16in(nelements);
-                if (fread(f16in.data(), sizeof(ggml_fp16_t), nelements, fin) != (size_t)nelements) {
-                    fprintf(stderr, "failed to read f16 data\n");
-                    return false;
+                const size_t chunk_bytes = ggml_row_size(qtype_used, n_per_row) * rows;
+                q_data.resize(chunk_bytes);
+                if (quantize) {
+                    // Both buffers begin at this chunk: start must remain zero.
+                    const size_t written =
+                        ggml_quantize_chunk(qtype_used, f32_data.data(), q_data.data(), 0, rows, n_per_row, imatrix);
+                    if (written != chunk_bytes) {
+                        fprintf(stderr, "unexpected quantized chunk size for %s\n", name);
+                        return false;
+                    }
+                } else if (qtype_used == GGML_TYPE_F16) {
+                    for (int64_t j = 0; j < count; j++) {
+                        const ggml_fp16_t value = ggml_fp32_to_fp16(f32_data[j]);
+                        memcpy(q_data.data() + j * sizeof(value), &value, sizeof(value));
+                    }
+                } else {
+                    memcpy(q_data.data(), f32_data.data(), chunk_bytes);
                 }
-                for (int64_t j = 0; j < nelements; j++)
-                    f32[j] = ggml_fp16_to_fp32(f16in[j]);
-            } else {
-                std::vector<uint8_t> qbuf(size);
-                if (fread(qbuf.data(), 1, size, fin) != size) {
-                    fprintf(stderr, "failed to read quantized source data\n");
+                if (!write_output(q_data.data(), chunk_bytes, "write converted tensor to"))
                     return false;
-                }
-                const ggml_type_traits* tr = ggml_get_type_traits(type);
-                if (!tr || !tr->to_float) {
-                    fprintf(stderr, "no dequantizer for source type %s\n", ggml_type_name(type));
-                    return false;
-                }
-                tr->to_float(qbuf.data(), f32.data(), nelements);
+                out_bytes += chunk_bytes;
             }
-            size_t out_bytes;
-            if (qtype_used == GGML_TYPE_F16) {
-                std::vector<ggml_fp16_t> f16(nelements);
-                for (int64_t j = 0; j < nelements; j++)
-                    f16[j] = ggml_fp32_to_fp16(f32[j]);
-                out_bytes = (size_t)nelements * sizeof(ggml_fp16_t);
-                if (!write_output(f16.data(), out_bytes, "write F16 tensor to"))
-                    return false;
-            } else {
-                out_bytes = (size_t)nelements * sizeof(float);
-                if (!write_output(f32.data(), out_bytes, "write F32 tensor to"))
-                    return false;
-            }
+            // GGUF aligns tensors, never individual chunks.
             if (!write_padding(out_bytes))
                 return false;
             printf("done\n");
         } else {
             printf("copying... ");
-            std::vector<uint8_t> raw_data(size);
-            if (fread(raw_data.data(), 1, size, fin) != size) {
-                fprintf(stderr, "failed to read raw data\n");
-                return false;
+            q_data.resize(std::min<size_t>(size, 1 << 20));
+            for (size_t remaining = size; remaining > 0;) {
+                const size_t count = std::min(remaining, q_data.size());
+                if (fread(q_data.data(), 1, count, fin) != count) {
+                    fprintf(stderr, "failed to read raw data\n");
+                    return false;
+                }
+                if (!write_output(q_data.data(), count, "write copied tensor to"))
+                    return false;
+                remaining -= count;
             }
-            if (!write_output(raw_data.data(), size, "write copied tensor to") || !write_padding(size))
+            if (!write_padding(size))
                 return false;
             printf("done\n");
         }

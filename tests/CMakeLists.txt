@@ -6903,6 +6903,13 @@ if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)
         LABELS "unit;gh;quantization"
         TIMEOUT 120)
 
+    add_test(NAME test-quantizer-streaming
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-quantizer-streaming.py
+            $<TARGET_FILE:crispasr-quantize>)
+    set_tests_properties(test-quantizer-streaming PROPERTIES
+        LABELS "unit;gh;quantization"
+        TIMEOUT 180)
+
     # Real /dev/full plus deterministic stdio failures in the production CLI.
     # Interposition is Linux-specific; the real device check skips elsewhere.
     set(quantizer_io_fault_args)

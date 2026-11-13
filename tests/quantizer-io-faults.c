@@ -47,7 +47,7 @@ size_t fwrite(const void* data, size_t size, size_t count, FILE* stream) {
                             : (size * count >= 4 && memcmp(data, "GGUF", 4) == 0)
                                 ? "metadata"
                                 : (size * count < 32 ? "padding" : "tensor");
-        if (fail(stage)) {
+        if (fail(stage) || (writes == 3 && strcmp(stage, "tensor") == 0 && fail("tensor-after-chunk"))) {
             // A partial write matters too: the caller must reject a short count.
             return real_write(data, size, count / 2, stream);
         }
