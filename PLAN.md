@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Ultra local-head Ruby binding — complete Codex (2026-11-13)
+
+- Base `309830a48`; isolated `feat/ultra-ruby-20261113`. Added the missing experimental Ruby local-head API with owned UTF-8 text, double-second boundaries and deterministic native cleanup, including Ruby exceptions during result conversion. The native-recorder contract first failed on the missing method; the full strict Ruby contract now passes 379 assertions, covering argument transport, fractional timing, output lifetime, null/empty/invalid-count results, injected conversion exceptions and invalid input. Existing CTest and strict binding runner discover these tests; context guards are synchronized. clang-format 18 and whitespace checks pass. No model, full-library build, GPU, push or hosted job; broader model quality remains unqualified.
+
 ### RNNoise native input bounds — complete Codex (2026-11-13)
 
 - Native RNNoise now rejects inputs before allocation when resampling or padding counts cannot fit native frame and buffer limits. A production-source test passes 59 checks under ASan/UBSan and optimized builds, covering exact bounds, simulated 32-bit capacities and small successful inputs; no large buffers are allocated. Actual 32-bit and real-DSP validation were not run.

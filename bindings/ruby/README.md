@@ -516,3 +516,13 @@ storage is released. Callback exceptions retain the existing policy of being
 swallowed so capture can continue; handle application errors inside the block
 when they need reporting. Killing/interruption of the pump also releases its
 native device. Close each microphone explicitly when finished.
+
+
+## Experimental Ultra local-head alignment
+
+`Whisper::CrispASR::Session.align_words_ultra(base_path, head_path, text, pcm, n_threads)`
+returns owned UTF-8 words as `{text:, start:, end:}` hashes, with floating-point
+seconds. All five arguments are required. Supply both converted GGUFs and a mono
+16 kHz sample array of 1–1,920,000 samples. The local head runs on CPU. See the
+[local-head guide](../../docs/qwen3-ultra-local-head-port.md) for an example,
+errors and the experimental qualification scope.

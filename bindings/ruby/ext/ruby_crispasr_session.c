@@ -1261,6 +1261,69 @@ static VALUE rb_session_vad_segments(int argc, VALUE* argv, VALUE self) {
     return result;
 }
 
+// Experimental Ultra local head: mono 16 kHz PCM, owned words and double-second times.
+struct crispasr_ultra_align_result;
+extern struct crispasr_ultra_align_result* crispasr_align_words_ultra_abi(const char* base, const char* head,
+                                                                          const char* text, const float* pcm, int32_t n,
+                                                                          int32_t threads);
+extern int crispasr_ultra_align_result_n_words(const struct crispasr_ultra_align_result* r);
+extern const char* crispasr_ultra_align_result_word_text(const struct crispasr_ultra_align_result* r, int i);
+extern double crispasr_ultra_align_result_word_start_ms(const struct crispasr_ultra_align_result* r, int i);
+extern double crispasr_ultra_align_result_word_end_ms(const struct crispasr_ultra_align_result* r, int i);
+extern void crispasr_ultra_align_result_free(struct crispasr_ultra_align_result* r);
+
+static VALUE rb_ultra_copy_words(VALUE opaque) {
+    struct crispasr_ultra_align_result* r = (struct crispasr_ultra_align_result*)(uintptr_t)opaque;
+    int count = crispasr_ultra_align_result_n_words(r);
+    if (count < 0)
+        rb_raise(rb_eRuntimeError, "Invalid Ultra alignment word count");
+    VALUE words = rb_ary_new_capa(count);
+    for (int i = 0; i < count; ++i) {
+        VALUE word = rb_hash_new();
+        const char* text = crispasr_ultra_align_result_word_text(r, i);
+        rb_hash_aset(word, ID2SYM(rb_intern("text")), rb_utf8_str_new_cstr(text ? text : ""));
+        rb_hash_aset(word, ID2SYM(rb_intern("start")),
+                     DBL2NUM(crispasr_ultra_align_result_word_start_ms(r, i) / 1000.0));
+        rb_hash_aset(word, ID2SYM(rb_intern("end")), DBL2NUM(crispasr_ultra_align_result_word_end_ms(r, i) / 1000.0));
+        rb_ary_push(words, word);
+    }
+    return words;
+}
+
+static VALUE rb_session_align_words_ultra(VALUE self, VALUE base, VALUE head, VALUE text, VALUE pcm_arr,
+                                          VALUE threads) {
+    StringValue(base);
+    StringValue(head);
+    StringValue(text);
+    // Validate C strings before dispatch, including embedded NULs.
+    StringValueCStr(base);
+    StringValueCStr(head);
+    StringValueCStr(text);
+    if (RSTRING_LEN(base) == 0 || RSTRING_LEN(head) == 0 || RSTRING_LEN(text) == 0)
+        rb_raise(rb_eArgError, "Ultra alignment requires base model, local head and transcript");
+    Check_Type(pcm_arr, T_ARRAY);
+    long count = RARRAY_LEN(pcm_arr);
+    if (count <= 0 || count > 120 * 16000)
+        rb_raise(rb_eArgError, "Ultra alignment requires 1 to 1920000 mono 16 kHz samples");
+    int n_threads = NUM2INT(threads);
+    VALUE storage = rb_aux_pcm_storage(pcm_arr);
+    struct crispasr_ultra_align_result* r =
+        crispasr_align_words_ultra_abi(StringValueCStr(base), StringValueCStr(head), StringValueCStr(text),
+                                       (float*)RSTRING_PTR(storage), (int32_t)count, n_threads);
+    RB_GC_GUARD(storage);
+    RB_GC_GUARD(base);
+    RB_GC_GUARD(head);
+    RB_GC_GUARD(text);
+    if (!r)
+        rb_raise(rb_eRuntimeError, "Ultra alignment failed");
+    int state = 0;
+    VALUE words = rb_protect(rb_ultra_copy_words, (VALUE)(uintptr_t)r, &state);
+    crispasr_ultra_align_result_free(r);
+    if (state)
+        rb_jump_tag(state);
+    return words;
+}
+
 // CrispASR::Session.align_words(aligner_model, transcript, pcm, n_threads) -> [{text:, t0:, t1:}]
 static VALUE rb_session_align_words(VALUE self, VALUE aligner_model, VALUE transcript, VALUE pcm_arr,
                                     VALUE n_threads_v) {
@@ -1862,6 +1925,7 @@ RB_CONTEXT_WRAPPER_1(rb_session_ctc_vocab);
 RB_CONTEXT_WRAPPER_5(rb_session_transcribe_chunked);
 RB_CONTEXT_WRAPPER_0(rb_session_get_progress);
 RB_CONTEXT_WRAPPER_VAR(rb_session_vad_segments);
+RB_CONTEXT_WRAPPER_5(rb_session_align_words_ultra);
 RB_CONTEXT_WRAPPER_4(rb_session_align_words);
 RB_CONTEXT_WRAPPER_1(rb_session_clear_phoneme_cache);
 RB_CONTEXT_WRAPPER_2(rb_session_set_source_language);
@@ -1989,6 +2053,7 @@ void init_ruby_crispasr_session(VALUE* mWhisper) {
     rb_define_singleton_method(mSession, "transcribe_chunked", rb_context_guard_rb_session_transcribe_chunked, 5);
     rb_define_singleton_method(mSession, "get_progress", rb_context_guard_rb_session_get_progress, 0);
     rb_define_singleton_method(mSession, "vad_segments", rb_context_guard_rb_session_vad_segments, -1);
+    rb_define_singleton_method(mSession, "align_words_ultra", rb_context_guard_rb_session_align_words_ultra, 5);
     rb_define_singleton_method(mSession, "align_words", rb_context_guard_rb_session_align_words, 4);
     rb_define_singleton_method(mSession, "clear_phoneme_cache", rb_context_guard_rb_session_clear_phoneme_cache, 1);
     rb_define_singleton_method(mSession, "set_source_language", rb_context_guard_rb_session_set_source_language, 2);

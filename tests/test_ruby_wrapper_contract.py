@@ -55,7 +55,22 @@ class RubyWrapperContract(unittest.TestCase):
             stub = tmp/'unused.c'
             stub.write_text('#include <stdlib.h>\n'+''.join('void '+n+'(void){abort();}\n' for n in unused))
             init = tmp/'init.c'
-            init.write_text('#include <ruby.h>\nvoid init_ruby_crispasr_session(VALUE*);\nvoid Init_wrapper_probe(void){VALUE m=rb_define_module("Whisper");init_ruby_crispasr_session(&m);}\n')
+            init.write_text(r'''#include <ruby.h>
+void init_ruby_crispasr_session(VALUE*);
+void probe_ultra_mode(int); int probe_ultra_calls(void); int probe_ultra_frees(void);
+void probe_ultra_throw(void (*callback)(void));
+static void conversion_error(void) { rb_raise(rb_eTypeError,"injected word conversion failure"); }
+static VALUE mode(VALUE self, VALUE v) { probe_ultra_mode(NUM2INT(v)); return Qnil; }
+static VALUE calls(VALUE self) { return INT2NUM(probe_ultra_calls()); }
+static VALUE frees(VALUE self) { return INT2NUM(probe_ultra_frees()); }
+void Init_wrapper_probe(void) {
+ VALUE m=rb_define_module("Whisper"); init_ruby_crispasr_session(&m);
+ probe_ultra_throw(conversion_error);
+ rb_define_singleton_method(m,"ultra_mode",mode,1);
+ rb_define_singleton_method(m,"ultra_calls",calls,0);
+ rb_define_singleton_method(m,"ultra_frees",frees,0);
+}
+''')
             lib = tmp/'wrapper_probe.so'
             subprocess.run(['cc','-shared',*flags,str(obj),str(probe),str(metadata),str(audio),str(chat),str(aux),str(parakeet),str(titanet),str(db),str(speaker),str(stream),str(text),str(mic),str(vad),str(stub),str(init),'-lpthread','-o',str(lib)],check=True)
             program = tmp/'probe.rb';program.write_text(PROGRAM)

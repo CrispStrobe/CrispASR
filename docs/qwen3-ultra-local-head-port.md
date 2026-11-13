@@ -45,6 +45,27 @@ invalid native word count throws `IllegalStateException`. Successful empty
 alignment returns an empty array, and the wrapper frees the native result before
 returning. Use a native library exporting the Ultra local-head C ABI.
 
+For Ruby, `Whisper::CrispASR::Session.align_words_ultra(base_path, head_path,
+text, pcm, n_threads)` takes five required arguments and returns an array of
+hashes with `:text`, `:start` and `:end` keys. Text is owned UTF-8; start/end are
+floating-point seconds, preserving fractional milliseconds. For example:
+
+```ruby
+words = Whisper::CrispASR::Session.align_words_ultra(
+  'qwen3-forced-aligner-ultra-f16.gguf', 'ultra-local-head-f32.gguf',
+  'Words to align', pcm, 4)
+words.each { |word| puts "#{word[:start]}–#{word[:end]}: #{word[:text]}" }
+```
+
+Supply an array of mono 16 kHz PCM samples, at most 120 seconds. Empty model
+paths, empty text, embedded NULs and empty/oversized audio raise `ArgumentError`;
+invalid Ruby types raise `TypeError` and out-of-range thread integers raise
+`RangeError`. A native failure or invalid native word count raises `RuntimeError`.
+Successful empty alignment returns `[]`. The wrapper releases the native result
+before returning and if Ruby result conversion raises. Use a native library
+exporting the Ultra local-head C ABI; broader language and device qualification
+remain as described below.
+
 These paths reject audio longer than 120 seconds rather than returning partial
 results. Word-level JSON retains refined timing; subtitle output is rounded to
 milliseconds. The local head runs on CPU and is not auto-downloaded. The base

@@ -16,6 +16,36 @@ def reject(type)
   end
   raise "expected #{type}"
 end
+# Experimental Ultra local head: UTF-8 ownership, fractional seconds and cleanup.
+def ultra
+  Whisper::CrispASR::Session.align_words_ultra('基础.gguf','头.gguf','你好',[1,3,5],7)
+end
+words=ultra
+eq(words.size,1);eq(words[0][:text],'你好');eq(words[0][:text].encoding,Encoding::UTF_8)
+eq((words[0][:start]-0.012345).abs < 1e-12,true)
+eq((words[0][:end]-0.067891).abs < 1e-12,true)
+eq(Whisper.ultra_calls,1);eq(Whisper.ultra_frees,1)
+Whisper.ultra_mode(1);eq(ultra,[]);eq(Whisper.ultra_frees,2)
+Whisper.ultra_mode(2);reject(RuntimeError){ultra};eq(Whisper.ultra_frees,2)
+Whisper.ultra_mode(3);reject(RuntimeError){ultra};eq(Whisper.ultra_frees,3)
+Whisper.ultra_mode(4);eq(ultra[0][:text],'');eq(Whisper.ultra_frees,4)
+# Raise during native-result conversion: Ruby nonlocal jumps must free ownership.
+Whisper.ultra_mode(5);reject(TypeError){ultra};eq(Whisper.ultra_frees,5)
+Whisper.ultra_mode(0)
+eq(ultra[0][:text],'你好');eq(Whisper.ultra_frees,6)
+calls=Whisper.ultra_calls
+['',"bad\0path"].each do |bad|
+  reject(ArgumentError){s.align_words_ultra(bad,'head','text',[1],1)}
+  reject(ArgumentError){s.align_words_ultra('base',bad,'text',[1],1)}
+  reject(ArgumentError){s.align_words_ultra('base','head',bad,[1],1)}
+end
+reject(TypeError){s.align_words_ultra(nil,'head','text',[1],1)}
+reject(TypeError){s.align_words_ultra('base','head','text',nil,1)}
+reject(TypeError){s.align_words_ultra('base','head','text',[Object.new],1)}
+reject(ArgumentError){s.align_words_ultra('base','head','text',[],1)}
+reject(ArgumentError){s.align_words_ultra('base','head','text',Array.new(1920001,0),1)}
+reject(RangeError){s.align_words_ultra('base','head','text',[1],2**40)}
+eq(Whisper.ultra_calls,calls)
 # Original 29 assertions (preserve exact semantics)
 h=s.open('probe',1)
 s.set_speaker_id(h,0);s.set_speaker_id(h,1)

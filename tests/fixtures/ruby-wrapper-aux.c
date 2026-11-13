@@ -274,3 +274,50 @@ int crispasr_session_set_temperature(crispasr_session* session, float temperatur
     ++temperature_calls;
     return session && temperature == .5f && seed == 0 ? 0 : -1;
 }
+
+// Ultra alignment recorder: the extension must copy before freeing this storage.
+struct crispasr_ultra_align_result {
+    char text[16];
+};
+static struct crispasr_ultra_align_result ultra_result;
+static int ultra_mode, ultra_calls, ultra_frees;
+static void (*ultra_throw)(void);
+void probe_ultra_throw(void (*callback)(void)) {
+    ultra_throw = callback;
+}
+void probe_ultra_mode(int value) {
+    ultra_mode = value;
+}
+int probe_ultra_calls(void) {
+    return ultra_calls;
+}
+int probe_ultra_frees(void) {
+    return ultra_frees;
+}
+crispasr_ultra_align_result* crispasr_align_words_ultra_abi(const char* base, const char* head, const char* text,
+                                                            const float* pcm, int32_t n, int32_t threads) {
+    ++ultra_calls;
+    if (ultra_mode == 2 || strcmp(base, "基础.gguf") || strcmp(head, "头.gguf") || strcmp(text, "你好") || n != 3 ||
+        threads != 7 || pcm[0] != 1 || pcm[1] != 3 || pcm[2] != 5)
+        return NULL;
+    strcpy(ultra_result.text, text);
+    return &ultra_result;
+}
+int crispasr_ultra_align_result_n_words(const crispasr_ultra_align_result* r) {
+    return ultra_mode == 1 ? 0 : ultra_mode == 3 ? -1 : 1;
+}
+const char* crispasr_ultra_align_result_word_text(const crispasr_ultra_align_result* r, int i) {
+    if (ultra_mode == 5)
+        ultra_throw();
+    return ultra_mode == 4 ? NULL : r->text;
+}
+double crispasr_ultra_align_result_word_start_ms(const crispasr_ultra_align_result* r, int i) {
+    return 12.345;
+}
+double crispasr_ultra_align_result_word_end_ms(const crispasr_ultra_align_result* r, int i) {
+    return 67.891;
+}
+void crispasr_ultra_align_result_free(crispasr_ultra_align_result* r) {
+    ++ultra_frees;
+    strcpy(r->text, "freed");
+}
