@@ -1,0 +1,482 @@
+{
+  "date": "2026-11-13",
+  "kernel": "crispasr-reuse-corpus-ten-second-20261113",
+  "version": 1,
+  "kernel_id": 144753603,
+  "status": "complete",
+  "scope": "Original-only whole10s versus original5s/2.5s-overlap reference chunking; no native parity or product-quality claim.",
+  "attribution": "LibriSpeech test-clean, OpenSLR12, CC BY4.0, https://www.openslr.org/12",
+  "elapsed_seconds": 1788.1617563609998,
+  "sample_rate": 16000,
+  "samples": 160000,
+  "noise": "globally generated seeded white noise at 5 dB",
+  "window_samples": 80000,
+  "hop_samples": 40000,
+  "selected_stages": [
+    "amplitude",
+    "block_29",
+    "encoder_layer_0",
+    "frontend_magnitude",
+    "frontend_phase",
+    "output_phase",
+    "raw_audio",
+    "waveform"
+  ],
+  "stoi_available": false,
+  "cases": [
+    {
+      "speaker": 61,
+      "source": "61-70970-0038.flac",
+      "source_sha256": "b91945bea4863b159ab19468d55b238480cd6ee95717a865b63c56a91243e9ff",
+      "noise_seed": 5791061,
+      "starts": [
+        0,
+        40000,
+        80000
+      ],
+      "input_metrics": {
+        "snr_db": 4.999999999509329,
+        "si_sdr_db": 4.994697745703117,
+        "projection_gain": 0.9995392299581309,
+        "rms_ratio": 1.146852012852224,
+        "spectral_convergence": 0.5021176460786015,
+        "peak_abs": 0.5317764282226562,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_metrics": {
+        "snr_db": 12.799158881163862,
+        "si_sdr_db": 12.648137568002966,
+        "projection_gain": 0.9204472657822562,
+        "rms_ratio": 0.9450037089309813,
+        "spectral_convergence": 0.17138642403378598,
+        "peak_abs": 0.5225352048873901,
+        "fraction_abs_gt_one": 0.0
+      },
+      "chunked_metrics": {
+        "snr_db": 12.747580133581017,
+        "si_sdr_db": 12.63863081736718,
+        "projection_gain": 0.9125241324153569,
+        "rms_ratio": 0.9369240999852693,
+        "spectral_convergence": 0.1734696597844511,
+        "peak_abs": 0.5177346467971802,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_vs_chunked": {
+        "rel_rms": 0.020823031797626314,
+        "max_abs": 0.010767936706542969,
+        "reference_norm": 19.7695794124234,
+        "candidate_norm": 19.60055312272315,
+        "norm_ratio": 0.9914501828200738,
+        "cosine": 0.9998181959690486
+      },
+      "selected_references": [
+        {
+          "name": "speaker-61-whole-selected-reference.npz",
+          "bytes": 180198455,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-61-window-0-selected-reference.npz",
+          "bytes": 90166378,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-61-window-1-selected-reference.npz",
+          "bytes": 90167462,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-61-window-2-selected-reference.npz",
+          "bytes": 90161802,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        }
+      ]
+    },
+    {
+      "speaker": 121,
+      "source": "121-123859-0000.flac",
+      "source_sha256": "bd507b31ede22afb0a49e9386ce62c3168cf6b2d93e88b6b548ff109d9d070b0",
+      "noise_seed": 5791121,
+      "starts": [
+        0,
+        40000,
+        80000
+      ],
+      "input_metrics": {
+        "snr_db": 4.9999999993221245,
+        "si_sdr_db": 5.005204472300844,
+        "projection_gain": 1.0005954607852008,
+        "rms_ratio": 1.1477890135854665,
+        "spectral_convergence": 0.5074295124783038,
+        "peak_abs": 0.5135911703109741,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_metrics": {
+        "snr_db": 12.69796591681686,
+        "si_sdr_db": 12.618669582691362,
+        "projection_gain": 0.9062539829230725,
+        "rms_ratio": 0.9307182488700192,
+        "spectral_convergence": 0.17613647018510653,
+        "peak_abs": 0.4596027731895447,
+        "fraction_abs_gt_one": 0.0
+      },
+      "chunked_metrics": {
+        "snr_db": 12.36765725018159,
+        "si_sdr_db": 12.417395500588452,
+        "projection_gain": 0.8861039031472051,
+        "rms_ratio": 0.9111431540093099,
+        "spectral_convergence": 0.18779527053347717,
+        "peak_abs": 0.442405641078949,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_vs_chunked": {
+        "rel_rms": 0.045260364171126874,
+        "max_abs": 0.02021762728691101,
+        "reference_norm": 15.087310702987255,
+        "candidate_norm": 14.769990677767446,
+        "norm_ratio": 0.9789677543290084,
+        "cosine": 0.9991796741006804
+      },
+      "selected_references": [
+        {
+          "name": "speaker-121-whole-selected-reference.npz",
+          "bytes": 180120996,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-121-window-0-selected-reference.npz",
+          "bytes": 90119006,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-121-window-1-selected-reference.npz",
+          "bytes": 90130879,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-121-window-2-selected-reference.npz",
+          "bytes": 90130123,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        }
+      ]
+    },
+    {
+      "speaker": 237,
+      "source": "237-134500-0015.flac",
+      "source_sha256": "6ffebcfa98310cfce7cf46ac74fb602237fafc1b2b1915142c3f4c08b8f31fbe",
+      "noise_seed": 5791237,
+      "starts": [
+        0,
+        40000,
+        80000
+      ],
+      "input_metrics": {
+        "snr_db": 4.999999999670716,
+        "si_sdr_db": 4.994031064242483,
+        "projection_gain": 0.9993013973464966,
+        "rms_ratio": 1.1466599527023045,
+        "spectral_convergence": 0.5188112895820577,
+        "peak_abs": 0.8080692887306213,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_metrics": {
+        "snr_db": 15.669541135418779,
+        "si_sdr_db": 16.322767144047393,
+        "projection_gain": 0.9122663848203432,
+        "rms_ratio": 0.9228419634093317,
+        "spectral_convergence": 0.13101100909864655,
+        "peak_abs": 0.711522102355957,
+        "fraction_abs_gt_one": 0.0
+      },
+      "chunked_metrics": {
+        "snr_db": 15.346372950642168,
+        "si_sdr_db": 16.34112802608256,
+        "projection_gain": 0.8975779219317768,
+        "rms_ratio": 0.907939567070052,
+        "spectral_convergence": 0.13898619235629833,
+        "peak_abs": 0.6957413554191589,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_vs_chunked": {
+        "rel_rms": 0.02471393418109137,
+        "max_abs": 0.017572641372680664,
+        "reference_norm": 32.37834831740294,
+        "candidate_norm": 31.85549066834828,
+        "norm_ratio": 0.9838516268980395,
+        "cosine": 0.9998221232860185
+      },
+      "selected_references": [
+        {
+          "name": "speaker-237-whole-selected-reference.npz",
+          "bytes": 180267913,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-237-window-0-selected-reference.npz",
+          "bytes": 90199947,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-237-window-1-selected-reference.npz",
+          "bytes": 90210561,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-237-window-2-selected-reference.npz",
+          "bytes": 90202475,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        }
+      ]
+    },
+    {
+      "speaker": 260,
+      "source": "260-123440-0004.flac",
+      "source_sha256": "288d22f60ab2527ac2e4035a16c9095438c71deed8becde769d91a964234d139",
+      "noise_seed": 5791260,
+      "starts": [
+        0,
+        40000,
+        80000
+      ],
+      "input_metrics": {
+        "snr_db": 5.000000001481002,
+        "si_sdr_db": 4.99351987728611,
+        "projection_gain": 0.9992532040280107,
+        "rms_ratio": 1.1466188360515561,
+        "spectral_convergence": 0.515003258590068,
+        "peak_abs": 0.40108799934387207,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_metrics": {
+        "snr_db": 14.797462972484785,
+        "si_sdr_db": 14.655611930098464,
+        "projection_gain": 0.9612586992384543,
+        "rms_ratio": 0.9775732516424737,
+        "spectral_convergence": 0.1262254655279431,
+        "peak_abs": 0.39847075939178467,
+        "fraction_abs_gt_one": 0.0
+      },
+      "chunked_metrics": {
+        "snr_db": 14.744379645244564,
+        "si_sdr_db": 14.678949507585749,
+        "projection_gain": 0.9427450324597233,
+        "rms_ratio": 0.9586603472869019,
+        "spectral_convergence": 0.12971980829850632,
+        "peak_abs": 0.39088839292526245,
+        "fraction_abs_gt_one": 0.0
+      },
+      "whole_vs_chunked": {
+        "rel_rms": 0.02574523944277044,
+        "max_abs": 0.012917369604110718,
+        "reference_norm": 20.77648199790592,
+        "candidate_norm": 20.37452376489223,
+        "norm_ratio": 0.9806532100548013,
+        "cosine": 0.9998528944432958
+      },
+      "selected_references": [
+        {
+          "name": "speaker-260-whole-selected-reference.npz",
+          "bytes": 180167001,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-260-window-0-selected-reference.npz",
+          "bytes": 90145066,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-260-window-1-selected-reference.npz",
+          "bytes": 90156163,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        },
+        {
+          "name": "speaker-260-window-2-selected-reference.npz",
+          "bytes": 90155457,
+          "stages": [
+            "amplitude",
+            "block_29",
+            "encoder_layer_0",
+            "frontend_magnitude",
+            "frontend_phase",
+            "output_phase",
+            "raw_audio",
+            "waveform"
+          ]
+        }
+      ]
+    }
+  ],
+  "independent_wave_checks": [
+    {
+      "speaker": 61,
+      "metrics_recomputed": true,
+      "stitch_replay_exact": true,
+      "whole_chunked_rel_rms": 0.020823031797626314,
+      "snr_delta_chunked_minus_whole": -0.05157874758284464
+    },
+    {
+      "speaker": 121,
+      "metrics_recomputed": true,
+      "stitch_replay_exact": true,
+      "whole_chunked_rel_rms": 0.045260364171126874,
+      "snr_delta_chunked_minus_whole": -0.33030866663527014
+    },
+    {
+      "speaker": 237,
+      "metrics_recomputed": true,
+      "stitch_replay_exact": true,
+      "whole_chunked_rel_rms": 0.02471393418109137,
+      "snr_delta_chunked_minus_whole": -0.3231681847766108
+    },
+    {
+      "speaker": 260,
+      "metrics_recomputed": true,
+      "stitch_replay_exact": true,
+      "whole_chunked_rel_rms": 0.02574523944277044,
+      "snr_delta_chunked_minus_whole": -0.05308332724022158
+    }
+  ],
+  "interpretation": "Both original recipes improve SNR on these four inputs. Chunked SNR is lower than whole-input SNR by 0.052\u20130.330 dB; waveform relRMS differs by 2.08\u20134.53%. This is a context/chunking diagnostic, not a native parity or perceptual/product acceptance result.",
+  "selected_reference_recovery": {
+    "archives": 16,
+    "bytes": 1802699684,
+    "all_eight_stage_names_present": true,
+    "raw_input_arrays_match_saved_input_slices": true,
+    "waveform_arrays_match_saved_wavs": true
+  }
+}
