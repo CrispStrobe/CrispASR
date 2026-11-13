@@ -46,9 +46,13 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - Source `853f04f09ebf8b0b574c79c0b95126eabdf7a2d9`. Ran the selected TADA, Parler and KugelAudio manifest entries on Kaggle against the pinned source because the existing Actions run was queued. Kaggle `crispasr-selected-regression-20261112` version 1 passed all three non-advisory CPU TTS-to-ASR roundtrips: Parler WER 0.1111 (limit 0.2), TADA 0.1111 (limit 0.3), and KugelAudio 0.0000 (limit 0.3). See the [run receipt](docs/historical/selected-tts-regression-20261112.json). This is one text input per backend, not broader voice, language or GPU qualification.
 
+### Server request context #588 HTTP/model validation — Codex (2026-11-13)
+
+- Base `8d3b6aa39`; all nine actual multipart HTTP/model cases pass on CPU with Qwen3-ASR 0.6B Q4_K. The [receipt](docs/historical/issue588-context-http-20261113.json) verifies exact tokenizer ChatML context bytes, real JFK speech, default/per-request/missing/empty restoration, prompt independence and both endpoints. The [live probe](tools/diagnostics/server_context_http.py) uses an unmodified server and a debugger observer; all 12 existing source controls also pass. Qwen3 omits `CAP_STREAMING`, so the two `stream=true` cases prove buffered fallback routing; genuine SSE and reporter-corpus language quality remain unqualified. No runtime changes, GPU use or CI dispatch.
+
 ### Server request context #588 — Codex (2026-11-12)
 
-- Source `30d03c393`; integrated fix `317703f95`. Unsupported streaming requests bypassed the ignored-context warning. A shared once-only warning now covers buffered and streaming dispatch; 12 source-compiled controls cover defaults, both endpoints, per-request and concurrent isolation, capability declarations and warnings. The two streaming warning cases failed before the fix. Reporter-corpus language behavior and full HTTP/model validation remain open.
+- Source `30d03c393`; integrated fix `317703f95`. Unsupported streaming requests bypassed the ignored-context warning. A shared once-only warning now covers buffered and streaming dispatch; 12 source-compiled controls cover defaults, both endpoints, per-request and concurrent isolation, capability declarations and warnings. The two streaming warning cases failed before the fix. Nine real CPU HTTP/model routing cases now pass (see the 2026-11-13 follow-up above); reporter-corpus language behavior remains open. Qwen3 does not advertise HTTP SSE support.
 
 ### Extended regression coverage outcome — Codex (2026-11-12)
 
@@ -60,6 +64,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Candidate validation: 19 unique model-free CTests and three optional oneMKL controls pass. Existing 100 ms independent original-reference replay passes all 71 unconditioned and 71 conditioned rows with `mkl-avx2`. The [reconciliation record](docs/reuse-reconciliation-20261112.md) preserves exact source and receipt hashes. Broader quality, duration/device and product-surface gates stay open.
 
 ### Model documentation and issues #577/#579 — Codex (2026-11-07)
+
+- **CPU follow-up complete 2026-11-13:** issue #577 description and both comments reread. Actual Q8_0 / IQ4_NL decoder and encoder headers inspected with bounded ranges; the 48 3D expert banks hold 93.16% of decoder quantized matrix elements and have 1856/2688-wide rows, compatible with block-32 IQ4_NL but incompatible with block-256 K formats. A tiny CPU quantizer probe confirms that generic `q3_k` and `q4_k` both skip the 3D expert bank and use Q4_0 for a 2688-wide 2D matrix. The [follow-up](docs/issue-577-nemotron-triage.md#actual-gguf-layout-and-cpu-quantizer-follow-up-2026-11-13) records concrete layouts and remaining speech-pipeline work. Existing parser controls and two model-free layout tests pass. No full 30B weights, GPU/CI jobs or backend changes.
 
 - Source `0c39103756be95576202985e9972479648b4b5c9`. First document shipped Haas-ja usage and the actual Ultra/RE-USE support boundaries against the registry and runtime. Then review draft PR #580 and continue the pinned Ultra local-head and RE-USE work with unit and original-model parity tests; assess Nemotron 3.5 30B conversion, resource and Q3/Q4 quality feasibility. Preserve the #568 Metal CPU fallback and defer physical Metal work as requested.
 

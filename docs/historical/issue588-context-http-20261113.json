@@ -1,0 +1,112 @@
+{
+  "test_source": "8d3b6aa393046b048643709555efc76719ee0bcc",
+  "binary_version": "=== build info ===\n  version       : 0.8.53\n  git sha       : f39a5fc4\n  git date      : 2026-11-12T18:56:33+00:00\n  git subject   : Record_rebuilt_CPU_C_ABI_rejection_qualification\n  build date    : 2026-11-13T07:43:08Z\n  build type    : Release\n  compiler      : gcc 13.3.0\n  os            : linux\n  arch          : x86_64\n  ggml backends : cpu",
+  "binary_sha256": "77a038745efeba36d8abc5ea720406e3f34e73104b71a13027ec5d9f41611599",
+  "model_sha256": "4c67426908a518c28c24bc780df27175fcf84ce4d6dbd678133a4531904bbcc9",
+  "input_sha256": "f670520c560d2c5a62a76fd38e1e33f03b2525c16c02f0001278137037f26030",
+  "device": "CPU",
+  "method": "Unmodified server; gdb read-only tokenizer argument observation; real multipart HTTP and model inference",
+  "cases": [
+    {
+      "case": "default",
+      "endpoint": "/v1/audio/transcriptions",
+      "context": "English",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered",
+      "prompt_sha256": "811180617fc2a4f46a35f672d52281f02c841b89af9c96232b1c269719611920",
+      "elapsed_s": 6.378
+    },
+    {
+      "case": "override",
+      "endpoint": "/v1/audio/transcriptions",
+      "context": "English\nРусский: verbatim.",
+      "status": 200,
+      "text": "And so my fellow Americans, ask.",
+      "response_mode": "buffered",
+      "prompt_sha256": "cd530e228b48d2357cf2de406c97e3628ff053c1eef8b2cd77882a17c578233a",
+      "elapsed_s": 3.748
+    },
+    {
+      "case": "restore",
+      "endpoint": "/v1/audio/transcriptions",
+      "context": "English",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered",
+      "prompt_sha256": "811180617fc2a4f46a35f672d52281f02c841b89af9c96232b1c269719611920",
+      "elapsed_s": 3.575
+    },
+    {
+      "case": "empty",
+      "endpoint": "/v1/audio/transcriptions",
+      "context": "English",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered",
+      "prompt_sha256": "811180617fc2a4f46a35f672d52281f02c841b89af9c96232b1c269719611920",
+      "elapsed_s": 4.505
+    },
+    {
+      "case": "prompt-independent",
+      "endpoint": "/v1/audio/transcriptions",
+      "context": "English",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered",
+      "prompt_sha256": "811180617fc2a4f46a35f672d52281f02c841b89af9c96232b1c269719611920",
+      "elapsed_s": 4.5
+    },
+    {
+      "case": "native-override",
+      "endpoint": "/inference",
+      "context": "English speech",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered",
+      "prompt_sha256": "235e25d80e719269535ac4e1b6e767fb4dcaed2d810a3dc263fa7a7a7f1818ee",
+      "elapsed_s": 4.576
+    },
+    {
+      "case": "native-restore",
+      "endpoint": "/inference",
+      "context": "English",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered",
+      "prompt_sha256": "811180617fc2a4f46a35f672d52281f02c841b89af9c96232b1c269719611920",
+      "elapsed_s": 4.505
+    },
+    {
+      "case": "stream-override",
+      "endpoint": "/v1/audio/transcriptions",
+      "context": "English speech",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered-stream-fallback",
+      "prompt_sha256": "235e25d80e719269535ac4e1b6e767fb4dcaed2d810a3dc263fa7a7a7f1818ee",
+      "elapsed_s": 4.551
+    },
+    {
+      "case": "stream-restore",
+      "endpoint": "/v1/audio/transcriptions",
+      "context": "English",
+      "status": 200,
+      "text": "And so, my fellow Americans, ask.",
+      "response_mode": "buffered-stream-fallback",
+      "prompt_sha256": "811180617fc2a4f46a35f672d52281f02c841b89af9c96232b1c269719611920",
+      "elapsed_s": 4.71
+    }
+  ],
+  "passed": true,
+  "limits": "One four-second English fixture; no reporter ru/en corpus or language-quality qualification. Qwen3 currently omits CAP_STREAMING, so stream=true exercises buffered fallback, not genuine SSE.",
+  "date": "2026-11-13",
+  "artifact_root": "CRISPASR_STORAGE/crispasr/issue588-http-20261113/live-v3",
+  "build_note": "Unchanged production CLI/common sources compiled using CMake-generated commands against the existing CPU candidate backend libraries. Production source directories at binary source f39a5fc4 match validated main 8d3b6aa39.",
+  "source_controls": {
+    "script": "tests/test-server-context.py",
+    "tests": 12,
+    "result": "pass"
+  },
+  "streaming_scope": "The two stream=true cases returned buffered JSON because Qwen3 does not advertise CAP_STREAMING. No Qwen3 SSE qualification is claimed."
+}

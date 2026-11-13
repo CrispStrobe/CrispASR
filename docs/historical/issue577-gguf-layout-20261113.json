@@ -1,0 +1,1072 @@
+{
+  "repository": "AtomicChat/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-GGUF",
+  "revision": "dbd06c5cad7a2f33c8e06be2fb3ef814dbd9aa59",
+  "scope": "Published tensor headers only; no model execution or quality measurement",
+  "files": {
+    "decoder": {
+      "file": "NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-Q8_0.gguf",
+      "url": "https://huggingface.co/AtomicChat/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-GGUF/resolve/dbd06c5cad7a2f33c8e06be2fb3ef814dbd9aa59/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-Q8_0.gguf",
+      "prefix_bytes": 16777216,
+      "architecture": "nemotron_h_moe",
+      "header_bytes": 7897238,
+      "tensor_count": 417,
+      "dtype_counts": {
+        "Q8_0": 173,
+        "F32": 243,
+        "BF16": 1
+      },
+      "quantized_matrix_tensors": 173,
+      "quantized_matrix_elements": 32904044544,
+      "expert_bank_tensors": 48,
+      "expert_bank_elements": 30651973632,
+      "row_block_compatibility": {
+        "32": {
+          "tensors": 173,
+          "elements": 32904044544,
+          "fraction": 1.0
+        },
+        "256": {
+          "tensors": 31,
+          "elements": 344752128,
+          "fraction": 0.0104775000392122
+        }
+      },
+      "layout_groups": [
+        {
+          "ggml_dimensions": [
+            1,
+            64
+          ],
+          "dtype": "F32",
+          "count": 46,
+          "elements": 2944,
+          "examples": [
+            "blk.0.ssm_a",
+            "blk.0.ssm_d"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            4,
+            6144
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 565248,
+          "examples": [
+            "blk.0.ssm_conv1d.weight",
+            "blk.2.ssm_conv1d.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            64
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 1472,
+          "examples": [
+            "blk.0.ssm_dt.bias",
+            "blk.2.ssm_dt.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            128
+          ],
+          "dtype": "F32",
+          "count": 24,
+          "elements": 3072,
+          "examples": [
+            "blk.1.exp_probs_b.bias",
+            "blk.3.exp_probs_b.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            512,
+            8
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 94208,
+          "examples": [
+            "blk.0.ssm_norm.weight",
+            "blk.2.ssm_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1856,
+            2688,
+            128
+          ],
+          "dtype": "Q8_0",
+          "count": 24,
+          "elements": 15325986816,
+          "examples": [
+            "blk.1.ffn_down_exps.weight",
+            "blk.3.ffn_down_exps.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688
+          ],
+          "dtype": "F32",
+          "count": 58,
+          "elements": 155904,
+          "examples": [
+            "output_norm.weight",
+            "blk.0.attn_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            128
+          ],
+          "dtype": "BF16",
+          "count": 1,
+          "elements": 344064,
+          "examples": [
+            "blk.52.ffn_gate_inp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            128
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 7913472,
+          "examples": [
+            "blk.1.ffn_gate_inp.weight",
+            "blk.3.ffn_gate_inp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            256
+          ],
+          "dtype": "Q8_0",
+          "count": 14,
+          "elements": 9633792,
+          "examples": [
+            "blk.5.attn_k.weight",
+            "blk.5.attn_v.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            1856,
+            128
+          ],
+          "dtype": "Q8_0",
+          "count": 24,
+          "elements": 15325986816,
+          "examples": [
+            "blk.1.ffn_up_exps.weight",
+            "blk.3.ffn_up_exps.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            3712
+          ],
+          "dtype": "Q8_0",
+          "count": 24,
+          "elements": 239468544,
+          "examples": [
+            "blk.1.ffn_up_shexp.weight",
+            "blk.3.ffn_up_shexp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            4096
+          ],
+          "dtype": "Q8_0",
+          "count": 7,
+          "elements": 77070336,
+          "examples": [
+            "blk.5.attn_q.weight",
+            "blk.12.attn_q.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            10304
+          ],
+          "dtype": "Q8_0",
+          "count": 23,
+          "elements": 637034496,
+          "examples": [
+            "blk.0.ssm_in.weight",
+            "blk.2.ssm_in.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            131072
+          ],
+          "dtype": "Q8_0",
+          "count": 2,
+          "elements": 704643072,
+          "examples": [
+            "output.weight",
+            "token_embd.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            3712,
+            2688
+          ],
+          "dtype": "Q8_0",
+          "count": 24,
+          "elements": 239468544,
+          "examples": [
+            "blk.1.ffn_down_shexp.weight",
+            "blk.3.ffn_down_shexp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            4096,
+            2688
+          ],
+          "dtype": "Q8_0",
+          "count": 30,
+          "elements": 330301440,
+          "examples": [
+            "blk.0.ssm_out.weight",
+            "blk.2.ssm_out.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            5376,
+            2688
+          ],
+          "dtype": "Q8_0",
+          "count": 1,
+          "elements": 14450688,
+          "examples": [
+            "blk.52.nextn.eh_proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            6144
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 141312,
+          "examples": [
+            "blk.0.ssm_conv1d.bias",
+            "blk.2.ssm_conv1d.bias"
+          ]
+        }
+      ]
+    },
+    "iq4": {
+      "file": "NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-AD-IQ4_NL.gguf",
+      "url": "https://huggingface.co/AtomicChat/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-GGUF/resolve/dbd06c5cad7a2f33c8e06be2fb3ef814dbd9aa59/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-AD-IQ4_NL.gguf",
+      "prefix_bytes": 8388608,
+      "architecture": "nemotron_h_moe",
+      "header_bytes": 7897504,
+      "tensor_count": 417,
+      "dtype_counts": {
+        "Q8_0": 125,
+        "F32": 243,
+        "IQ4_NL": 48,
+        "BF16": 1
+      },
+      "quantized_matrix_tensors": 173,
+      "quantized_matrix_elements": 32904044544,
+      "expert_bank_tensors": 48,
+      "expert_bank_elements": 30651973632,
+      "row_block_compatibility": {
+        "32": {
+          "tensors": 173,
+          "elements": 32904044544,
+          "fraction": 1.0
+        },
+        "256": {
+          "tensors": 31,
+          "elements": 344752128,
+          "fraction": 0.0104775000392122
+        }
+      },
+      "layout_groups": [
+        {
+          "ggml_dimensions": [
+            1,
+            64
+          ],
+          "dtype": "F32",
+          "count": 46,
+          "elements": 2944,
+          "examples": [
+            "blk.0.ssm_a",
+            "blk.0.ssm_d"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            4,
+            6144
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 565248,
+          "examples": [
+            "blk.0.ssm_conv1d.weight",
+            "blk.2.ssm_conv1d.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            64
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 1472,
+          "examples": [
+            "blk.0.ssm_dt.bias",
+            "blk.2.ssm_dt.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            128
+          ],
+          "dtype": "F32",
+          "count": 24,
+          "elements": 3072,
+          "examples": [
+            "blk.1.exp_probs_b.bias",
+            "blk.3.exp_probs_b.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            512,
+            8
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 94208,
+          "examples": [
+            "blk.0.ssm_norm.weight",
+            "blk.2.ssm_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1856,
+            2688,
+            128
+          ],
+          "dtype": "IQ4_NL",
+          "count": 24,
+          "elements": 15325986816,
+          "examples": [
+            "blk.1.ffn_down_exps.weight",
+            "blk.3.ffn_down_exps.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688
+          ],
+          "dtype": "F32",
+          "count": 58,
+          "elements": 155904,
+          "examples": [
+            "output_norm.weight",
+            "blk.0.attn_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            128
+          ],
+          "dtype": "BF16",
+          "count": 1,
+          "elements": 344064,
+          "examples": [
+            "blk.52.ffn_gate_inp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            128
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 7913472,
+          "examples": [
+            "blk.1.ffn_gate_inp.weight",
+            "blk.3.ffn_gate_inp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            256
+          ],
+          "dtype": "Q8_0",
+          "count": 14,
+          "elements": 9633792,
+          "examples": [
+            "blk.5.attn_k.weight",
+            "blk.5.attn_v.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            1856,
+            128
+          ],
+          "dtype": "IQ4_NL",
+          "count": 24,
+          "elements": 15325986816,
+          "examples": [
+            "blk.1.ffn_up_exps.weight",
+            "blk.3.ffn_up_exps.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            3712
+          ],
+          "dtype": "Q8_0",
+          "count": 24,
+          "elements": 239468544,
+          "examples": [
+            "blk.1.ffn_up_shexp.weight",
+            "blk.3.ffn_up_shexp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            4096
+          ],
+          "dtype": "Q8_0",
+          "count": 7,
+          "elements": 77070336,
+          "examples": [
+            "blk.5.attn_q.weight",
+            "blk.12.attn_q.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            10304
+          ],
+          "dtype": "Q8_0",
+          "count": 23,
+          "elements": 637034496,
+          "examples": [
+            "blk.0.ssm_in.weight",
+            "blk.2.ssm_in.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688,
+            131072
+          ],
+          "dtype": "Q8_0",
+          "count": 2,
+          "elements": 704643072,
+          "examples": [
+            "output.weight",
+            "token_embd.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            3712,
+            2688
+          ],
+          "dtype": "Q8_0",
+          "count": 24,
+          "elements": 239468544,
+          "examples": [
+            "blk.1.ffn_down_shexp.weight",
+            "blk.3.ffn_down_shexp.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            4096,
+            2688
+          ],
+          "dtype": "Q8_0",
+          "count": 30,
+          "elements": 330301440,
+          "examples": [
+            "blk.0.ssm_out.weight",
+            "blk.2.ssm_out.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            5376,
+            2688
+          ],
+          "dtype": "Q8_0",
+          "count": 1,
+          "elements": 14450688,
+          "examples": [
+            "blk.52.nextn.eh_proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            6144
+          ],
+          "dtype": "F32",
+          "count": 23,
+          "elements": 141312,
+          "examples": [
+            "blk.0.ssm_conv1d.bias",
+            "blk.2.ssm_conv1d.bias"
+          ]
+        }
+      ]
+    },
+    "encoder": {
+      "file": "NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-Encoder-F16.gguf",
+      "url": "https://huggingface.co/AtomicChat/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-GGUF/resolve/dbd06c5cad7a2f33c8e06be2fb3ef814dbd9aa59/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-Encoder-F16.gguf",
+      "prefix_bytes": 1048576,
+      "architecture": "pee",
+      "header_bytes": 901649,
+      "tensor_count": 886,
+      "dtype_counts": {
+        "F32": 627,
+        "F16": 259
+      },
+      "quantized_matrix_tensors": 0,
+      "quantized_matrix_elements": 0,
+      "expert_bank_tensors": 0,
+      "expert_bank_elements": 0,
+      "row_block_compatibility": {
+        "32": {
+          "tensors": 0,
+          "elements": 0,
+          "fraction": null
+        },
+        "256": {
+          "tensors": 0,
+          "elements": 0,
+          "fraction": null
+        }
+      },
+      "layout_groups": [
+        {
+          "ggml_dimensions": [
+            3,
+            192,
+            1536
+          ],
+          "dtype": "F16",
+          "count": 1,
+          "elements": 884736,
+          "examples": [
+            "diar.head.subpixel_upsample.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            8
+          ],
+          "dtype": "F32",
+          "count": 3,
+          "elements": 24,
+          "examples": [
+            "fusion.diar_norm.bias",
+            "fusion.diar_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            80
+          ],
+          "dtype": "F32",
+          "count": 8,
+          "elements": 640,
+          "examples": [
+            "ctc.transformer.layers.0.attn.k_norm.bias",
+            "ctc.transformer.layers.0.attn.k_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            128
+          ],
+          "dtype": "F32",
+          "count": 128,
+          "elements": 16384,
+          "examples": [
+            "asr.layers.0.attn.k_norm.bias",
+            "asr.layers.0.attn.k_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            192
+          ],
+          "dtype": "F32",
+          "count": 2,
+          "elements": 384,
+          "examples": [
+            "diar.head.encoder_proj.bias",
+            "diar.head.first_hidden_to_hidden.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            192,
+            8
+          ],
+          "dtype": "F16",
+          "count": 1,
+          "elements": 1536,
+          "examples": [
+            "diar.head.single_hidden_to_spks.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            192,
+            192
+          ],
+          "dtype": "F16",
+          "count": 1,
+          "elements": 36864,
+          "examples": [
+            "diar.head.first_hidden_to_hidden.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            257,
+            128
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 32896,
+          "examples": [
+            "preprocessor.fb"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            512
+          ],
+          "dtype": "F32",
+          "count": 191,
+          "elements": 97792,
+          "examples": [
+            "diar.embed_norm.bias",
+            "diar.embed_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            512,
+            192
+          ],
+          "dtype": "F16",
+          "count": 1,
+          "elements": 98304,
+          "examples": [
+            "diar.head.encoder_proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            512,
+            512
+          ],
+          "dtype": "F16",
+          "count": 31,
+          "elements": 8126464,
+          "examples": [
+            "diar.layers.0.attn.out_proj.weight",
+            "diar.layers.1.attn.out_proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            512,
+            1536
+          ],
+          "dtype": "F16",
+          "count": 31,
+          "elements": 24379392,
+          "examples": [
+            "diar.layers.0.attn.w_qkv.weight",
+            "diar.layers.1.attn.w_qkv.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            512,
+            2048
+          ],
+          "dtype": "F16",
+          "count": 31,
+          "elements": 32505856,
+          "examples": [
+            "diar.layers.0.ffn.net.0.weight",
+            "diar.layers.1.ffn.net.0.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            640
+          ],
+          "dtype": "F32",
+          "count": 2,
+          "elements": 1280,
+          "examples": [
+            "ctc.transformer.layers.0.ffn.net.0.bias",
+            "ctc.transformer.layers.1.ffn.net.0.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            640,
+            1280
+          ],
+          "dtype": "F32",
+          "count": 2,
+          "elements": 1638400,
+          "examples": [
+            "ctc.transformer.layers.0.ffn.net.3.weight",
+            "ctc.transformer.layers.1.ffn.net.3.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1024,
+            512
+          ],
+          "dtype": "F16",
+          "count": 1,
+          "elements": 524288,
+          "examples": [
+            "diar.pre_encode.proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1024,
+            1280
+          ],
+          "dtype": "F16",
+          "count": 1,
+          "elements": 1310720,
+          "examples": [
+            "asr.pre_encode.proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280
+          ],
+          "dtype": "F32",
+          "count": 214,
+          "elements": 273920,
+          "examples": [
+            "asr.embed_norm.bias",
+            "asr.embed_norm.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            8
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 10240,
+          "examples": [
+            "fusion.diar_kernel"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            640
+          ],
+          "dtype": "F32",
+          "count": 2,
+          "elements": 1638400,
+          "examples": [
+            "ctc.transformer.layers.0.ffn.net.0.weight",
+            "ctc.transformer.layers.1.ffn.net.0.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            1280
+          ],
+          "dtype": "F16",
+          "count": 32,
+          "elements": 52428800,
+          "examples": [
+            "asr.layers.0.attn.out_proj.weight",
+            "asr.layers.1.attn.out_proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            1280
+          ],
+          "dtype": "F32",
+          "count": 2,
+          "elements": 3276800,
+          "examples": [
+            "ctc.transformer.layers.0.attn.out_proj.weight",
+            "ctc.transformer.layers.1.attn.out_proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            2560
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 3276800,
+          "examples": [
+            "ctc.upsample.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            2688
+          ],
+          "dtype": "F16",
+          "count": 1,
+          "elements": 3440640,
+          "examples": [
+            "fusion.proj.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            3840
+          ],
+          "dtype": "F16",
+          "count": 32,
+          "elements": 157286400,
+          "examples": [
+            "asr.layers.0.attn.w_qkv.weight",
+            "asr.layers.1.attn.w_qkv.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            3840
+          ],
+          "dtype": "F32",
+          "count": 2,
+          "elements": 9830400,
+          "examples": [
+            "ctc.transformer.layers.0.attn.w_qkv.weight",
+            "ctc.transformer.layers.1.attn.w_qkv.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            5120
+          ],
+          "dtype": "F16",
+          "count": 32,
+          "elements": 209715200,
+          "examples": [
+            "asr.layers.0.ffn.net.0.weight",
+            "asr.layers.1.ffn.net.0.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1280,
+            23863
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 30544640,
+          "examples": [
+            "ctc.classifier.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            1536
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 1536,
+          "examples": [
+            "diar.head.subpixel_upsample.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2048
+          ],
+          "dtype": "F32",
+          "count": 31,
+          "elements": 63488,
+          "examples": [
+            "diar.layers.0.ffn.net.0.bias",
+            "diar.layers.1.ffn.net.0.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2048,
+            512
+          ],
+          "dtype": "F16",
+          "count": 31,
+          "elements": 32505856,
+          "examples": [
+            "diar.layers.0.ffn.net.3.weight",
+            "diar.layers.1.ffn.net.3.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2560
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 2560,
+          "examples": [
+            "ctc.upsample.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            2688
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 2688,
+          "examples": [
+            "fusion.proj.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            5120
+          ],
+          "dtype": "F32",
+          "count": 32,
+          "elements": 163840,
+          "examples": [
+            "asr.layers.0.ffn.net.0.bias",
+            "asr.layers.1.ffn.net.0.bias"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            5120,
+            1280
+          ],
+          "dtype": "F16",
+          "count": 32,
+          "elements": 209715200,
+          "examples": [
+            "asr.layers.0.ffn.net.3.weight",
+            "asr.layers.1.ffn.net.3.weight"
+          ]
+        },
+        {
+          "ggml_dimensions": [
+            23863
+          ],
+          "dtype": "F32",
+          "count": 1,
+          "elements": 23863,
+          "examples": [
+            "ctc.classifier.bias"
+          ]
+        }
+      ]
+    }
+  },
+  "date": "2026-11-13",
+  "quantizer_probe": {
+    "release": "v0.8.53",
+    "source_matches_main": "bf4b88ce1",
+    "results": {
+      "q3k": [
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dimensions": [
+            2688,
+            16,
+            2
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.1.ffn_up_shexp.weight",
+          "dimensions": [
+            2688,
+            16
+          ],
+          "type": "Q4_0"
+        }
+      ],
+      "q4k": [
+        {
+          "name": "blk.1.ffn_up_exps.weight",
+          "dimensions": [
+            2688,
+            16,
+            2
+          ],
+          "type": "F32"
+        },
+        {
+          "name": "blk.1.ffn_up_shexp.weight",
+          "dimensions": [
+            2688,
+            16
+          ],
+          "type": "Q4_0"
+        }
+      ]
+    }
+  }
+}
