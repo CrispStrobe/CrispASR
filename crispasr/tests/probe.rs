@@ -1459,3 +1459,67 @@ fn probe_generic_speaker_returns_clusters_and_cache() {
     }
     assert_eq!(unsafe { probe_speaker_live() }, 0);
 }
+
+#[test]
+fn probe_ultra_alignment_precision_and_ownership() {
+    unsafe {
+        probe_reset();
+    }
+    let words =
+        crispasr::align_words_ultra("base.gguf", "head.gguf", "你好", &[1., 3., 5.], 7).unwrap();
+    assert_eq!(words.len(), 1);
+    assert_eq!(words[0].text, "你好");
+    assert!((words[0].start - 0.012345).abs() < 1e-12);
+    assert!((words[0].end - 0.067891).abs() < 1e-12);
+    unsafe {
+        assert_eq!(probe_calls_get(), 1);
+        assert_eq!(probe_result_frees_get(), 1);
+    }
+}
+
+#[test]
+fn probe_ultra_alignment_failure_empty_and_cleanup() {
+    for mode in [1, 2, 3] {
+        unsafe {
+            probe_reset();
+            probe_mode_set(mode);
+        }
+        let result =
+            crispasr::align_words_ultra("base.gguf", "head.gguf", "你好", &[1., 3., 5.], 7);
+        if mode == 1 {
+            assert!(result.unwrap().is_empty());
+        } else {
+            assert!(result.is_err());
+        }
+        unsafe {
+            assert_eq!(probe_calls_get(), 1);
+            assert_eq!(probe_result_frees_get(), if mode == 2 { 0 } else { 1 });
+        }
+    }
+    unsafe {
+        probe_reset();
+    }
+}
+
+#[test]
+fn probe_ultra_alignment_invalid_input() {
+    let too_long = vec![0.; 120 * 16000 + 1];
+    for (base, head, text, pcm) in [
+        ("", "head.gguf", "你好", &[1.][..]),
+        ("base.gguf", "", "你好", &[1.][..]),
+        ("base.gguf", "head.gguf", "", &[1.][..]),
+        ("base.gguf", "head.gguf", "你好", &[][..]),
+        ("base.gguf", "head.gguf", "你好", &too_long[..]),
+        ("base\0.gguf", "head.gguf", "你好", &[1.][..]),
+        ("base.gguf", "head\0.gguf", "你好", &[1.][..]),
+        ("base.gguf", "head.gguf", "你\0好", &[1.][..]),
+    ] {
+        unsafe {
+            probe_reset();
+        }
+        assert!(crispasr::align_words_ultra(base, head, text, pcm, 7).is_err());
+        unsafe {
+            assert_eq!(probe_calls_get(), 0);
+        }
+    }
+}

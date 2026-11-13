@@ -3448,6 +3448,80 @@ pub fn align_words(
     Ok(out)
 }
 
+/// A refined Ultra local-head word interval, in seconds.
+/// Fractional milliseconds are preserved independently of generic alignment.
+#[derive(Clone, Debug)]
+pub struct UltraAlignedWord {
+    pub text: String,
+    pub start: f64,
+    pub end: f64,
+}
+
+/// Run experimental Qwen Ultra local-head forced alignment.
+///
+/// Requires converted base and local-head GGUF paths and nonempty mono 16 kHz
+/// PCM of at most 120 seconds. Paths and transcript must be nonempty and contain
+/// no NUL. Native failure returns an error; a successful empty result returns an
+/// empty vector. Word text is copied before the native result is freed.
+/// The local head runs on CPU; broader language and GPU acceptance remain open.
+pub fn align_words_ultra(
+    aligner_model: &str,
+    head_model: &str,
+    transcript: &str,
+    pcm: &[f32],
+    n_threads: i32,
+) -> Result<Vec<UltraAlignedWord>, String> {
+    if aligner_model.is_empty() || head_model.is_empty() || transcript.is_empty() {
+        return Err("alignment paths and transcript must be nonempty".into());
+    }
+    if pcm.is_empty() || pcm.len() > 120 * 16000 {
+        return Err("Ultra alignment requires between 1 and 1920000 mono 16 kHz samples".into());
+    }
+    let base = CString::new(aligner_model).map_err(|e| format!("aligner_model NUL: {e}"))?;
+    let head = CString::new(head_model).map_err(|e| format!("head_model NUL: {e}"))?;
+    let text = CString::new(transcript).map_err(|e| format!("transcript NUL: {e}"))?;
+    let result = unsafe {
+        crispasr_sys::crispasr_align_words_ultra_abi(
+            base.as_ptr(),
+            head.as_ptr(),
+            text.as_ptr(),
+            pcm.as_ptr(),
+            pcm.len() as i32,
+            n_threads,
+        )
+    };
+    if result.is_null() {
+        return Err("Ultra alignment failed".into());
+    }
+    struct OwnedResult(*mut crispasr_sys::CrispasrUltraAlignResult);
+    impl Drop for OwnedResult {
+        fn drop(&mut self) {
+            unsafe { crispasr_sys::crispasr_ultra_align_result_free(self.0) };
+        }
+    }
+    let owned = OwnedResult(result);
+    let mut words = Vec::new();
+    unsafe {
+        let count = crispasr_sys::crispasr_ultra_align_result_n_words(owned.0);
+        if count < 0 {
+            return Err("invalid native alignment word count".into());
+        }
+        for i in 0..count {
+            let text = crispasr_sys::crispasr_ultra_align_result_word_text(owned.0, i);
+            words.push(UltraAlignedWord {
+                text: if text.is_null() {
+                    String::new()
+                } else {
+                    CStr::from_ptr(text).to_string_lossy().into_owned()
+                },
+                start: crispasr_sys::crispasr_ultra_align_result_word_start_ms(owned.0, i) / 1000.0,
+                end: crispasr_sys::crispasr_ultra_align_result_word_end_ms(owned.0, i) / 1000.0,
+            });
+        }
+    }
+    Ok(words)
+}
+
 // =========================================================================
 // Language identification (shared C-ABI, 0.4.6+)
 // =========================================================================

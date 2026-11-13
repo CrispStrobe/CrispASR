@@ -163,6 +163,11 @@ pub struct CrispasrMic(c_void);
 #[repr(C)]
 pub struct CrispasrAlignResult(c_void);
 
+/// Opaque experimental Ultra local-head alignment result.
+/// Must be freed with [`crispasr_ultra_align_result_free`].
+#[repr(C)]
+pub struct CrispasrUltraAlignResult(c_void);
+
 /// Tunables for [`crispasr_session_transcribe_vad`]. Mirrors crispasr's
 /// `whisper_vad_params` plus the max-chunk fallback used to bound encoder
 /// cost on long audio. Pass a null pointer to use defaults.
@@ -469,6 +474,32 @@ extern "C" {
         i: c_int,
     ) -> i64;
     pub fn crispasr_align_result_free(r: *mut CrispasrAlignResult);
+
+    /// Experimental Ultra alignment with a separate local-head GGUF.
+    /// Audio is mono 16 kHz, at most 120 seconds. Null means failure.
+    /// Returned word times are milliseconds, including fractional milliseconds.
+    pub fn crispasr_align_words_ultra_abi(
+        aligner_model: *const c_char,
+        head_model: *const c_char,
+        transcript: *const c_char,
+        samples: *const c_float,
+        n_samples: c_int,
+        n_threads: c_int,
+    ) -> *mut CrispasrUltraAlignResult;
+    pub fn crispasr_ultra_align_result_n_words(r: *const CrispasrUltraAlignResult) -> c_int;
+    pub fn crispasr_ultra_align_result_word_text(
+        r: *const CrispasrUltraAlignResult,
+        i: c_int,
+    ) -> *const c_char;
+    pub fn crispasr_ultra_align_result_word_start_ms(
+        r: *const CrispasrUltraAlignResult,
+        i: c_int,
+    ) -> f64;
+    pub fn crispasr_ultra_align_result_word_end_ms(
+        r: *const CrispasrUltraAlignResult,
+        i: c_int,
+    ) -> f64;
+    pub fn crispasr_ultra_align_result_free(r: *mut CrispasrUltraAlignResult);
 
     /// Shared HF download + cache (0.4.8+). Writes the resolved path
     /// into `out_buf`. Returns 0 on success, -1 on invalid args, 1 on

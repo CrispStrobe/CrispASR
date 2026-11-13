@@ -64,6 +64,13 @@ Word `confidence` preserves native -1 when unavailable. VAD and owned polling
 share the ordinary result reader, including count checks and RAII cleanup.
 
 
+`align_words_ultra(base_path, head_path, text, pcm, n_threads)` provides
+experimental Qwen Ultra local-head alignment with owned `UltraAlignedWord` values
+and `f64` seconds, preserving fractional milliseconds. Supply both converted
+GGUFs and 1–1,920,000 mono 16 kHz samples; empty/NUL-containing strings and native
+failures return errors. The head runs on CPU. See the
+[local-head guide](../docs/qwen3-ultra-local-head-port.md) for qualification scope.
+
 ## Legacy Whisper compatibility
 
 The deprecated `CrispASR` type remains available. Its opaque-parameter sys calls
