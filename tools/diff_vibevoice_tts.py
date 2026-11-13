@@ -43,6 +43,7 @@ import numpy as np
 
 # (python_ref_name, cpp_dump_name, dtype, label)
 VOICE_STAGES = [
+    ("tts_voice_original_normalized_pcm", "tts_voice_encoder_input", "f32", "upstream vs native preprocessing PCM"),
     ("tts_voice_encoder_input", "tts_voice_encoder_input", "f32", "voice effective encoder PCM"),
     ("tts_voice_acoustic_mean", "tts_voice_acoustic_mean", "f32", "voice acoustic encoder mean"),
     ("tts_voice_acoustic_scaled", "tts_voice_acoustic_scaled", "f32", "voice acoustic scaled"),
@@ -115,7 +116,7 @@ def main():
     ap.add_argument("--threshold", type=float, default=0.999,
                     help="cos threshold below which a stage is flagged (default 0.999)")
     ap.add_argument("--voice-only", action="store_true",
-                    help="compare effective PCM and four base-model voice stages; all are required")
+                    help="compare original/effective PCM and four voice stages; all are required")
     ap.add_argument("--relative-rms-max", type=float, default=0.02,
                     help="voice-only RMS error / reference RMS gate (default 0.02)")
     args = ap.parse_args()
