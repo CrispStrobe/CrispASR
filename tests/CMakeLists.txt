@@ -7008,3 +7008,21 @@ add_executable(test-vibevoice-tts-tokenizer test-vibevoice-tts-tokenizer.cpp)
 target_include_directories(test-vibevoice-tts-tokenizer PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-vibevoice-tts-tokenizer PRIVATE Catch2::Catch2WithMain)
 catch_discover_tests(test-vibevoice-tts-tokenizer)
+
+# Explicitly configured base-model cloning checks; no model downloads in CTest.
+if(Python3_EXECUTABLE AND CRISPASR_BUILD_EXAMPLES)
+    foreach(vibevoice_size IN ITEMS 1.5b 7b)
+        add_test(NAME vibevoice-clone-${vibevoice_size}-live
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live.py
+                --size ${vibevoice_size} --crispasr $<TARGET_FILE:crispasr-cli>
+                --output-dir ${CMAKE_CURRENT_BINARY_DIR}/vibevoice-clone-${vibevoice_size})
+        set_tests_properties(vibevoice-clone-${vibevoice_size}-live PROPERTIES
+            LABELS "live;tts;vibevoice;voice-cloning" SKIP_RETURN_CODE 77
+            RUN_SERIAL TRUE TIMEOUT 7200)
+    endforeach()
+endif()
+if(Python3_EXECUTABLE)
+    add_test(NAME vibevoice-clone-live-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live_controls.py)
+    set_tests_properties(vibevoice-clone-live-controls PROPERTIES LABELS "unit;vibevoice;voice-cloning")
+endif()

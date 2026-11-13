@@ -370,3 +370,31 @@ backends tested; it is not a passing model regression. A selected matrix must
 finish successfully, otherwise coverage fails. The selected backend count and
 list are recorded in the summary; the coverage job also emits machine-readable
 `outcome` and `selected_count` outputs.
+
+### Local VibeVoice clone quality tests
+
+`vibevoice-clone-1.5b-live` and `vibevoice-clone-7b-live` are serial, opt-in
+CTest checks. Configure `CRISPASR_VIBEVOICE_CLONE_15B_MODEL` and/or
+`CRISPASR_VIBEVOICE_CLONE_7B_MODEL`, plus `CRISPASR_VIBEVOICE_CLONE_REFERENCE`
+(a local owned/synthetic PCM16 WAV; preferably 5–10 seconds), and
+`CRISPASR_VIBEVOICE_CLONE_ASR_MODEL`. The recognizer backend defaults to
+`parakeet`; override `CRISPASR_VIBEVOICE_CLONE_ASR_BACKEND` for another local
+recognizer. Resemblyzer must be installed in the isolated Python environment.
+No models or dependencies are downloaded by these tests.
+
+Run `ctest --test-dir BUILD -R '^vibevoice-clone-.*-live$' --output-on-failure`,
+or `tests/test-vibevoice-base-clone.sh --size 7b --crispasr BUILD/bin/crispasr
+--output-dir OUTPUT`. The existing `--keep-files` option remains supported;
+without an explicit output directory it prints and retains a temporary directory.
+`CRISPASR_BIN` also overrides the binary. Unset required
+inputs skip with code 77; invalid explicitly configured inputs fail.
+
+Each test synthesizes the same new sentence and seed with and without the
+reference, transcribes both outputs, and requires WER ≤ 0.25 for both plus
+speaker cosine(clone, reference) − cosine(baseline, reference) > 0.02.
+Override `CRISPASR_VIBEVOICE_CLONE_WER_MAX`,
+`CRISPASR_VIBEVOICE_CLONE_MIN_SPEAKER_DELTA`, and
+`CRISPASR_VIBEVOICE_CLONE_TEXT` for a measured local fixture. Use a sentence
+different from the reference recording. The JSON result retains both
+transcripts, WERs and speaker scores; CTest retains the generated WAVs/logs in
+its binary directory. A skipped test establishes no model-quality result.

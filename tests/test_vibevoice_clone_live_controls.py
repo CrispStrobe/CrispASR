@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Model-free controls for the opt-in VibeVoice clone quality regression."""
+import contextlib
+import importlib.util
+import io
+import os
+from pathlib import Path
+import struct
+import tempfile
+import unittest
+from unittest.mock import patch
+import wave
+
+SPEC = importlib.util.spec_from_file_location("clone_live", Path(__file__).with_name("test_vibevoice_clone_live.py"))
+live = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(live)
+
+
+class CloneLiveControls(unittest.TestCase):
+    def test_unconfigured_sizes_skip_without_launching(self):
+        for size in ("1.5b", "7b"):
+            with self.subTest(size=size), patch.object(live, "evaluate") as evaluate, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(live.main(["--size", size], {}), 77)
+                evaluate.assert_not_called()
+
+    def test_keep_files_retains_legacy_option(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            with patch.object(live, "configuration", return_value=({}, [])), \
+                    patch.object(live.tempfile, "mkdtemp", return_value=str(output)), \
+                    patch.object(live, "evaluate", return_value={"passed": True}) as evaluate, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(live.main(["--keep-files"], {}), 0)
+                self.assertEqual(evaluate.call_args.args[1], output)
+
+    def test_invalid_configured_path_fails_even_when_other_inputs_are_unset(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(live.main([], {live.PREFIX + "REFERENCE": "/nonexistent/voice.wav"}), 1)
+
+    def test_invalid_explicit_threshold_fails(self):
+        for value in ("nan", "-1", "bad"):
+            with self.subTest(value=value), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(live.main([], {live.PREFIX + "WER_MAX": value}), 1)
+
+    def test_both_sizes_run_clone_control_and_both_content_gates(self):
+        for size, model_var in (("1.5b", "15B_MODEL"), ("7b", "7B_MODEL")):
+            for bad_content, speaker_pass in ((False, True), (True, True), (False, False)):
+                with self.subTest(size=size, bad_content=bad_content, speaker_pass=speaker_pass), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    for name in ("model.gguf", "recognizer.gguf", "cli"):
+                        (root / name).write_text("fixture")
+                    (root / "cli").chmod(0o755)
+                    self.wav(root / "reference.wav")
+                    environ = {live.PREFIX + model_var: str(root / "model.gguf"),
+                               live.PREFIX + "REFERENCE": str(root / "reference.wav"),
+                               live.PREFIX + "ASR_MODEL": str(root / "recognizer.gguf"),
+                               "CRISPASR_BIN": str(root / "cli")}
+                    config, missing = live.configuration(size, environ, "unused")
+                    self.assertFalse(missing)
+                    self.assertEqual(config["wer_max"], 0.25)
+                    self.assertEqual(config["speaker_delta"], 0.02)
+                    commands = []
+                    def execute(argv, output, name, timeout):
+                        commands.append(argv)
+                        if "--tts-output" in argv:
+                            self.wav(Path(argv[argv.index("--tts-output") + 1]))
+                        else:
+                            text = "wrong words" if bad_content and name == "baseline-asr" else live.TEXT
+                            Path(str(argv[argv.index("-of") + 1]) + ".txt").write_text(text)
+                    with patch.object(live, "run", side_effect=execute), \
+                            patch.object(live, "speaker_conditioning_gate", return_value=(speaker_pass, {"delta": 0.3})):
+                        result = live.evaluate(config, root / "output")
+                    self.assertEqual(result["passed"], speaker_pass and not bad_content)
+                    baseline, _, clone, _ = commands
+                    self.assertNotIn("--voice", baseline)
+                    self.assertIn("--i-have-rights", clone)
+                    self.assertEqual(clone[clone.index("--voice") + 1], (root / "reference.wav").resolve())
+                    self.assertEqual(baseline[baseline.index("--seed") + 1], clone[clone.index("--seed") + 1])
+                    self.assertEqual(len(commands), 4)
+
+    @staticmethod
+    def wav(path):
+        with wave.open(str(path), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(struct.pack("<h", 4096) * 16000)
+
+
+if __name__ == "__main__":
+    unittest.main()
