@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Standalone VAD binding timestamps — Codex (2026-11-13)
 
-- Correct Go, Java and Ruby standalone VAD timestamp units and add native-fixture regression coverage; Python VAD ownership and units are handled in the related Python lane.
+- Correct the Go and Java standalone VAD timestamps to seconds and add native-fixture regressions. Preserve and document Ruby standalone VAD centiseconds; Python VAD ownership and units are handled in the related Python lane.
 
 ### Python standalone VAD result transport — complete Codex (2026-11-13)
 
