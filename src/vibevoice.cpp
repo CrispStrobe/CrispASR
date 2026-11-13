@@ -17,6 +17,7 @@
 #include "vibevoice_backend_policy.h"
 #include "core/attention.h"
 #include "core/bpe.h"
+#include "core/vibevoice_tts_tokenizer.h"
 #include "core/vibevoice_asr_prompt.h"
 #include "core/conv.h"
 #include "core/ffn.h"
@@ -2179,68 +2180,6 @@ static std::vector<int32_t> tokenize_text_greedy(const vibevoice_model& m, const
     return ids;
 }
 
-static void vibevoice_bpe_one_vocab_rank(const std::unordered_map<std::string, int32_t>& token_to_id,
-                                         const std::string& word, std::vector<int32_t>& out) {
-    std::vector<std::string> symbols;
-    size_t i = 0;
-    while (i < word.size()) {
-        unsigned char c = (unsigned char)word[i];
-        size_t len = 1;
-        if ((c & 0xE0) == 0xC0)
-            len = 2;
-        else if ((c & 0xF0) == 0xE0)
-            len = 3;
-        else if ((c & 0xF8) == 0xF0)
-            len = 4;
-        if (i + len > word.size())
-            len = 1;
-        symbols.emplace_back(word, i, len);
-        i += len;
-    }
-
-    while (symbols.size() >= 2) {
-        int best_i = -1;
-        int32_t best_id = INT32_MAX;
-        for (size_t k = 0; k + 1 < symbols.size(); k++) {
-            std::string merged = symbols[k] + symbols[k + 1];
-            auto it = token_to_id.find(merged);
-            if (it != token_to_id.end() && it->second < best_id) {
-                best_id = it->second;
-                best_i = (int)k;
-            }
-        }
-        if (best_i < 0)
-            break;
-        symbols[best_i] += symbols[best_i + 1];
-        symbols.erase(symbols.begin() + best_i + 1);
-    }
-
-    for (const auto& s : symbols) {
-        auto it = token_to_id.find(s);
-        if (it != token_to_id.end()) {
-            out.push_back(it->second);
-            continue;
-        }
-        size_t j = 0;
-        while (j < s.size()) {
-            unsigned char c = (unsigned char)s[j];
-            size_t len = 1;
-            if ((c & 0xE0) == 0xC0)
-                len = 2;
-            else if ((c & 0xF0) == 0xE0)
-                len = 3;
-            else if ((c & 0xF8) == 0xF0)
-                len = 4;
-            if (j + len > s.size())
-                len = 1;
-            auto jt = token_to_id.find(std::string(s, j, len));
-            if (jt != token_to_id.end())
-                out.push_back(jt->second);
-            j += len;
-        }
-    }
-}
-
 static std::vector<int32_t> tokenize_text_bpe_vocab_rank(const vibevoice_model& m, const std::string& text) {
     std::vector<int32_t> result;
     size_t i = 0;
@@ -2258,7 +2197,7 @@ static std::vector<int32_t> tokenize_text_bpe_vocab_rank(const vibevoice_model& 
             word = std::string(" ") + word;
         first = false;
         word = core_bpe::bytes_to_unicode(word.data(), word.size());
-        vibevoice_bpe_one_vocab_rank(m.token_to_id, word, result);
+        core_vibevoice_tts::bpe_one_vocab_rank(m.token_to_id, word, result);
         i = j;
     }
     return result;
@@ -3465,14 +3404,21 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         std::string sys = " Transform the text provided by various speakers into speech output, utilizing the distinct "
                           "voice of each respective speaker.\n";
         std::string voice_prefix = " Voice input:\n Speaker 0:";
-        std::string text_prefix = " Text input:\n Speaker 0:";
+        std::string text_prefix = " Text input:\n";
         std::string speech_prefix = " Speech output:\n";
 
-        auto sys_ids = tokenize_text_greedy(m, sys.c_str());
-        auto vp_ids = tokenize_text_greedy(m, voice_prefix.c_str());
-        auto nl_ids = tokenize_text_greedy(m, "\n");
-        auto tp_ids = tokenize_text_greedy(m, (text_prefix + text_with_nl).c_str());
-        auto sp_ids = tokenize_text_greedy(m, speech_prefix.c_str());
+        auto encode_prompt = [&](const std::string& fragment) {
+            return core_vibevoice_tts::tokenize(m.token_to_id, m.merge_rank, fragment);
+        };
+        auto sys_ids = encode_prompt(sys);
+        auto vp_ids = encode_prompt(voice_prefix);
+        auto nl_ids = encode_prompt("\n");
+        // _parse_script strips the sentence and adds one separator space.
+        // The processor encodes the section header and speaker line separately.
+        auto tp_ids = encode_prompt(text_prefix);
+        const auto speaker_ids = encode_prompt(core_vibevoice_tts::speaker_line(text));
+        tp_ids.insert(tp_ids.end(), speaker_ids.begin(), speaker_ids.end());
+        auto sp_ids = encode_prompt(speech_prefix);
 
         // If --voice provides a WAV file for the 1.5B model, encode it as voice reference
         // The voice embeds go between <speech_start> and <speech_end> in the voice section
@@ -3481,8 +3427,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
         // Try loading voice audio from the voice GGUF path (reused as audio path for 1.5B)
         // For the Base models, --voice points to a reference .wav.
-        // #299: the base model conditions on a reference WAV (acoustic+semantic
-        // frames), NOT on a realtime voice pack's tts_lm KV cache. Always take the
+        // #299: the base model conditions on acoustic frames from a reference
+        // WAV, NOT on a realtime voice pack's tts_lm KV cache. Always take the
         // WAV route for the base model even if a (realtime) pack happens to be
         // loaded — that pack is unusable here, and gating on tts_seq_len==0 would
         // otherwise suppress a perfectly good WAV reference.
@@ -3526,8 +3472,9 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                     // Normalize to -25 dB FS (matches Microsoft's default).
                     vibevoice_normalize_ref_pcm(ref_pcm);
 
-                    // TTS Voice Cloning: acoustic encoder (with scaling) + semantic encoder
-                    // combined via element-wise sum, matching Microsoft's Python reference.
+                    // The serving _process_speech_inputs path uses acoustic reference
+                    // features only. The semantic sum in modeling_vibevoice.py is a
+                    // training path; using it here regressed voice cloning (#589).
                     float sf = 0.196f, bf = -0.049f;
                     auto* tsf = G("speech_scaling_factor");
                     auto* tbf = G("speech_bias_factor");
@@ -3536,49 +3483,24 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                     if (tbf)
                         ggml_backend_tensor_get(tbf, &bf, 0, sizeof(float));
 
-                    // 1. Acoustic encoder → scale → acoustic connector
                     int T_at = 0, vd_at = 0;
                     auto at_mean = run_encoder_stage(ctx, "at_enc", ref_pcm.data(), n_samples_ref, &T_at, &vd_at);
-
-                    // 2. Semantic encoder → semantic connector (no scaling)
-                    int T_st = 0, vd_st = 0;
-                    auto st_mean = run_encoder_stage(ctx, "st_enc", ref_pcm.data(), n_samples_ref, &T_st, &vd_st);
-
-                    if (!at_mean.empty() && !st_mean.empty()) {
-                        n_voice_frames = T_at;
-                        for (int i = 0; i < T_at * vd_at; i++)
-                            at_mean[i] = (at_mean[i] + bf) * sf;
-
-                        auto at_feat = run_connector_stage(ctx, "at_conn", at_mean.data(), T_at, vd_at);
-                        auto st_feat = run_connector_stage(ctx, "se_conn", st_mean.data(), T_st, vd_st);
-
-                        if (!at_feat.empty() && !st_feat.empty() && T_at == T_st) {
-                            // Element-wise sum of acoustic + semantic features
-                            voice_embeds.resize(T_at * hp.d_lm);
-                            for (int i = 0; i < T_at * hp.d_lm; i++)
-                                voice_embeds[i] = at_feat[i] + st_feat[i];
+                    if (!at_mean.empty()) {
+                        if (dump_dir)
+                            vibevoice_dump_f32(dump_dir, "tts_voice_acoustic_mean", at_mean.data(), at_mean.size());
+                        for (float& value : at_mean)
+                            value = (value + bf) * sf;
+                        if (dump_dir)
+                            vibevoice_dump_f32(dump_dir, "tts_voice_acoustic_scaled", at_mean.data(), at_mean.size());
+                        voice_embeds = run_connector_stage(ctx, "at_conn", at_mean.data(), T_at, vd_at);
+                        if (!voice_embeds.empty()) {
+                            n_voice_frames = T_at;
+                            if (dump_dir)
+                                vibevoice_dump_f32(dump_dir, "tts_voice_acoustic_connected", voice_embeds.data(),
+                                                   voice_embeds.size());
                             if (verbosity >= 1)
-                                fprintf(stderr,
-                                        "vibevoice TTS: voice ref encoded: %d frames "
-                                        "(acoustic+semantic combined)\n",
-                                        T_at);
-                        } else if (!at_feat.empty()) {
-                            // Fallback: acoustic-only if semantic fails or frame mismatch
-                            if (verbosity >= 1)
-                                fprintf(stderr,
-                                        "vibevoice TTS: semantic path unavailable (T_at=%d, T_st=%d), "
-                                        "using acoustic-only\n",
-                                        T_at, T_st);
-                            voice_embeds = at_feat;
+                                fprintf(stderr, "vibevoice TTS: voice ref encoded: %d frames (acoustic)\n", T_at);
                         }
-                    } else if (!at_mean.empty()) {
-                        // Legacy fallback: acoustic-only (e.g. old GGUFs without semantic tensors)
-                        n_voice_frames = T_at;
-                        for (int i = 0; i < T_at * vd_at; i++)
-                            at_mean[i] = (at_mean[i] + bf) * sf;
-                        auto at_feat = run_connector_stage(ctx, "at_conn", at_mean.data(), T_at, vd_at);
-                        if (!at_feat.empty())
-                            voice_embeds = at_feat;
                     }
                 }
             }
@@ -3625,6 +3547,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         prompt.insert(prompt.end(), sp_ids.begin(), sp_ids.end());
         prompt.push_back(SPEECH_START);
         int prefix_len = (int)prompt.size();
+        if (dump_dir)
+            vibevoice_dump_i32(dump_dir, "tts_prompt_ids", prompt.data(), prompt.size());
 
         if (verbosity >= 1)
             fprintf(stderr, "vibevoice TTS (base): prompt %d tokens (%d voice frames)\n", prefix_len, n_voice_frames);
@@ -3642,6 +3566,9 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 memcpy(prefix_embeds.data() + (size_t)(voice_embed_start + i) * d_lm,
                        voice_embeds.data() + (size_t)i * d_lm, d_lm * sizeof(float));
         }
+
+        if (dump_dir)
+            vibevoice_dump_f32(dump_dir, "tts_prompt_embeds", prefix_embeds.data(), prefix_embeds.size());
 
         // Allocate KV cache
         int max_gen = ctx->params.max_new_tokens > 0 ? ctx->params.max_new_tokens : 512;
@@ -3841,6 +3768,10 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         if (!run_dec(prefix_embeds.data(), prefix_len, 0, logits_v, hidden_v)) {
             fprintf(stderr, "vibevoice TTS (base): prefill failed\n");
             return nullptr;
+        }
+        if (dump_dir) {
+            vibevoice_dump_f32(dump_dir, "tts_prefill_hidden", hidden_v.data(), hidden_v.size());
+            vibevoice_dump_f32(dump_dir, "tts_prefill_logits", logits_v.data(), logits_v.size());
         }
         int n_past = prefix_len;
         const auto t_pure_infer_start = std::chrono::high_resolution_clock::now();
