@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Standalone VAD binding timestamps — Codex (2026-11-13)
+
+- Correct Go, Java and Ruby standalone VAD timestamp units and add native-fixture regression coverage; Python VAD ownership and units are handled in the related Python lane.
+
 ### Python auxiliary PCM transport — complete Codex (2026-11-13)
 
 - Base `586eb2b94`; isolated `fix/product-audio-20261113`. Native recording probes reproduced incorrect logical samples from strided language-ID/diarization buffers. Both now use the shared mono transport helper; stereo channels must match in length. Public watermark wrappers also referenced an undefined loader; all three now load the normal library, preserve native loaded-model state, and support strided PCM with in-place embedding copyback and writable/shape validation. All seven focused tests pass, including negative strides, untouched neighboring samples and pre-dispatch rejection; the existing regression workflow executes them. The related Python suite passes 32 tests and 55 subtests, with one pre-existing optional real-GGUF/native-library test skipped. Native recorder tests skip explicitly without a Linux C compiler. Whitespace and Python compilation checks pass. No full-library/model build, GPU or hosted dispatch.
