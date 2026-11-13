@@ -5,8 +5,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstddef>
+#include <limits>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -178,4 +181,59 @@ TEST_CASE("polyphase resampling benchmark: 10s audio", "[audio-resample][perf]")
     double ms = std::chrono::duration<double, std::milli>(t1 - t0).count() / 10.0;
     INFO("10s 48k->16k resample took " << ms << " ms per run");
     CHECK(ms > 0.0);
+}
+
+TEST_CASE("polyphase resampling bounds filter construction", "[unit][audio-resample]") {
+    const float input[] = {0.25f, -0.125f};
+
+    SECTION("extreme coprime header rates are refused") {
+        // Output length is only one or two floats, so the expansion guard
+        // cannot protect the filter. The original half-length calculation
+        // overflowed for INT_MAX and requested over 1 GiB for 10000019.
+        CHECK(core_audio::resample_polyphase(input, 2, INT_MAX, 16000).empty());
+        CHECK(core_audio::resample_polyphase(input, 2, 10000019, 16000).empty());
+        CHECK(core_audio::resample_polyphase(input, 2, INT_MAX, INT_MAX - 1).empty());
+    }
+
+    SECTION("invalid filter parameters are refused") {
+        CHECK(core_audio::resample_polyphase(input, 2, 48000, 16000, 0).empty());
+        CHECK(core_audio::resample_polyphase(input, 2, 48000, 16000, -1).empty());
+        CHECK(core_audio::resample_polyphase(input, 2, 48000, 16000, INT_MAX).empty());
+        CHECK(core_audio::resample_polyphase(input, 2, 48000, 16000, 14, std::numeric_limits<float>::quiet_NaN())
+                  .empty());
+        CHECK(
+            core_audio::resample_polyphase(input, 2, 48000, 16000, 14, std::numeric_limits<float>::infinity()).empty());
+    }
+
+    SECTION("finite beta with overflowing normalization is refused") {
+        CHECK(core_audio::resample_polyphase(input, 2, 48000, 16000, 14, std::numeric_limits<float>::max()).empty());
+        CHECK(core_audio::resample_polyphase(input, 2, 48000, 16000, 14, -std::numeric_limits<float>::max()).empty());
+    }
+
+    SECTION("high and coprime audio rates remain valid") {
+        const auto output = core_audio::resample_polyphase(input, 2, 192000, 96000);
+        REQUIRE(output.size() == 1);
+        CHECK(std::isfinite(output[0]));
+        for (const auto& rates :
+             {std::pair<int, int>{48001, 16000}, {44117, 48000}, {48000, 44117}, {383999, 384000}, {384000, 383999}}) {
+            CAPTURE(rates.first, rates.second);
+            const auto near = core_audio::resample_polyphase(input, 2, rates.first, rates.second);
+            REQUIRE(near.size() == static_cast<size_t>((2LL * rates.second + rates.first - 1) / rates.first));
+            for (const float sample : near)
+                CHECK(std::isfinite(sample));
+        }
+    }
+
+    SECTION("equal-rate copies do not require filter parameters") {
+        const auto output =
+            core_audio::resample_polyphase(input, 2, 16000, 16000, -1, std::numeric_limits<float>::infinity());
+        REQUIRE(output == std::vector<float>{0.25f, -0.125f});
+    }
+
+    SECTION("rejection preserves a previously cached ordinary filter") {
+        const auto before = core_audio::resample_polyphase(input, 2, 48000, 16000);
+        CHECK(core_audio::resample_polyphase(input, 2, INT_MAX, 16000).empty());
+        const auto after = core_audio::resample_polyphase(input, 2, 48000, 16000);
+        CHECK(before == after);
+    }
 }

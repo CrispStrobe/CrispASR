@@ -29,7 +29,10 @@ namespace core_audio {
 //
 // `num_zeros` controls filter sharpness (default 14 matches librosa's
 // kaiser_fast). Higher values give a sharper transition band at the cost
-// of compute.
+// of compute. Invalid inputs, expansions above 64x, and filters above
+// 16,777,216 taps (64 MiB) return an empty vector. For unequal rates,
+// num_zeros must be positive and kaiser_beta and its Bessel normalization
+// must be finite.
 std::vector<float> resample_polyphase(const float* in, int n_in, int src_rate, int dst_rate, int num_zeros = 14,
                                       float kaiser_beta = 8.6f);
 

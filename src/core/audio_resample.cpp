@@ -75,6 +75,12 @@ static int gcd(int a, int b) {
 
 // Largest upsample this will perform. See the note in resample_polyphase.
 static constexpr int kMaxResampleRatio = 64;
+// At most 64 MiB per thread-local filter. The usual audio ratios need only
+// hundreds/thousands of taps; even coprime rates through 384 kHz fit with the
+// default 14 zero crossings (2 * 14 * 384000 + 1 taps). Bounding output length
+// alone does not bound this allocation: an extreme source rate can require a
+// huge filter while producing just one output sample.
+static constexpr int64_t kMaxFilterTaps = 16 * 1024 * 1024;
 
 std::vector<float> resample_polyphase(const float* in, int n_in, int src_rate, int dst_rate, int num_zeros,
                                       float kaiser_beta) {
@@ -123,6 +129,18 @@ std::vector<float> resample_polyphase(const float* in, int n_in, int src_rate, i
     const int g = gcd(src_rate, dst_rate);
     const int L = dst_rate / g;
     const int M = src_rate / g;
+
+    // Validate in wide arithmetic before build_filter's int indexing and
+    // allocation. Rates can come directly from untrusted audio headers.
+    const int64_t filter_taps = 2 * (int64_t)num_zeros * std::max(L, M) + 1;
+    if (num_zeros <= 0 || !std::isfinite(kaiser_beta) || filter_taps > kMaxFilterTaps ||
+        !std::isfinite(bessel_i0((double)kaiser_beta))) {
+        std::fprintf(stderr,
+                     "[crispasr-resample] refusing %d Hz -> %d Hz: invalid filter parameters or filter exceeds "
+                     "%lld taps.\n",
+                     src_rate, dst_rate, (long long)kMaxFilterTaps);
+        return {};
+    }
 
     // Total output length — round up so we never silently drop trailing
     // input samples.
