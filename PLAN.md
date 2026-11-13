@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Python speaker-vector transport bounds — complete Codex (2026-11-13)
+
+- Base `c8388400e`; isolated `fix/product-guards-20261113`. TitaNet, SpeakerDB match/enroll and clustering now validate shape and native int32 counts before dtype conversion or contiguous copying. Twelve oversized float32/float64 virtual-view controls first failed against the prior wrappers without allocating large buffers. Both complete native-recorder suites pass (15 tests), including no native dispatch for oversized views, invalid shapes and valid strided/reversed transport. Clustering rejects nonzero rows with zero-dimensional embeddings while preserving zero-row results; both dtype controls first failed before the fix. The related wrapper suite passes 19 tests with one optional full-library test skipped. Existing CI executes both speaker suites; the generic speaker suite is now also registered in CTest. All three production registrations pass in an isolated CMake configuration. clang-format 18, Python compilation and whitespace checks pass. No model, full-library build, GPU, push or hosted dispatch; speaker quality was not tested.
+
 ### PCM16 extensible reference WAV — complete Codex (2026-11-13)
 
 - Base `1bf2db151`; isolated `fix/product-small-20261113`. Shared voice-reference

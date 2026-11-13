@@ -3735,8 +3735,8 @@ class TitaNet:
         """Extract 192-d speaker embedding from 16 kHz mono float32 PCM."""
         import numpy as np
         if not self._ctx: raise RuntimeError("TitaNet context is closed")
-        pcm = np.ascontiguousarray(pcm_16k, dtype=np.float32)
-        if pcm.ndim!=1 or not pcm.size: raise ValueError("nonempty mono PCM required")
+        pcm = _mono_pcm(pcm_16k)
+        if not pcm.size: raise ValueError("nonempty mono PCM required")
         out = np.zeros(192, dtype=np.float32)
         dim = self._lib.crispasr_titanet_embed(
             self._ctx,
@@ -3767,6 +3767,16 @@ class TitaNet:
 
     def __exit__(self, *exc):
         self.close()
+
+
+def _speaker_vector(embedding):
+    # Check native dimensions before dtype conversion or a contiguous copy.
+    arr = np.asarray(embedding)
+    if arr.ndim != 1 or not arr.size:
+        raise ValueError("Expected a nonempty embedding")
+    if arr.size > 2147483647:
+        raise ValueError("speaker embedding exceeds native int32 size")
+    return np.ascontiguousarray(arr, dtype=np.float32)
 
 
 class SpeakerDB:
@@ -3827,9 +3837,9 @@ class SpeakerDB:
         if not self._db:
             raise RuntimeError("SpeakerDB is closed")
         import numpy as np
-        emb = np.ascontiguousarray(embedding, dtype=np.float32)
-        if emb.ndim != 1 or not emb.size or not np.isfinite(threshold):
-            raise ValueError("Expected a nonempty embedding and finite threshold")
+        emb = _speaker_vector(embedding)
+        if not np.isfinite(threshold):
+            raise ValueError("Expected a finite threshold")
         name_buf = ctypes.create_string_buffer(256)
         score = self._lib.crispasr_speaker_db_match(
             self._db, emb.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
@@ -3842,10 +3852,7 @@ class SpeakerDB:
         """Enroll on disk with the attestation from construction; reopen to refresh the roster."""
         if not self._db:
             raise RuntimeError("SpeakerDB is closed")
-        import numpy as np
-        emb = np.ascontiguousarray(embedding, dtype=np.float32)
-        if emb.ndim != 1 or not emb.size:
-            raise ValueError("Expected a nonempty embedding")
+        emb = _speaker_vector(embedding)
         rc = self._lib.crispasr_speaker_db_enroll2(
             self._dir.encode(), name.encode(),
             emb.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), len(emb), 1,
@@ -4002,19 +4009,21 @@ def agglomerative_cluster(embeddings, *, merge_threshold: float = 0.5,
     ``[0, k)`` assigned in first-appearance order.
     """
     import numpy as np
-    arr = np.asarray(embeddings, dtype=np.float32)
+    arr = np.asarray(embeddings)
     if arr.ndim != 2:
         raise ValueError("expected a two-dimensional speaker embedding matrix")
-    if arr.size == 0:
-        return np.zeros(0, dtype=np.int32)
     n, dim = arr.shape
+    if n == 0:
+        return np.zeros(0, dtype=np.int32)
+    if dim == 0:
+        raise ValueError("speaker embeddings must have a nonzero dimension")
     if arr.size > 2147483647:
         raise ValueError("speaker matrix exceeds native int32 size")
     maximum = _speaker_int32(max_speakers, "max_speakers")
     threshold = ctypes.c_float(float(merge_threshold)).value
     if not np.isfinite(threshold):
         raise ValueError("merge_threshold must be finite float32")
-    arr = np.ascontiguousarray(arr)
+    arr = np.ascontiguousarray(arr, dtype=np.float32)
 
     lib = ctypes.CDLL(lib_path or _find_lib())
     lib.crispasr_speaker_cluster_abi.argtypes = [

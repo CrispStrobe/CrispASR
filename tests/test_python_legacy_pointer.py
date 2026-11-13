@@ -5,6 +5,7 @@ import sys
 import tempfile
 import subprocess
 import unittest
+from unittest.mock import patch
 import numpy as np
 from build_legacy_wrapper_probe import build
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,5 +123,48 @@ class LegacyPointerContract(unittest.TestCase):
             with self.assertRaises(RuntimeError):db.match(emb)
             with self.assertRaises(RuntimeError):db.enroll('Alice',emb)
             self.assertEqual(lib.probe_db_calls(),before)
+
+    def test_speaker_vectors_reject_large_views_before_copy_and_dispatch(self):
+        with tempfile.TemporaryDirectory(prefix='python-speaker-bounds-') as tmp:
+            titan_path = Path(tmp) / 'titan.so'
+            db_path = Path(tmp) / 'db.so'
+            for path, fixture in ((titan_path, 'wrapper-titanet-legacy.c'),
+                                  (db_path, 'wrapper-speaker-db.c')):
+                subprocess.run(['cc', '-shared', '-fPIC', '-Werror', '-I' + str(ROOT / 'include'),
+                                str(ROOT / 'tests/fixtures' / fixture), '-o', str(path)], check=True)
+            titan = TitaNet('probe', lib_path=str(titan_path))
+            db = SpeakerDB('db', 'Alice,Bob', True, lib_path=str(db_path))
+            try:
+                original_asarray = np.asarray
+                def no_dtype_copy(value, *args, **kwargs):
+                    if args or kwargs.get('dtype') is not None:
+                        raise AssertionError('unexpected dtype copy')
+                    return original_asarray(value)
+                for dtype in (np.float32, np.float64):
+                    oversized = np.broadcast_to(np.array([1], dtype=dtype), (2**31,))
+                    for operation in (titan.embed, db.match, lambda v: db.enroll('Alice', v)):
+                        with self.subTest(dtype=dtype, operation=operation):
+                            with patch.object(np, 'asarray', side_effect=no_dtype_copy):
+                                with patch.object(np, 'ascontiguousarray', side_effect=AssertionError('unexpected copy')):
+                                    with self.assertRaises(ValueError):
+                                        operation(oversized)
+                for invalid in (np.array(1., dtype=np.float64), np.ones((2, 3), dtype=np.float64)):
+                    for operation in (titan.embed, db.match, lambda v: db.enroll('Alice', v)):
+                        with patch.object(np, 'ascontiguousarray', side_effect=AssertionError('unexpected copy')):
+                            with self.assertRaises(ValueError):
+                                operation(invalid)
+                self.assertEqual(titan._lib.probe_titanet_calls(), 0)
+                self.assertEqual(db._lib.probe_db_calls(), 1)  # constructor only
+                # Both dtype conversion and logical ordering must survive valid views.
+                for pcm in (np.arange(1, 7, dtype=np.float64)[::2],
+                            np.array([5, 3, 1], dtype=np.float32)[::-1]):
+                    self.assertEqual(titan.embed(pcm)[0], 1)
+                    self.assertEqual(db.match(pcm), ('アリス', .875))
+                    self.assertTrue(db.enroll('Alice', pcm))
+            finally:
+                titan.close()
+                db.close()
+            self.assertEqual(titan._lib.probe_titanet_live(), 0)
+            self.assertEqual(db._lib.probe_db_live(), 0)
 
 if __name__=='__main__':unittest.main()

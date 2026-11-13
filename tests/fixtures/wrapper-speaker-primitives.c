@@ -3,7 +3,10 @@
 #include "runtime-abi-layout.h"
 #include <stdlib.h>
 #include <string.h>
-static int speaker_mode, speaker_live;
+static int speaker_mode, speaker_live, cluster_calls;
+int probe_cluster_calls(void) {
+    return cluster_calls;
+}
 void probe_speaker_mode(int mode) {
     speaker_mode = mode;
 }
@@ -41,6 +44,7 @@ int32_t crispasr_speaker_embedder_embed_abi(void* handle, const float* pcm, int3
 }
 int32_t crispasr_speaker_cluster_abi(const float* emb, int32_t n, int32_t dim, float threshold, int32_t max,
                                      int32_t* labels) {
+    ++cluster_calls;
     if (!emb || n != 2 || dim != 3 || threshold != .6f || max != 3 || emb[0] != 1 || emb[5] != 6 || speaker_mode == 2)
         return -1;
     labels[0] = speaker_mode == 9 ? -1 : speaker_mode == 7 ? 2 : 0;

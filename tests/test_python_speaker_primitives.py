@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -111,6 +112,42 @@ class SpeakerPrimitives(unittest.TestCase):
         with self.assertRaises(ValueError):
             agglomerative_cluster([[1, 2, 3]], max_speakers=2**32 + 3, lib_path=self.library)
         self.assertEqual(agglomerative_cluster(np.empty((0, 3)), lib_path=self.library).size, 0)
+
+    def test_cluster_bounds_precede_dtype_and_contiguous_copies(self):
+        before = self.lib.probe_cluster_calls()
+        for dtype in (np.float32, np.float64):
+            for shape in ((2**31, 1), (1, 2**31), (65536, 65536)):
+                matrix = np.broadcast_to(np.array([[1]], dtype=dtype), shape)
+                with self.subTest(dtype=dtype, shape=shape):
+                    def no_dtype_copy(value, *args, **kwargs):
+                        if args or kwargs.get('dtype') is not None:
+                            raise AssertionError('unexpected dtype copy')
+                        return original_asarray(value)
+                    original_asarray = np.asarray
+                    with patch.object(np, 'asarray', side_effect=no_dtype_copy) as coercion:
+                        with patch.object(np, 'ascontiguousarray', side_effect=AssertionError('unexpected copy')):
+                            with self.assertRaises(ValueError):
+                                agglomerative_cluster(matrix, lib_path=self.library)
+                        self.assertTrue(all(not call.kwargs.get('dtype') for call in coercion.call_args_list))
+        self.assertEqual(self.lib.probe_cluster_calls(), before)
+        for matrix in (np.array([[1, 0, 2, 0, 3, 0], [4, 0, 5, 0, 6, 0]],
+                                dtype=np.float64)[:, ::2],
+                       np.array([[6, 5, 4], [3, 2, 1]], dtype=np.float32)[::-1, ::-1]):
+            np.testing.assert_array_equal(agglomerative_cluster(matrix, merge_threshold=.6,
+                                           max_speakers=3, lib_path=self.library), [0, 1])
+
+    def test_cluster_zero_dimension_rejected_and_zero_rows_preserved(self):
+        before = self.lib.probe_cluster_calls()
+        for dtype in (np.float32, np.float64):
+            with self.subTest(dtype=dtype):
+                with patch.object(np, 'ascontiguousarray', side_effect=AssertionError('unexpected copy')):
+                    with self.assertRaises(ValueError):
+                        agglomerative_cluster(np.empty((3, 0), dtype=dtype), lib_path=self.library)
+                    for shape in ((0, 3), (0, 0)):
+                        labels = agglomerative_cluster(np.empty(shape, dtype=dtype), lib_path=self.library)
+                        self.assertEqual(labels.shape, (0,))
+                        self.assertEqual(labels.dtype, np.int32)
+        self.assertEqual(self.lib.probe_cluster_calls(), before)
 
     def test_constructor_rejects_truncated_strings_and_counts(self):
         for model, cache, threads in [('embed\0bad', 'cache', 2), ('embed', 'cache\0bad', 2),
