@@ -30,7 +30,7 @@ class WrapperOperations(unittest.TestCase):
         cc = os.environ.get('CC') or shutil.which('cc')
         if not cc:
             raise unittest.SkipTest('no C compiler')
-        subprocess.run([cc, '-shared', '-fPIC', '-std=c11', '-Werror',
+        subprocess.run([cc, '-shared', '-fPIC', '-std=c11', '-Werror', '-DCRISPASR_PROBE_PYTHON_AUDIO',
                         '-I'+str(ROOT/'include'), str(ROOT/'tests/fixtures/python-wrapper-abi.c'),
                         '-o', cls.path], check=True)
         cls.lib = C.CDLL(cls.path)
@@ -57,6 +57,51 @@ class WrapperOperations(unittest.TestCase):
         self.session.close()
         self.assertEqual(self.lib.probe_live(), 0)
         self.assertEqual(self.lib.probe_invalid_frees(), 0)
+
+    def test_separation_strides_and_owned_output(self):
+        padded = np.zeros((3, 4), dtype=np.float32)
+        padded[:, ::2] = np.arange(1, 7).reshape(3, 2)
+        reversed_storage = np.arange(6, 0, -1, dtype=np.float32)
+        for pcm in (padded[:, ::2], padded.reshape(-1)[::2], reversed_storage[::-1]):
+            result = self.session.separate(pcm)['vocals']
+            np.testing.assert_array_equal(result, np.arange(1, 7))
+            self.lib.probe_mutate()
+            self.assertEqual(result[0], 1)
+        self.lib.probe_mode(2)
+        with self.assertRaises(RuntimeError):
+            self.session.separate(np.arange(1, 7))
+
+    def test_audio_shape_and_oversized_views_rejected_before_dispatch(self):
+        bad_stereo = [1.0, np.zeros((2, 3)), np.zeros(3)]
+        bad_mono = [1.0, np.zeros((2, 2))]
+        for dtype in (np.float32, np.float64):
+            one = np.zeros(1, dtype=dtype)
+            bad_stereo.extend([
+                np.lib.stride_tricks.as_strided(one, shape=(2147483648, 2), strides=(0, 0)),
+                np.lib.stride_tricks.as_strided(one, shape=(4294967296,), strides=(0,)),
+            ])
+            bad_mono.append(np.lib.stride_tricks.as_strided(one, shape=(2147483648,), strides=(0,)))
+        for fn, inputs in ((self.session.separate, bad_stereo),
+                           (lambda pcm: crispasr.enhance_audio_rnnoise(pcm, lib_path=self.path), bad_mono),
+                           (self.session.piano, bad_mono)):
+            for pcm in inputs:
+                calls = self.lib.probe_calls()
+                # A rejected virtual view must never be materialized.
+                with patch.object(np, 'ascontiguousarray', side_effect=AssertionError('unexpected copy')):
+                    with self.assertRaises(ValueError):
+                        fn(pcm)
+                self.assertEqual(self.lib.probe_calls(), calls)
+
+    def test_rnnoise_strided_mono_output_and_errors(self):
+        for pcm in (self.pcm, np.array([5, 3, 1], dtype=np.float64)[::-1]):
+            result = crispasr.enhance_audio_rnnoise(pcm, lib_path=self.path)
+            np.testing.assert_array_equal(result, [.5, 1.5, 2.5])
+            self.assertEqual(result.dtype, np.float32)
+            result[0] = 42
+            self.assertEqual(pcm[0], 1)
+        self.lib.probe_mode(2)
+        with self.assertRaises(RuntimeError):
+            crispasr.enhance_audio_rnnoise(self.pcm, lib_path=self.path)
 
     def test_music_layout_units_and_borrowed_copies(self):
         piano = self.session.piano(self.pcm)

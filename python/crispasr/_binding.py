@@ -3462,13 +3462,14 @@ class Session(SessionExtras):
         lib.crispasr_session_separate_sample_rate.argtypes = [ctypes.c_void_p]
         lib.crispasr_session_separate_sample_rate.restype = ctypes.c_int
 
-        data = np.asarray(pcm_stereo, dtype=np.float32)
-        if data.ndim == 2 and data.shape[1] == 2:
-            data = data.reshape(-1)
-        elif data.ndim != 1 or data.size % 2:
+        data = np.asarray(pcm_stereo)
+        if not ((data.ndim == 2 and data.shape[1] == 2) or
+                (data.ndim == 1 and data.size % 2 == 0)):
             raise ValueError("expected interleaved stereo or an (n_frames, 2) array")
-        data = np.ascontiguousarray(data)
         n_samples = data.size // 2
+        if n_samples > 2147483647:
+            raise ValueError("PCM exceeds the C API frame limit")
+        data = np.ascontiguousarray(data, dtype=np.float32).reshape(-1)
         n_stems = lib.crispasr_session_separate(
             self._handle, data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), n_samples,
         )
@@ -4235,11 +4236,10 @@ def enhance_audio_rnnoise(
     *,
     lib_path: Optional[str] = None,
 ) -> "np.ndarray":
-    """Apply RNNoise audio denoising to raw 48 kHz mono PCM.
+    """Apply RNNoise audio denoising to raw 16 kHz mono PCM.
 
-    Returns a float32 array of the same length with noise reduced.
-    Note: RNNoise operates at 48 kHz internally. If your audio is
-    16 kHz, resample to 48 kHz first, denoise, then resample back.
+    Returns a 16 kHz float32 array of the same length with noise reduced.
+    The native implementation resamples to 48 kHz internally and back.
     """
     lib = ctypes.CDLL(lib_path or _find_lib())
     fn = lib.crispasr_enhance_audio_rnnoise
@@ -4249,7 +4249,7 @@ def enhance_audio_rnnoise(
     ]
     fn.restype = ctypes.c_int
 
-    pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+    pcm_arr = _mono_pcm(pcm)
     out = np.zeros_like(pcm_arr)
     rc = fn(
         pcm_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),

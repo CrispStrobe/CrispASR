@@ -2588,7 +2588,7 @@ func DetectBackendFromGGUF(path string) (string, error) {
 	return C.GoString(&out[0]), nil
 }
 
-// EnhanceAudioRnnoise applies RNNoise denoising to 48 kHz mono PCM.
+// EnhanceAudioRnnoise applies RNNoise denoising to 16 kHz mono PCM; output is also 16 kHz.
 func EnhanceAudioRnnoise(pcm []float32) ([]float32, error) {
 	out := make([]float32, len(pcm))
 	rc := C.crispasr_enhance_audio_rnnoise(

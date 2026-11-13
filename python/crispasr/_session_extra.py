@@ -21,12 +21,12 @@ def function(lib, name, args, result):
 
 
 def mono(pcm):
-    arr = np.asarray(pcm, dtype=np.float32)
+    arr = np.asarray(pcm)
     if arr.ndim != 1:
         raise ValueError("expected a one-dimensional mono PCM array")
     if arr.size > 2147483647:
         raise ValueError("PCM exceeds the C API sample limit")
-    return np.ascontiguousarray(arr)
+    return np.ascontiguousarray(arr, dtype=np.float32)
 
 
 def pointer(arr):

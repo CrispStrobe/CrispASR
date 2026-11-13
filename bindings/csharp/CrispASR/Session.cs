@@ -920,7 +920,7 @@ namespace CrispASR
         // Audio enhancement (static)
         // ----------------------------------------------------------------
 
-        /// <summary>Enhance audio using RNNoise (48 kHz mono).</summary>
+        /// <summary>Enhance audio using RNNoise (16 kHz mono input and output).</summary>
         public static float[] EnhanceAudioRnnoise(float[] pcm)
         {
             var outPcm = new float[pcm.Length];

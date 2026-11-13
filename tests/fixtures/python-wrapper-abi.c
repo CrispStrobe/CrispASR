@@ -377,3 +377,40 @@ float* crispasr_session_speech_to_speech(crispasr_session* s, const float* pcm, 
 int crispasr_session_set_source_language(crispasr_session* s, const char* language) {
     return language && strcmp(language, "de") == 0 ? 0 : -1;
 }
+
+#ifdef CRISPASR_PROBE_PYTHON_AUDIO
+int crispasr_enhance_audio_rnnoise(const float* pcm, int32_t n, float* out, int32_t capacity) {
+    int rc = run(pcm, n);
+    if (rc < 0 || capacity != n)
+        return -1;
+    for (int i = 0; i < n; ++i)
+        out[i] = pcm[i] * 0.5f;
+    return 0;
+}
+
+int crispasr_session_separate(crispasr_session* s, const float* pcm, int n) {
+    ++calls;
+    if (mode == 2 || n != 3)
+        return -1;
+    for (int i = 0; i < 6; ++i) {
+        if (pcm[i] != (float)(i + 1))
+            return -1;
+        buffer[i] = pcm[i];
+    }
+    return 1;
+}
+int crispasr_session_separate_n_stems(crispasr_session* s) {
+    return 1;
+}
+const char* crispasr_session_separate_stem_name(crispasr_session* s, int index) {
+    return "vocals";
+}
+const float* crispasr_session_separate_stem(crispasr_session* s, int index, int* n) {
+    *n = 3;
+    return buffer;
+}
+int crispasr_session_separate_sample_rate(crispasr_session* s) {
+    return 44100;
+}
+
+#endif

@@ -694,7 +694,7 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
         return translateText(text, sourceLanguage, targetLanguage, 256);
     }
 
-    /** RNNoise denoising of 48 kHz mono PCM. Throws if RNNoise is unavailable in the native build. */
+    /** RNNoise denoising of 16 kHz mono PCM, returning 16 kHz PCM. Throws if RNNoise is unavailable in the native build. */
     public static float[] enhanceAudioRnnoise(float[] pcm) {
         java.util.Objects.requireNonNull(pcm, "pcm");
         if (pcm.length == 0) return new float[0];

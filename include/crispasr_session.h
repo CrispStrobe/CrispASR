@@ -339,6 +339,8 @@ CRISPASR_SESSION_API int crispasr_detect_language_pcm(const float* samples, int3
                                                       const char* model_path, int32_t n_threads, int32_t use_gpu,
                                                       int32_t gpu_device, int32_t flash_attn, char* out_lang_buf,
                                                       int32_t out_lang_cap, float* out_confidence);
+// Denoise 16 kHz mono float PCM into caller-owned 16 kHz output of the same length.
+// Resampling to RNNoise's internal 48 kHz rate and back is handled internally.
 CRISPASR_SESSION_API int crispasr_enhance_audio_rnnoise(const float* in_pcm, int32_t n_samples, float* out_pcm,
                                                         int32_t out_cap);
 CRISPASR_SESSION_API int crispasr_text_detect_language(const char* text, const char* model_path, int32_t n_threads,

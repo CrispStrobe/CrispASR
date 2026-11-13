@@ -16,6 +16,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - Audit and fix overflow in native 16 kHz-to-48 kHz frame counts; verify boundary handling with small model-free tests.
 
+### Python separation and denoising transport — complete Codex (2026-11-13)
+
+- Base `bd0ded624`; isolated `fix/next-product-20261113`. Stereo separation now validates frame counts before reshape, dtype or contiguity copies; shared mono transport also checks counts before dtype conversion, and RNNoise rejects non-mono input. Corrected Python/Go/Java/C# and public-header RNNoise documentation to its actual 16 kHz input/output contract. The prior separation guard first failed on an oversized virtual view. Three new native-probe tests cover strided/reversed PCM, owned output, errors and oversized float32/float64 views without large allocation. All 19 executable wrapper tests, eight resampling, six audio utility and seven auxiliary PCM tests pass; one optional full-library test skips. Existing CTest/CI discovers the tests. Shared fixture audio symbols are Python-macro-only and absent in the default compiled fixture; Java/Ruby execution skips without their SDKs. Formatting and whitespace checks pass. No model/full build/GPU/hosted job or push. Native RNNoise internal large-buffer arithmetic remains a separate unqualified limit.
+
 ### Standalone VAD binding timestamps — complete Codex (2026-11-13)
 
 - Go and Java now convert legacy native centiseconds to the seconds promised by their interfaces; native-fixture tests cover fractional times, result ownership, empty results and errors. Ruby preserves and documents its existing native-centisecond convention, with fixture coverage. Python VAD ownership and units are handled in the related Python lane. The full model-free Go/Rust wrapper contract passed: 55 Go probes, the Go high-level package compilation, 39 Rust probes and five Rust documentation tests. An earlier run stalled while using the Rust compiler cache; rerunning with `RUSTC_WRAPPER=` completed in 49 seconds.
