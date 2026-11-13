@@ -276,6 +276,15 @@ What `run_one.py` does for a TTS entry:
 5. Compute WER (lowercase + strip ASCII punctuation), assert
    `wer ≤ wer_max`.
 
+Voice-cloning entries can also set `"speaker_conditioning": {"min_delta": 0.02}`.
+This requires a WAV `voice` and Resemblyzer in the isolated validation environment.
+The driver synthesizes an unconditioned control with the same phrase and seed,
+then requires cosine(clone, reference) - cosine(control, reference) > `min_delta`.
+Missing dependencies and short/silent audio fail this requested gate. Set
+`baseline_backend` inside this block when an explicit generic TTS alias is needed
+for the unconditioned arm. Content WER remains a separate gate; speaker movement
+alone does not establish intelligible speech.
+
 `wer_max` recommendations (start tight, loosen if needed):
 
 * `0.05` — high-quality English TTS on a clean pangram (kokoro, orpheus
