@@ -6188,7 +6188,8 @@ catch_discover_tests(test-arch-backend-map
 )
 
 # Malformed architecture metadata must not abort a process hosting the C ABI.
-# Each detector call runs in a child process; no model weights are needed.
+# Metadata calls run in child processes; capacity controls also check complete
+# names, exact-fit buffers and output sentinels. No model weights are needed.
 if(BUILD_SHARED_LIBS AND Python3_Interpreter_FOUND)
     add_test(NAME gguf-detector-metadata COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_gguf_detector_metadata.py

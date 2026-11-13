@@ -236,7 +236,9 @@ CRISPASR_SESSION_API void crispasr_set_gpu_backend(const char* name);
 
 // Returns the backend-name byte count (0 for an unknown architecture), or
 // -1 for invalid arguments, -2 for an unreadable GGUF, -3 for a missing
-// general.architecture key, and -4 for a non-string architecture value.
+// general.architecture key, -4 for a non-string architecture value, or -5
+// if out_cap cannot hold the complete backend name plus its terminating NUL.
+// A short buffer never returns a truncated name.
 // After argument validation, failures leave the output string empty.
 CRISPASR_SESSION_API int crispasr_detect_backend_from_gguf(const char* path, char* out_name, int out_cap);
 // #433: EVERY backend that can open this file, newline-separated, primary

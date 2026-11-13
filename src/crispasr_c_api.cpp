@@ -1767,10 +1767,14 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
     if (std::strcmp(backend, "parakeet") == 0 && core_parakeet_gguf::compatible_ctc(gctx))
         backend = "fastconformer-ctc";
 
-    std::strncpy(out_name, backend, out_cap - 1);
-    out_name[out_cap - 1] = '\0';
+    const size_t backend_size = std::strlen(backend);
+    if (backend_size + 1 > (size_t)out_cap) {
+        gguf_free(gctx);
+        return -5;
+    }
+    std::memcpy(out_name, backend, backend_size + 1);
     gguf_free(gctx);
-    return (int)std::strlen(out_name);
+    return (int)backend_size;
 }
 
 // =========================================================================
