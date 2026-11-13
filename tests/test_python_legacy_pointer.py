@@ -167,4 +167,46 @@ class LegacyPointerContract(unittest.TestCase):
             self.assertEqual(titan._lib.probe_titanet_live(), 0)
             self.assertEqual(db._lib.probe_db_live(), 0)
 
+    def test_speaker_array_coercion_cannot_dispatch_after_close(self):
+        with tempfile.TemporaryDirectory(prefix='python-speaker-reentry-') as tmp:
+            titan_path = Path(tmp) / 'titan.so'
+            db_path = Path(tmp) / 'db.so'
+            for path, fixture in ((titan_path, 'wrapper-titanet-legacy.c'),
+                                  (db_path, 'wrapper-speaker-db.c')):
+                subprocess.run(['cc', '-shared', '-fPIC', '-Werror', '-I' + str(ROOT / 'include'),
+                                str(ROOT / 'tests/fixtures' / fixture), '-o', str(path)], check=True)
+            for name in ('embed', 'match', 'enroll', 'threshold', 'name'):
+                with self.subTest(operation=name):
+                    owner = (TitaNet('probe', lib_path=str(titan_path)) if name == 'embed' else
+                             SpeakerDB('db', 'Alice,Bob', True, lib_path=str(db_path)))
+                    counter = (owner._lib.probe_titanet_calls if name == 'embed' else owner._lib.probe_db_calls)
+                    before = counter()
+                    class ClosesOwner:
+                        def __array__(self, dtype=None, copy=None):
+                            owner.close()
+                            return np.array([1, 3, 5], dtype=np.float64)
+                    class ClosingThreshold(float):
+                        def __float__(self):
+                            owner.close()
+                            return .7
+                    class ClosingName(str):
+                        def encode(self, *args, **kwargs):
+                            owner.close()
+                            return b'Alice'
+                    try:
+                        with self.assertRaisesRegex(RuntimeError, 'closed'):
+                            if name == 'threshold':
+                                owner.match([1, 3, 5], threshold=ClosingThreshold(.7))
+                            elif name == 'name':
+                                owner.enroll(ClosingName('Alice'), [1, 3, 5])
+                            elif name == 'enroll':
+                                owner.enroll('Alice', ClosesOwner())
+                            else:
+                                getattr(owner, name)(ClosesOwner())
+                    finally:
+                        owner.close()
+                    self.assertEqual(counter(), before)
+                    live = owner._lib.probe_titanet_live if name == 'embed' else owner._lib.probe_db_live
+                    self.assertEqual(live(), 0)
+
 if __name__=='__main__':unittest.main()

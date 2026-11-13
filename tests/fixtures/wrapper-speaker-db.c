@@ -36,7 +36,10 @@ int32_t crispasr_speaker_db_count(const void* db) {
 float crispasr_speaker_db_match(const void* db, const float* emb, int32_t dim, float threshold, char* name,
                                 int32_t cap) {
     ++db_calls;
-    if (!db || !emb || dim != 3 || emb[0] != 1 || emb[1] != 3 || emb[2] != 5 || cap < 10)
+    // Record a closed-handle dispatch without crashing the coercion guard test.
+    if (!db)
+        return -1.f;
+    if (!emb || dim != 3 || emb[0] != 1 || emb[1] != 3 || emb[2] != 5 || cap < 10)
         abort();
     if (db_mode == 1)
         return -1.f;

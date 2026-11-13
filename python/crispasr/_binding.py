@@ -3738,6 +3738,7 @@ class TitaNet:
         pcm = _mono_pcm(pcm_16k)
         if not pcm.size: raise ValueError("nonempty mono PCM required")
         out = np.zeros(192, dtype=np.float32)
+        if not self._ctx: raise RuntimeError("TitaNet context is closed")
         dim = self._lib.crispasr_titanet_embed(
             self._ctx,
             pcm.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
@@ -3840,10 +3841,13 @@ class SpeakerDB:
         emb = _speaker_vector(embedding)
         if not np.isfinite(threshold):
             raise ValueError("Expected a finite threshold")
+        native_threshold = ctypes.c_float(threshold)
         name_buf = ctypes.create_string_buffer(256)
+        if not self._db:
+            raise RuntimeError("SpeakerDB is closed")
         score = self._lib.crispasr_speaker_db_match(
             self._db, emb.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-            len(emb), threshold, name_buf, 256,
+            len(emb), native_threshold, name_buf, 256,
         )
         name = name_buf.value.decode() if score >= 0 and score >= threshold else None
         return name, float(score)
@@ -3853,8 +3857,11 @@ class SpeakerDB:
         if not self._db:
             raise RuntimeError("SpeakerDB is closed")
         emb = _speaker_vector(embedding)
+        directory, encoded_name = self._dir.encode(), name.encode()
+        if not self._db:
+            raise RuntimeError("SpeakerDB is closed")
         rc = self._lib.crispasr_speaker_db_enroll2(
-            self._dir.encode(), name.encode(),
+            directory, encoded_name,
             emb.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), len(emb), 1,
         )
         return rc == 0
