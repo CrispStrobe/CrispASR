@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### RNNoise native input bounds — Codex (2026-11-13)
+
+- Audit and fix overflow in native 16 kHz-to-48 kHz frame counts; verify boundary handling with small model-free tests.
+
 ### Standalone VAD binding timestamps — complete Codex (2026-11-13)
 
 - Go and Java now convert legacy native centiseconds to the seconds promised by their interfaces; native-fixture tests cover fractional times, result ownership, empty results and errors. Ruby preserves and documents its existing native-centisecond convention, with fixture coverage. Python VAD ownership and units are handled in the related Python lane. The full model-free Go/Rust wrapper contract passed: 55 Go probes, the Go high-level package compilation, 39 Rust probes and five Rust documentation tests. An earlier run stalled while using the Rust compiler cache; rerunning with `RUSTC_WRAPPER=` completed in 49 seconds.
