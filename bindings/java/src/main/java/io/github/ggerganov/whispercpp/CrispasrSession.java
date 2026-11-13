@@ -1575,8 +1575,9 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
         try {
             float[] raw = outSpans[0].getFloatArray(0, n * 2);
             VADSpan[] spans = new VADSpan[n];
+            // The legacy C ABI returns centiseconds; VADSpan exposes seconds.
             for (int i = 0; i < n; i++)
-                spans[i] = new VADSpan(raw[i * 2], raw[i * 2 + 1]);
+                spans[i] = new VADSpan(raw[i * 2] / 100.0, raw[i * 2 + 1] / 100.0);
             return spans;
         } finally {
             Lib.INSTANCE.crispasr_vad_free(outSpans[0]);

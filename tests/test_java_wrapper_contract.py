@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 public class WrapperAbiProbe {
     public interface Probe extends Library {
         Probe INSTANCE=Native.load("crispasr",Probe.class);
-        void probe_vad_expect(int n);int probe_vad_calls();void probe_mode(int n);void probe_mutate();int probe_live();int probe_invalid_frees();int probe_result_frees();int probe_calls();void probe_utility_mode(int mode);int probe_utility_live();
+        int probe_vad_segments_live();int probe_vad_segments_frees();void probe_vad_expect(int n);int probe_vad_calls();void probe_mode(int n);void probe_mutate();int probe_live();int probe_invalid_frees();int probe_result_frees();int probe_calls();void probe_utility_mode(int mode);int probe_utility_live();
     }
     static int assertions;
     static void eq(Object a,Object b){if(!Objects.equals(a,b))throw new AssertionError(a+" != "+b);assertions++;}
@@ -80,6 +80,14 @@ public class WrapperAbiProbe {
             Probe.INSTANCE.probe_mode(1);eq(s.translateText("","en","ja",0),"");Probe.INSTANCE.probe_mode(2);
             reject(IllegalStateException.class,()->s.translateText("hello","en","ja"));Probe.INSTANCE.probe_mode(0);
             reject(NullPointerException.class,()->s.translateText(null,"en","ja"));eq(translated,"こんにちは");
+            int spanFrees=Probe.INSTANCE.probe_vad_segments_frees();
+            CrispasrSession.VADSpan[] spans=CrispasrSession.vadSegments("vad",pcm,16000,.375f,123,456,2);
+            eq(spans.length,2);eq(spans[0].t0,1.255);eq(spans[0].t1,2.5025);
+            eq(spans[1].t0,3.0075);eq(spans[1].t1,9.0375);
+            eq(Probe.INSTANCE.probe_vad_segments_live(),0);eq(Probe.INSTANCE.probe_vad_segments_frees(),spanFrees+1);
+            eq(CrispasrSession.vadSegments("empty",pcm,16000,.375f,123,456,2).length,0);
+            reject(RuntimeException.class,()->CrispasrSession.vadSegments("error",pcm,16000,.375f,123,456,2));
+            eq(Probe.INSTANCE.probe_vad_segments_frees(),spanFrees+1);eq(spans[0].t0,1.255);
             eq(CrispasrSession.enhanceAudioRnnoise(pcm)[0],.5f);eq(pcm[0],1f);
             eq(CrispasrSession.enhanceAudioRnnoise(new float[0]).length,0);reject(NullPointerException.class,()->CrispasrSession.enhanceAudioRnnoise(null));
             Probe.INSTANCE.probe_utility_mode(2);reject(IllegalStateException.class,()->CrispasrSession.enhanceAudioRnnoise(pcm));
@@ -358,7 +366,7 @@ class JavaWrapperContract(unittest.TestCase):
                 cc=os.environ.get('CC') or 'cc'
                 subprocess.run([cc,'-std=c11','-shared','-fPIC','-Werror',
                                 '-I'+str(ROOT/'include'), '-I'+str(ROOT/'ggml/include'), '-I'+str(path), '-DCRISPASR_PROBE_JAVA_RNNOISE', '-DCRISPASR_PROBE_VAD_ARGUMENTS', '-DCRISPASR_PROBE_EXISTING_STREAM_OPS', *(['-DCRISPASR_PROBE_OLD_TOKENS'] if old else []),
-                                str(ROOT/'tests/fixtures/python-wrapper-abi.c'),str(ROOT/'tests/fixtures/wrapper-session-metadata.c'),str(ROOT/'tests/fixtures/wrapper-stream-lifetime.c'),str(ROOT/'tests/fixtures/wrapper-audio-utilities.c'),
+                                str(ROOT/'tests/fixtures/wrapper-vad-segments.c'),str(ROOT/'tests/fixtures/python-wrapper-abi.c'),str(ROOT/'tests/fixtures/wrapper-session-metadata.c'),str(ROOT/'tests/fixtures/wrapper-stream-lifetime.c'),str(ROOT/'tests/fixtures/wrapper-audio-utilities.c'),
                                 '-o',str(directory/'libcrispasr.so')],check=True)
                 run=subprocess.run([JAVA,'-Djna.tmpdir='+str(path),'-Djna.library.path='+str(directory),
                                     '-cp',str(path)+os.pathsep+JAR,'WrapperAbiProbe',*(['old'] if old else [])],capture_output=True,text=True)

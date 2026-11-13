@@ -51,6 +51,12 @@ chunks=[];s.synthesize_streaming(h,'a. b.'){|pcm,last|chunks << [pcm,last]}
 eq(chunks.size,2);eq(chunks.first.first.first,0.25);eq(chunks.last.first.first,0.75);eq(chunks.last.last,true)
 reject(RuntimeError){s.synthesize_streaming(h,'test'){|pcm,last|s.close(h)}}
 reject(ArgumentError){s.synthesize_streaming(h,'test'){|pcm,last|raise ArgumentError,'sentinel'}}
+# Legacy session VAD preserves native centiseconds.
+spans=s.vad_segments('vad',[1,3,5],16000,0.375,123,456,2)
+eq(spans,[{t0:125.5,t1:250.25},{t0:300.75,t1:903.75}])
+eq(s.vad_segments('empty',[1,3,5],16000,0.375,123,456,2),[])
+reject(RuntimeError){s.vad_segments('error',[1,3,5],16000,0.375,123,456,2)}
+eq(spans.first[:t0],125.5)
 # New: audio load family
 al=c.audio_load('probe.wav')
 eq(al[:pcm].size,3);eq(al[:sample_rate],16000);eq(al[:n_samples],3)

@@ -1878,11 +1878,11 @@ func VADSegments(vadModelPath string, pcm []float32, sampleRate int, threshold f
 		return nil, nil
 	}
 	defer C.crispasr_vad_free(outSpans)
-	// outSpans is a flat array of [t0, t1, t0, t1, ...] with n pairs
+	// The legacy C ABI returns centiseconds; VADSpan exposes seconds.
 	spans := make([]VADSpan, int(n))
 	raw := unsafe.Slice((*float32)(unsafe.Pointer(outSpans)), int(n)*2)
 	for i := 0; i < int(n); i++ {
-		spans[i] = VADSpan{T0: float64(raw[i*2]), T1: float64(raw[i*2+1])}
+		spans[i] = VADSpan{T0: float64(raw[i*2]) / 100.0, T1: float64(raw[i*2+1]) / 100.0}
 	}
 	return spans, nil
 }

@@ -1035,15 +1035,11 @@ int crispasr_stream_flush(crispasr_stream* s) {
 }
 void crispasr_stream_set_live_decode(crispasr_stream* s, int e) {}
 #include "wrapper-parakeet-legacy.c"
-int crispasr_vad_segments(const char* m, const float* pcm, int n, int sr, float th, int min_s, int min_si, int nt,
-                          bool gpu, float** out) {
-    return 0;
-}
+#include "wrapper-vad-segments.c"
 int crispasr_vad_slices(const char* m, const float* pcm, int n, int sr, float th, int min_s, int min_si, int pad,
                         float max_dur, int nt, float** out) {
     return 0;
 }
-void crispasr_vad_free(float* p) {}
 #define CRISPASR_PROBE_AUDIO_ONLY
 #include "wrapper-audio-utilities.c"
 #undef CRISPASR_PROBE_AUDIO_ONLY

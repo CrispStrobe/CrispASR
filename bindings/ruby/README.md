@@ -440,6 +440,11 @@ samples = waveform.squeeze.numo.to_arrow.to_arrow_array
 segments = vad.segments_from_samples(Whisper::VAD::Params.new, samples)
 ```
 
+`Whisper::CrispASR::Session.vad_segments(model_path, samples, 16000)` returns
+copied `{t0:, t1:}` hashes in native **centiseconds**. Divide either boundary by
+`100.0` to obtain seconds. An empty array means no speech was detected; native
+VAD errors raise `RuntimeError`.
+
 Development
 -----------
 

@@ -1226,7 +1226,7 @@ static VALUE rb_session_get_progress(VALUE self) {
 }
 
 // CrispASR::Session.vad_segments(vad_model_path, pcm, sample_rate, threshold, min_speech_ms, min_silence_ms, n_threads)
-// -> [{t0:, t1:}]
+// -> [{t0:, t1:}], with native centisecond timestamps.
 static VALUE rb_session_vad_segments(int argc, VALUE* argv, VALUE self) {
     if (argc < 3)
         rb_raise(rb_eArgError, "vad_segments needs at least 3 args: vad_model_path, pcm, sample_rate");
