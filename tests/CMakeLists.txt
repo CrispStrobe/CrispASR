@@ -35,6 +35,11 @@ function(crispasr_discover_ab_tests target labels)
         PROPERTIES LABELS "bench" ENVIRONMENT "CRISPASR_RUN_PERF=1")
 endfunction()
 
+# Production RNNoise orchestration with link stubs; no model or library build.
+add_executable(test-rnnoise-bounds test-rnnoise-bounds.cpp)
+add_test(NAME test-rnnoise-bounds COMMAND test-rnnoise-bounds)
+set_tests_properties(test-rnnoise-bounds PROPERTIES LABELS "unit;enhance")
+
 add_executable(test-realtime-turn-buffer test-realtime-turn-buffer.cpp)
 target_include_directories(test-realtime-turn-buffer PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-realtime-turn-buffer PRIVATE Catch2::Catch2WithMain)

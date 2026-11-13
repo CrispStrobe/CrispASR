@@ -16,6 +16,7 @@ extern "C" {
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 namespace {
@@ -25,10 +26,25 @@ constexpr int kInputSampleRate = 16000;   // ASR-canonical rate
 constexpr int kRnnoiseSampleRate = 48000; // RNNoise internal rate
 constexpr float kRnnoiseScale = 32768.0f; // classic rnnoise wants short-range floats
 
+// Reserve both the resampler tail and the padding addition before multiplying.
+// The int bound covers frame-count casts, padding arithmetic and loop offsets;
+// max_size also covers float-byte/address-space limits on 32-bit hosts.
+int rnnoise_max_input_samples(size_t max_buffer_samples) {
+    const size_t max_count = std::min(max_buffer_samples, static_cast<size_t>(std::numeric_limits<int>::max()));
+    constexpr size_t headroom = 2 * kRnnoiseFrameSize - 1;
+    return max_count < headroom ? 0 : static_cast<int>((max_count - headroom) / 3);
+}
+
 bool enhance_rnnoise(const float* in_samples, int n_samples, float* out_samples, bool verbose) {
     if (in_samples == nullptr || out_samples == nullptr || n_samples <= 0) {
         if (verbose)
             std::fprintf(stderr, "[enhance] invalid args\n");
+        return false;
+    }
+
+    if (n_samples > rnnoise_max_input_samples(std::vector<float>().max_size())) {
+        if (verbose)
+            std::fprintf(stderr, "[enhance] input too large for RNNoise buffers\n");
         return false;
     }
 
