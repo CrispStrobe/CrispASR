@@ -1465,7 +1465,7 @@ def detect_language_pcm(
     ]
     lib.crispasr_detect_language_pcm.restype = ctypes.c_int
 
-    pcm_np = np.asarray(pcm, dtype=np.float32)
+    pcm_np = _mono_pcm(pcm)
     buf = ctypes.create_string_buffer(16)
     conf = ctypes.c_float(-1.0)
     rc = lib.crispasr_detect_language_pcm(
@@ -1501,7 +1501,8 @@ def diarize_segments(
 
     Five methods — see :class:`DiarizeMethod`. ``left`` is mono PCM for
     mono-only methods, otherwise the left channel of a stereo pair.
-    All PCM is 16 kHz float32. Returns ``True`` on success; only
+    All PCM is one-dimensional 16 kHz audio; stereo channels must have equal
+    lengths. Strided views are supported. Returns ``True`` on success; only
     Model-backed methods can fail when their model cannot be loaded.
     """
     ok, _ = _diarize_segments_impl(
@@ -1578,10 +1579,12 @@ def _diarize_segments_impl(
     ]
     lib.crispasr_diarize_segments_abi.restype = ctypes.c_int
 
-    left_np = np.asarray(left, dtype=np.float32)
+    left_np = _mono_pcm(left)
     left_ptr = left_np.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     if is_stereo and right is not None:
-        right_np = np.asarray(right, dtype=np.float32)
+        right_np = _mono_pcm(right)
+        if len(right_np) != len(left_np):
+            raise ValueError("stereo PCM channels must have equal lengths")
         right_ptr = right_np.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     else:
         right_ptr = left_ptr
@@ -4522,7 +4525,7 @@ def watermark_load_model(gguf_path: str) -> None:
     dispatch to AudioSeal automatically. Without loading, they use the
     built-in spread-spectrum watermark.
     """
-    lib = _get_lib()
+    lib = ctypes.CDLL(_find_lib())
     fn = lib.crispasr_watermark_load_model
     fn.argtypes = [ctypes.c_char_p]
     fn.restype = ctypes.c_int
@@ -4533,6 +4536,9 @@ def watermark_load_model(gguf_path: str) -> None:
 
 def watermark_embed(pcm: "numpy.ndarray", alpha: float = -1.0) -> None:
     """Embed an AI-generated watermark into float32 PCM in-place.
+
+    ``pcm`` must be writable and one-dimensional. Strided views are supported;
+    only the selected samples are modified.
 
     ``alpha`` controls spread-spectrum strength; ignored when AudioSeal is
     loaded. The default (``<= 0``) selects the band-limited strength that makes
@@ -4549,12 +4555,17 @@ def watermark_embed(pcm: "numpy.ndarray", alpha: float = -1.0) -> None:
     import numpy as np
     if pcm.dtype != np.float32:
         raise TypeError("pcm must be float32")
-    lib = _get_lib()
+    if not pcm.flags.writeable:
+        raise ValueError("pcm must be writable for in-place watermark embedding")
+    data = _mono_pcm(pcm)
+    lib = ctypes.CDLL(_find_lib())
     fn = lib.crispasr_watermark_embed
     fn.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_float]
     fn.restype = None
-    fn(pcm.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-       ctypes.c_int(len(pcm)), ctypes.c_float(alpha))
+    fn(data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+       ctypes.c_int(len(data)), ctypes.c_float(alpha))
+    if data is not pcm:
+        pcm[...] = data
 
 
 def watermark_detect(pcm: "numpy.ndarray") -> float:
@@ -4562,12 +4573,13 @@ def watermark_detect(pcm: "numpy.ndarray") -> float:
     import numpy as np
     if pcm.dtype != np.float32:
         raise TypeError("pcm must be float32")
-    lib = _get_lib()
+    data = _mono_pcm(pcm)
+    lib = ctypes.CDLL(_find_lib())
     fn = lib.crispasr_watermark_detect
     fn.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int]
     fn.restype = ctypes.c_float
-    return float(fn(pcm.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
-                    ctypes.c_int(len(pcm))))
+    return float(fn(data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+                    ctypes.c_int(len(data))))
 
 
 # ---------------------------------------------------------------------------
