@@ -234,13 +234,18 @@ CRISPASR_SESSION_API void crispasr_parakeet_result_free(parakeet_result* r);
 // "metal"). Call before any crispasr_session_open*. NULL or "" = auto.
 CRISPASR_SESSION_API void crispasr_set_gpu_backend(const char* name);
 
+// Returns the backend-name byte count (0 for an unknown architecture), or
+// -1 for invalid arguments, -2 for an unreadable GGUF, -3 for a missing
+// general.architecture key, and -4 for a non-string architecture value.
+// After argument validation, failures leave the output string empty.
 CRISPASR_SESSION_API int crispasr_detect_backend_from_gguf(const char* path, char* out_name, int out_cap);
 // #433: EVERY backend that can open this file, newline-separated, primary
 // first. detect_backend() above is 1:1, which is not always the whole truth —
 // a voxcpm2 GGUF opens both as `voxcpm2-tts` and as `voxcpm2-vae` (the same
 // loader with vae_only=true; there is no separate VAE model). Returns bytes
-// written, or -5 if `out_cap` is too small — never a truncated list, because a
-// silently cut list would name fewer backends than exist.
+// written, the same errors as detect_backend(), or -5 if `out_cap` is too
+// small — never a truncated list, because a silently cut list would name fewer
+// backends than exist.
 CRISPASR_SESSION_API int crispasr_detect_backends_from_gguf(const char* path, char* out, int out_cap);
 CRISPASR_SESSION_API crispasr_session* crispasr_session_open_explicit(const char* model_path, const char* backend_name,
                                                                       int n_threads);

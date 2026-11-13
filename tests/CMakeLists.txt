@@ -6187,6 +6187,16 @@ catch_discover_tests(test-arch-backend-map
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# Malformed architecture metadata must not abort a process hosting the C ABI.
+# Each detector call runs in a child process; no model weights are needed.
+if(BUILD_SHARED_LIBS AND Python3_Interpreter_FOUND)
+    add_test(NAME gguf-detector-metadata COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_gguf_detector_metadata.py
+        --library $<TARGET_FILE:crispasr-lib>)
+    set_tests_properties(gguf-detector-metadata PROPERTIES
+        LABELS "unit;c-abi;arch-map" TIMEOUT 120)
+endif()
+
 # ─── #551: real GGUF schema routing and C ABI/CLI rejection (no weights)
 add_executable(test-parakeet-gguf test-parakeet-gguf.cpp)
 target_include_directories(test-parakeet-gguf PRIVATE ${PROJECT_SOURCE_DIR}/src)

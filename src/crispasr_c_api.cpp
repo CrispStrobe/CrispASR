@@ -1692,6 +1692,12 @@ CA_EXPORT int crispasr_detect_backends_from_gguf(const char* path, char* out, in
         gguf_free(gctx);
         return -3;
     }
+    // GGUF getters assert on a mismatched type; malformed model metadata
+    // must return an error rather than abort the process hosting the C ABI.
+    if (gguf_get_kv_type(gctx, key_id) != GGUF_TYPE_STRING) {
+        gguf_free(gctx);
+        return -4;
+    }
     const char* arch = gguf_get_val_str(gctx, key_id);
     if (!arch) {
         gguf_free(gctx);
@@ -1732,6 +1738,12 @@ CA_EXPORT int crispasr_detect_backend_from_gguf(const char* path, char* out_name
     if (key_id < 0) {
         gguf_free(gctx);
         return -3;
+    }
+    // GGUF getters assert on a mismatched type; malformed model metadata
+    // must return an error rather than abort the process hosting the C ABI.
+    if (gguf_get_kv_type(gctx, key_id) != GGUF_TYPE_STRING) {
+        gguf_free(gctx);
+        return -4;
     }
     const char* arch = gguf_get_val_str(gctx, key_id);
     if (!arch) {

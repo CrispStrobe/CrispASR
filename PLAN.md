@@ -16,6 +16,16 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - Base `c50d4afb4`; isolated `fix/ultra-bindings-20261113`. Added the missing experimental Go local-head wrapper using the existing C ABI, with float64-second intervals, UTF-8 text copied before result cleanup, bounded audio and FFI argument validation. Three new native-stub execution tests first failed on the missing wrapper and now pass, covering transport, fractional timing, null/empty/invalid-count cleanup and invalid input. The complete shared wrapper contract passes 54 Go probes, high-level Go package compilation, 36 Rust probes and five Rust doc tests. clang-format 18, gofmt and whitespace checks pass. No model, GPU or CI job and no broader model-quality claim.
 
+### C ABI architecture metadata validation — complete (2026-11-13)
+
+- Both GGUF backend detectors reject non-string `general.architecture` values
+  with `-4` and an empty output. The public header documents the error. The
+  38-case subprocess regression covers all scalar types, arrays and string
+  routing controls. The prior shared library aborts on 26 cases and wrongly
+  accepts two string-array cases; the exact fixed production detector definitions
+  pass all cases against the same ggml library. Registered in shared-build CTest;
+  no full library rebuild, hosted jobs or model-quality claim.
+
 ### Quantizer fallback reporting — Codex (2026-11-13)
 
 - Base `8011652f5`; isolated `fix/quantizer-report-20261113`. Recognize `nemotron_h_moe` 3D expert banks using the existing row-wise writer and preserve their declared dimensions. Report global and per-tensor row-width substitutions and unsupported expert copies separately from intentional precision rules; correct zero-quantization reporting for casts and idempotent inputs. All seven new model-free execution cases (including Q3/Q4 subtests), seven selected CTests and clang-format 18 checks pass. Bank payloads match identical 2D matrices byte-for-byte; Q8-source requantization, overrides, unsupported rows and idempotency are covered. No full-model inference, CI/GPU dispatch or speech-quality claim.
