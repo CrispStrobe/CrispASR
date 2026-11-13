@@ -12,9 +12,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
-### Standalone VAD binding timestamps — Codex (2026-11-13)
+### Standalone VAD binding timestamps — complete Codex (2026-11-13)
 
-- Correct the Go and Java standalone VAD timestamps to seconds and add native-fixture regressions. Preserve and document Ruby standalone VAD centiseconds; Python VAD ownership and units are handled in the related Python lane.
+- Go and Java now convert legacy native centiseconds to the seconds promised by their interfaces; native-fixture tests cover fractional times, result ownership, empty results and errors. Ruby preserves and documents its existing native-centisecond convention, with fixture coverage. Python VAD ownership and units are handled in the related Python lane.
 
 ### Python standalone VAD result transport — complete Codex (2026-11-13)
 

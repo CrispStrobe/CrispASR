@@ -2001,7 +2001,8 @@ void init_ruby_crispasr_session(VALUE* mWhisper) {
     rb_define_singleton_method(mSession, "set_tts_seed", rb_context_guard_rb_session_set_tts_seed, 2);
     rb_define_singleton_method(mSession, "set_max_new_tokens", rb_context_guard_rb_session_set_max_new_tokens, 2);
     rb_define_singleton_method(mSession, "set_autochunk", rb_context_guard_rb_session_set_autochunk, 3);
-    rb_define_singleton_method(mSession, "set_max_new_tokens_per_second", rb_context_guard_rb_session_set_max_new_tokens_per_second, 3);
+    rb_define_singleton_method(mSession, "set_max_new_tokens_per_second",
+                               rb_context_guard_rb_session_set_max_new_tokens_per_second, 3);
     rb_define_singleton_method(mSession, "set_frequency_penalty", rb_context_guard_rb_session_set_frequency_penalty, 2);
     rb_define_singleton_method(mSession, "set_tts_steps", rb_context_guard_rb_session_set_tts_steps, 2);
     rb_define_singleton_method(mSession, "set_tts_num_candidates", rb_context_guard_rb_session_set_tts_num_candidates,
