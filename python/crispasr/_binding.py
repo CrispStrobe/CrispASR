@@ -4136,6 +4136,21 @@ class VadSpan:
     end: float    # seconds
 
 
+def _copy_vad_spans(out_spans, count, free, api_name, divisor):
+    """Copy VAD boundaries to seconds and release their library-owned storage."""
+    try:
+        if count < 0:
+            raise RuntimeError(f"{api_name} failed (rc={count})")
+        if count > 0 and not out_spans:
+            raise RuntimeError(f"{api_name} returned a count but no spans")
+        return [VadSpan(start=float(out_spans[2 * i]) / divisor,
+                        end=float(out_spans[2 * i + 1]) / divisor)
+                for i in range(count)]
+    finally:
+        if out_spans:
+            free(out_spans)
+
+
 def vad_segments(
     pcm: "np.ndarray",
     model_path: str,
@@ -4167,7 +4182,9 @@ def vad_segments(
     ]
     fn.restype = ctypes.c_int
 
-    pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+    pcm_arr = _mono_pcm(pcm)
+    lib.crispasr_vad_free.argtypes = [ctypes.POINTER(ctypes.c_float)]
+    lib.crispasr_vad_free.restype = None
     out_spans = ctypes.POINTER(ctypes.c_float)()
     n = fn(
         model_path.encode("utf-8"),
@@ -4176,15 +4193,8 @@ def vad_segments(
         min_speech_ms, min_silence_ms, n_threads, False,
         ctypes.byref(out_spans),
     )
-    if n < 0:
-        raise RuntimeError(f"crispasr_vad_segments failed (rc={n})")
-    spans = []
-    for i in range(n):
-        spans.append(VadSpan(start=float(out_spans[2 * i]),
-                             end=float(out_spans[2 * i + 1])))
-    if n > 0:
-        lib.free(out_spans)
-    return spans
+    return _copy_vad_spans(out_spans, n, lib.crispasr_vad_free,
+                           "crispasr_vad_segments", 100.0)
 
 
 def text_detect_language(
@@ -4493,7 +4503,7 @@ def vad_slices(
     lib.crispasr_vad_free.argtypes = [ctypes.POINTER(ctypes.c_float)]
     lib.crispasr_vad_free.restype = None
 
-    pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+    pcm_arr = _mono_pcm(pcm)
     out_spans = ctypes.POINTER(ctypes.c_float)()
     n = fn(
         model_path.encode("utf-8"),
@@ -4503,15 +4513,8 @@ def vad_slices(
         max_chunk_duration_s, n_threads,
         ctypes.byref(out_spans),
     )
-    if n < 0:
-        raise RuntimeError(f"crispasr_vad_slices failed (rc={n})")
-    spans = []
-    for i in range(n):
-        spans.append(VadSpan(start=float(out_spans[2 * i]),
-                             end=float(out_spans[2 * i + 1])))
-    if n > 0:
-        lib.crispasr_vad_free(out_spans)
-    return spans
+    return _copy_vad_spans(out_spans, n, lib.crispasr_vad_free,
+                           "crispasr_vad_slices", 1.0)
 
 
 # ---------------------------------------------------------------------------

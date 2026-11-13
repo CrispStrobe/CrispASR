@@ -16,6 +16,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - Correct Go, Java and Ruby standalone VAD timestamp units and add native-fixture regression coverage; Python VAD ownership and units are handled in the related Python lane.
 
+### Python standalone VAD result transport — complete Codex (2026-11-13)
+
+- Base `0962e73df`; isolated `fix/product-audio-next-20261113`. Legacy standalone VAD boundaries now convert native centiseconds to the documented seconds; dispatcher boundaries retain their existing seconds. Both wrappers use the shared mono transport guard and free returned spans through the exported library allocator on success, empty/error returns and Python conversion exceptions. Three new native-recorder tests first reproduced the 100x timestamp error and allocator mismatch; all six audio utility tests, eight resampling tests and seven auxiliary diarization/PCM tests pass, including reversed PCM, non-mono rejection, positive-count/null rejection and zero/null controls. Existing CTest/CI registrations run the new cases. Python compilation and whitespace checks pass. No model/GPU/full-library build, push or hosted jobs.
+
 ### Python auxiliary PCM transport — complete Codex (2026-11-13)
 
 - Base `586eb2b94`; isolated `fix/product-audio-20261113`. Native recording probes reproduced incorrect logical samples from strided language-ID/diarization buffers. Both now use the shared mono transport helper; stereo channels must match in length. Public watermark wrappers also referenced an undefined loader; all three now load the normal library, preserve native loaded-model state, and support strided PCM with in-place embedding copyback and writable/shape validation. All seven focused tests pass, including negative strides, untouched neighboring samples and pre-dispatch rejection; the existing regression workflow executes them. The related Python suite passes 32 tests and 55 subtests, with one pre-existing optional real-GGUF/native-library test skipped. Native recorder tests skip explicitly without a Linux C compiler. Whitespace and Python compilation checks pass. No full-library/model build, GPU or hosted dispatch.
