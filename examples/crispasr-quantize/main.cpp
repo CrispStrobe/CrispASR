@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <map>
 #include <regex>
 #include <string>
@@ -132,6 +133,22 @@ static ggml_type crispasr_row_fit(ggml_type want, int64_t ncols) {
 }
 
 static bool crispasr_model_quantize(const std::string& fname_inp, const std::string& fname_out, ggml_ftype ftype) {
+    // Compare file identities, not path strings: symlinks and hardlinks can name
+    // the input too. Reject before opening output with truncation.
+    std::error_code path_error;
+    const bool output_exists = std::filesystem::exists(fname_out, path_error);
+    if (!path_error && output_exists) {
+        const bool same_file = std::filesystem::equivalent(fname_inp, fname_out, path_error);
+        if (same_file) {
+            fprintf(stderr, "%s: input and output refer to the same file; choose a different output path\n", __func__);
+            return false;
+        }
+    }
+    if (path_error) {
+        fprintf(stderr, "%s: cannot check input/output file identities: %s\n", __func__, path_error.message().c_str());
+        return false;
+    }
+
     ggml_type qtype = GGML_TYPE_F32;
 
     switch (ftype) {
@@ -1380,10 +1397,23 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                 __func__, skipped_expert_banks, (long long)skipped_expert_elements, ggml_type_name(qtype));
     }
 
+    // Open input before creating/truncating output, including when the input
+    // became unavailable after reading its metadata.
+    FILE* fin = fopen(fname_inp.c_str(), "rb");
+    if (!fin) {
+        fprintf(stderr, "%s: failed to open '%s' for reading\n", __func__, fname_inp.c_str());
+        gguf_free(ctx_in);
+        gguf_free(ctx_out);
+        if (ctx_in_ggml)
+            ggml_free(ctx_in_ggml);
+        return false;
+    }
+
     // Allocate output file
     printf("%s: writing quantized model to '%s'\n", __func__, fname_out.c_str());
     FILE* fout = fopen(fname_out.c_str(), "w+b");
     if (!fout) {
+        fclose(fin);
         fprintf(stderr, "%s: failed to open '%s' for writing\n", __func__, fname_out.c_str());
         gguf_free(ctx_in);
         gguf_free(ctx_out);
@@ -1397,8 +1427,6 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     std::vector<uint8_t> meta_data(meta_size, 0);
     fwrite(meta_data.data(), 1, meta_size, fout);
 
-    // Open input file for data reading
-    FILE* fin = fopen(fname_inp.c_str(), "rb");
     const size_t data_offset_in = gguf_get_data_offset(ctx_in);
 
     std::vector<float> f32_data;

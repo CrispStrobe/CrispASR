@@ -111,6 +111,64 @@ class QuantizerReporting(unittest.TestCase):
             self.assertEqual(bank[1:], control[1:])
         self.assertEqual(tensors['output_norm.weight'], read(self.source)['output_norm.weight'])
 
+    def assert_rejects_same_file(self, source, output):
+        original = self.source.read_bytes()
+        run = subprocess.run([str(QUANT), str(source), str(output), 'q4_k'],
+                             capture_output=True, text=True)
+        self.assertEqual(self.source.read_bytes(), original, 'source file was modified')
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn('input and output refer to the same file', run.stderr)
+
+    def test_identical_path_preserves_input(self):
+        self.assert_rejects_same_file(self.source, self.source)
+
+    def test_relative_path_alias_preserves_input(self):
+        self.assert_rejects_same_file(self.source, str(self.root) + '/./in.gguf')
+
+    def test_symlink_output_preserves_input(self):
+        alias = self.root / 'alias.gguf'
+        try:
+            alias.symlink_to(self.source)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f'symlinks unavailable: {exc}')
+        self.assert_rejects_same_file(self.source, alias)
+        self.assertTrue(alias.is_symlink())
+
+    def test_symlink_input_preserves_input(self):
+        alias = self.root / 'alias.gguf'
+        try:
+            alias.symlink_to(self.source)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f'symlinks unavailable: {exc}')
+        self.assert_rejects_same_file(alias, self.source)
+
+    def test_hardlink_output_preserves_input(self):
+        alias = self.root / 'alias.gguf'
+        try:
+            os.link(self.source, alias)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f'hardlinks unavailable: {exc}')
+        self.assert_rejects_same_file(self.source, alias)
+        self.assertTrue(os.path.samefile(self.source, alias))
+
+    def test_missing_input_preserves_existing_output(self):
+        output = self.root / 'out.gguf'
+        output.write_bytes(b'old output')
+        run = subprocess.run([str(QUANT), str(self.root / 'missing.gguf'), str(output), 'q4_k'],
+                             capture_output=True, text=True)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertEqual(output.read_bytes(), b'old output')
+
+    def test_distinct_existing_output_preserves_input(self):
+        original = self.source.read_bytes()
+        output = self.root / 'out.gguf'
+        output.write_bytes(b'old output')
+        run = subprocess.run([str(QUANT), str(self.source), str(output), 'q4_k'],
+                             capture_output=True, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assert_banks(read(output), 2)
+
     def test_experts_and_row_fallbacks(self):
         for mode in ('q3_k', 'q4_k'):
             with self.subTest(mode=mode):

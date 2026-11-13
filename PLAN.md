@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Quantizer input preservation — Codex (2026-11-13)
+
+- Base `e210e7179`; isolated `fix/quantizer-same-file-20261113`. Reject input/output file identity before opening output with truncation, including symlink/hardlink aliases, and reopen input successfully before output creation. Three preservation guards first reproduced source destruction on the prior executable. All 14 actual-quantizer execution tests now pass, including seven new identical/normalized-path, both symlink directions, hardlink, missing-input and distinct-existing-output controls. Exact production quantizer sources compile against the existing ggml-base library; clang-format 18 and whitespace checks pass. No full-library/model build, GPU or CI job.
+
 ### Ultra local-head Go binding — Codex (2026-11-13)
 
 - Base `c50d4afb4`; isolated `fix/ultra-bindings-20261113`. Added the missing experimental Go local-head wrapper using the existing C ABI, with float64-second intervals, UTF-8 text copied before result cleanup, bounded audio and FFI argument validation. Three new native-stub execution tests first failed on the missing wrapper and now pass, covering transport, fractional timing, null/empty/invalid-count cleanup and invalid input. The complete shared wrapper contract passes 54 Go probes, high-level Go package compilation, 36 Rust probes and five Rust doc tests. clang-format 18, gofmt and whitespace checks pass. No model, GPU or CI job and no broader model-quality claim.
