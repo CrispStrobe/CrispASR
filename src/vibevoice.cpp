@@ -91,7 +91,8 @@ struct vibevoice_hparams {
     int n_filters = 32;
     int total_downsample = 3200;
     int has_decoder = 0;
-    int tts_n_layers = 0; // TTS LM layers (0 = ASR-only model)
+    int tts_n_layers = 0; // Separate realtime TTS LM layers; base TTS also uses 0.
+    bool asr_checkpoint = true;
     bool asr_streaming = false;
     int stream_chunk_frames = 22;
     int stream_lookahead_frames = 4;
@@ -280,6 +281,11 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     hp.total_downsample = core_gguf::kv_u32(gctx, "vibevoice.total_downsample", 3200);
     hp.has_decoder = core_gguf::kv_u32(gctx, "vibevoice.has_decoder", 0);
     hp.tts_n_layers = core_gguf::kv_u32(gctx, "vibevoice.tts_n_layers", 0);
+    // Older base TTS converts were incorrectly labeled vibevoice-asr (#589).
+    // New converts preserve the source checkpoint's trained task explicitly;
+    // legacy synthesis tensors are checked by vibevoice_has_asr below.
+    hp.asr_checkpoint = core_gguf::kv_u32(gctx, "vibevoice.supports_asr", 1) != 0 &&
+                        core_gguf::kv_str(gctx, "general.architecture", "") != "vibevoice-tts";
     hp.asr_streaming = core_gguf::kv_u32(gctx, "vibevoice.asr_streaming", 0) != 0;
     hp.stream_chunk_frames = core_gguf::kv_u32(gctx, "vibevoice.streaming.chunk_frames", 22);
     hp.stream_lookahead_frames = core_gguf::kv_u32(gctx, "vibevoice.streaming.lookahead_frames", 4);
@@ -1697,31 +1703,12 @@ static char* vibevoice_transcribe_impl(struct vibevoice_context* ctx, const floa
     auto& hp = m.hp;
     const char* dump_dir = crispasr_env::get("CRISPASR_VIBEVOICE_DUMP_DIR");
 
-    // Verify the model has ASR capability: acoustic and semantic tokenizer
-    // encoders must be present (at_enc.*, st_enc.*).  vibevoice-realtime and
-    // other TTS-only variants omit these — they contain at_dec.* (decoder)
-    // and tts_lm.* but no encoder.  Without this check the tensor lookups all
-    // return null, build_causal_dw_conv1d dereferences a null weight pointer,
-    // and the process segfaults.
-    {
-        bool has_at_enc = false, has_st_enc = false;
-        for (const auto& kv : m.tensors) {
-            if (!has_at_enc && kv.first.rfind("at_enc.", 0) == 0)
-                has_at_enc = true;
-            if (!has_st_enc && kv.first.rfind("st_enc.", 0) == 0)
-                has_st_enc = true;
-            if (has_at_enc && has_st_enc)
-                break;
-        }
-        if (!has_at_enc || !has_st_enc) {
-            fprintf(stderr,
-                    "vibevoice: error: this model does not support ASR (missing %s%s%s encoder tensors).\n"
-                    "  vibevoice-realtime and similar TTS-only models lack the tokenizer encoders.\n"
-                    "  Use a full VibeVoice ASR GGUF (contains at_enc.* and st_enc.* tensors).\n",
-                    has_at_enc ? "" : "at_enc", (!has_at_enc && !has_st_enc) ? " and " : "",
-                    has_st_enc ? "" : "st_enc");
-            return nullptr;
-        }
+    if (!vibevoice_has_asr(ctx)) {
+        fprintf(stderr, "vibevoice: error: this checkpoint does not support ASR. Base VibeVoice-1.5B/7B and "
+                        "VibeVoice-Realtime are TTS models; tokenizer encoders alone do not grant transcription.\n"
+                        "  Use a GGUF converted from microsoft/VibeVoice-ASR or "
+                        "microsoft/VibeVoice-ASR-Streaming-1.5B.\n");
+        return nullptr;
     }
 
     vibevoice_bench_stage _bs_total("transcribe_total");
@@ -5954,7 +5941,7 @@ extern "C" int vibevoice_stream_lookahead_samples(const vibevoice_context* ctx) 
 }
 
 extern "C" vibevoice_stream* vibevoice_stream_open(vibevoice_context* ctx, const char* context) {
-    if (!ctx || !ctx->model.hp.asr_streaming || ctx->model.merge_rank.empty())
+    if (!vibevoice_has_asr(ctx) || !ctx->model.hp.asr_streaming || ctx->model.merge_rank.empty())
         return nullptr;
     auto* s = new vibevoice_stream();
     s->ctx = ctx;
@@ -6114,16 +6101,19 @@ extern "C" void vibevoice_result_free(struct vibevoice_result* r) {
 }
 
 extern "C" bool vibevoice_has_asr(const struct vibevoice_context* ctx) {
-    if (!ctx)
+    if (!ctx || !ctx->model.hp.asr_checkpoint)
         return false;
     bool has_at = false, has_st = false;
     for (const auto& kv : ctx->model.tensors) {
-        if (!has_at && kv.first.rfind("at_enc.", 0) == 0)
+        // The official ASR checkpoints remove the diffusion prediction head.
+        // Base TTS checkpoints retain it alongside both tokenizer encoders,
+        // including legacy GGUFs mislabeled vibevoice-asr by our converter.
+        if (kv.first.rfind("pred.", 0) == 0)
+            return false;
+        if (kv.first.rfind("at_enc.", 0) == 0)
             has_at = true;
-        if (!has_st && kv.first.rfind("st_enc.", 0) == 0)
+        if (kv.first.rfind("st_enc.", 0) == 0)
             has_st = true;
-        if (has_at && has_st)
-            break;
     }
     return has_at && has_st;
 }

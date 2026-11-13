@@ -172,16 +172,17 @@ public:
             fprintf(stderr, "crispasr[vibevoice]: failed to load model '%s'\n", p.model.c_str());
             return false;
         }
-        // For the ASR backend ("vibevoice"), verify encoder tensors exist
+        // For the ASR backend ("vibevoice"), verify checkpoint ASR capability
         // immediately so the user gets a clear diagnostic before any audio is
         // processed.  TTS-only aliases ("vibevoice-tts", "vibevoice-1.5b")
-        // legitimately lack these tensors and must not fail here.
+        // legitimately synthesize without ASR and must not fail here.
         if ((backend_name_ == "vibevoice" || backend_name_ == "vibevoice-streaming") && !vibevoice_has_asr(ctx_)) {
-            fprintf(stderr,
-                    "crispasr[vibevoice]: error: '%s' is a TTS-only model (no at_enc.*/st_enc.* tensors).\n"
-                    "  Use --backend vibevoice-tts for this model, or download the ASR model:\n"
-                    "  crispasr -m auto --backend vibevoice --auto-download\n",
-                    p.model.c_str());
+            fprintf(
+                stderr,
+                "crispasr[vibevoice]: error: '%s' is not an ASR checkpoint (TTS task or missing tokenizer encoders).\n"
+                "  Use --backend vibevoice-tts for this model, or download the ASR model:\n"
+                "  crispasr -m auto --backend vibevoice --auto-download\n",
+                p.model.c_str());
             vibevoice_free(ctx_);
             ctx_ = nullptr;
             return false;

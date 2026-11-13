@@ -2626,9 +2626,10 @@ catch_discover_tests(test-tada-params
 )
 
 # ─── test-vibevoice-params — Catch2 unit tests for vibevoice_context_params defaults
-# and null-guard coverage. No GGUF required. ───────────────────────────────────
+# and task-capability coverage. Tiny generated GGUFs; no model required. ───────────────────────────────────
 add_executable(test-vibevoice-params
     test-vibevoice-params.cpp
+    test-vibevoice-asr-capability.cpp
 )
 target_include_directories(test-vibevoice-params PRIVATE
     ${PROJECT_SOURCE_DIR}/src
@@ -2641,6 +2642,13 @@ catch_discover_tests(test-vibevoice-params
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit;vibevoice"
 )
+
+add_executable(test-vibevoice-asr-live test-vibevoice-asr-live.cpp)
+target_link_libraries(test-vibevoice-asr-live PRIVATE vibevoice)
+add_test(NAME test-vibevoice-asr-live
+    COMMAND test-vibevoice-asr-live ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
+set_tests_properties(test-vibevoice-asr-live PROPERTIES
+    LABELS "integration;live;vibevoice" SKIP_RETURN_CODE 77 TIMEOUT 900)
 
 # ─── test-voxcpm2-params — Catch2 unit tests for voxcpm2_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
@@ -5726,6 +5734,11 @@ set_tests_properties(test-package-lib-bundle PROPERTIES
 # Discover Python before constructing commands or guarding their registration.
 # A later find_package leaves clean builds without the guarded unit tests.
 find_package(Python3 COMPONENTS Interpreter QUIET)
+if (Python3_Interpreter_FOUND)
+    add_test(NAME test-vibevoice-converter-task
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_converter_task.py)
+    set_tests_properties(test-vibevoice-converter-task PROPERTIES LABELS "unit;vibevoice")
+endif()
 
 if (Python3_Interpreter_FOUND)
     add_test(NAME mini-bs-roformer-converter
