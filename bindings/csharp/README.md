@@ -204,3 +204,22 @@ seconds. The original three-argument overload retains native defaults.
 `SpeakerDb.Match` preserves a negative native score as no match, and DB
 operations reject disposed handles. `SpeakerDb.Enroll` writes to disk;
 reopen an existing DB to refresh the retained roster.
+
+## Experimental Ultra local-head alignment
+
+`Session.AlignWordsUltra` accepts the converted base aligner and separate local-head
+GGUF, a transcript, and mono 16 kHz PCM (up to 120 seconds):
+
+```csharp
+AlignedWord[] words = Session.AlignWordsUltra(
+    "qwen3-forced-aligner-ultra-f16.gguf", "ultra-local-head-f32.gguf",
+    "Hello, world!", pcm16kMono, nThreads: 4);
+Console.WriteLine($"{words[0].Text}: {words[0].T0:F6}–{words[0].T1:F6} seconds");
+```
+
+Times retain fractional milliseconds as double-precision seconds. Character spans
+are empty. A failed native alignment throws `InvalidOperationException`; invalid
+arguments throw `ArgumentException`. The loaded native library must export the
+experimental Ultra C ABI. See the [local-head guide](../../docs/qwen3-ultra-local-head-port.md)
+for conversion and the limited model qualification; broader language and GPU
+acceptance remain open.

@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Ultra local-head C# binding — complete Codex (2026-11-13)
+
+- Base `fc6950aca`; isolated `feat/ultra-csharp-interface-20261113`. Added the missing experimental C# local-head wrapper using the existing C ABI, owned UTF-8 text, fractional-second boundaries and deterministic native-result cleanup. Three new managed/native-stub execution tests first failed on the missing method and now pass 29 checks covering transport, precision, null/empty/invalid-count cleanup and invalid input. The full strict C# contract passes all 11 tests (357 checks), including older-library compatibility. The new tests run through the existing CTest and strict binding runner. Whitespace checks pass; no model, GPU, full-library build or CI dispatch and no broader model-quality claim.
+
 ### Shared PCM16 WAV chunk traversal — complete Codex (2026-11-13)
 
 - Base `7e11bad81`; isolated `fix/core-audit-20261113`. Shared voice-reference parsing now consumes RIFF odd-byte padding, bounds unsigned non-data chunk traversal to real file bytes and rejects short/truncated formats and invalid rates. All three valid odd JUNK/LIST/fmt controls first failed on the old header. The fixed production-header Catch2 suite passes 89 assertions under ASan/UBSan, preserving stereo averages, partial-frame discard and truncated-data clamps; parallel process controls pass. Portable 64-bit seeks also pass an exact-PCM sparse-file control beyond 2 GiB with only 8 KiB allocated. Registered as a header-only unit target; clang-format 18 and whitespace checks pass. No model, full-library build, GPU or hosted dispatch.

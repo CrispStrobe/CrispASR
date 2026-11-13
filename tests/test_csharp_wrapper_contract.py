@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import unittest
 
+from test_csharp_ultra_contract import CSharpUltraContract
+
 ROOT = Path(__file__).resolve().parents[1]
 
 PROBE = r'''

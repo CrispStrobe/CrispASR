@@ -24,10 +24,10 @@ namespace CrispASR
         private IntPtr _handle;
         private readonly System.Collections.Generic.HashSet<StreamDecoder> _streams = new();
 
-        // The session C ABI reports every time in centiseconds; this binding
-        // exposes seconds throughout (issue #291). ONE constant, used by every
-        // conversion site, so a future time-bearing accessor cannot pick a
-        // different unit by accident.
+        // Ordinary session C ABI times are centiseconds (the experimental
+        // Ultra local-head accessors use milliseconds); this binding
+        // exposes seconds throughout (issue #291). All centisecond conversions
+        // share one constant so future accessors keep the same unit.
         internal const double CentisecondsPerSecond = 100.0;
 
         // The C ABI uses -1 for "this backend produced no timing for this
