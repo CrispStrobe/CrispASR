@@ -7,7 +7,7 @@ F16 aligner and CPU head matched the upstream full path in
 [run 42320992672](https://github.com/CrispStrobe/CrispASR/actions/runs/42320992672):
 the maximum and mean timing errors over 22 words were 0.00460 ms and 0.00078 ms.
 Broader audio/language coverage and GPU acceptance remain open. The separate
-experimental CLI, C ABI and Python entrypoints below retain refined precision;
+experimental CLI, C ABI, Python and Go entrypoints below retain refined precision;
 the existing generic aligner continues to store centiseconds.
 
 ## Experimental interface
@@ -25,7 +25,14 @@ For Python, `crispasr.align_words_ultra(base_path, head_path, text, pcm)` takes
 mono 16 kHz PCM and returns word times in seconds. The corresponding C ABI
 `crispasr_align_words_ultra_abi` returns an opaque result with millisecond
 accessors and must be freed with `crispasr_ultra_align_result_free`.
-Both paths reject audio longer than 120 seconds rather than returning partial
+
+For Go, `whisper.AlignWordsUltra(basePath, headPath, text, pcm, nThreads)`
+returns `[]UltraAlignedWord` and an error. `Start` and `End` are `float64`
+seconds, retaining the local head's fractional-millisecond precision. The wrapper
+copies the UTF-8 word text and frees the native result before returning. It
+requires the base and local-head GGUF paths and mono 16 kHz PCM, as above.
+
+These paths reject audio longer than 120 seconds rather than returning partial
 results. Word-level JSON retains refined timing; subtitle output is rounded to
 milliseconds. The local head runs on CPU and is not auto-downloaded. The base
 model is available through the [model registry](qwen3-ultra-aligner.md).
