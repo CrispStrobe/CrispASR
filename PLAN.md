@@ -12,6 +12,20 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### PCM16 extensible reference WAV — complete Codex (2026-11-13)
+
+- Base `1bf2db151`; isolated `fix/product-small-20261113`. Shared voice-reference
+  WAV parsing now accepts Windows extensible PCM16 with bounded cbSize, exact
+  PCM subtype GUID, valid-bit/container and block-alignment validation. Three
+  valid controls first failed against the old header. The production-header
+  Catch2 suite passes 158 assertions under ASan/UBSan and optimized builds,
+  covering exact mono/stereo/three-channel samples, odd metadata and extended
+  format padding, plus malformed/unsupported format rejection. All five tests
+  pass through the existing production CTest registration in an isolated
+  configuration. clang-format 18 and whitespace checks pass. No model,
+  full-library build, GPU, push or hosted dispatch; model speech quality was
+  not tested.
+
 ### Ruby microphone cancellation stall — complete Codex (2026-11-13)
 
 - Base `08446098a`; isolated `diag/ruby-mic-close-20261113`. Full-contract repetition reproduced the stall; Ruby/native thread stacks located it at pump cancellation inside a callback, rather than concurrent close. `rb_protect` swallowed `Thread.kill` along with callback exceptions, leaving the pump waiting for more audio. Pausing the callback with `Thread.stop` made the old wrapper stall on the first run. Exception-specific rescue now lets cancellation reach the existing cleanup. The complete native-recorder contract passes 387 assertions, including forced callback cancellation, idle-wait cancellation, ordinary/non-StandardError callback exceptions, callback/external/concurrent close, exactly-once native cleanup and no live chunks; 100 complete program repetitions pass using one tiny fixture. Both kill joins and the subprocess have timeouts. clang-format 18 and whitespace checks pass. No model, full build, GPU, push or hosted dispatch.

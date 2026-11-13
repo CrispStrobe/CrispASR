@@ -47,6 +47,18 @@ struct WavFixture {
         if (size & 1)
             bytes.push_back(0);
     }
+    void extensible(int channels = 1, uint16_t valid_bits = 16, uint16_t cb_size = 22) {
+        const size_t start = bytes.size();
+        fmt(16, channels);
+        bytes[start + 8] = 0xfe;
+        bytes[start + 9] = 0xff;
+        bytes[start + 4] = 40;
+        le16(cb_size);
+        le16(valid_bits);
+        le32(channels == 1 ? 4 : (1u << channels) - 1); // speaker mask; averaging is independent of positions
+        const uint8_t pcm_guid[16] = {1, 0, 0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71};
+        bytes.insert(bytes.end(), pcm_guid, pcm_guid + 16);
+    }
     void metadata(const char* name, uint32_t size) {
         tag(name);
         le32(size);
@@ -186,4 +198,89 @@ TEST_CASE("PCM16 reader preserves bounded partial data and channel averaging", "
         CHECK(pcm[0] == 0.5f);
         CHECK(pcm[1] == -0.5f);
     }
+}
+
+TEST_CASE("PCM16 reader accepts extensible PCM with exact samples", "[wav-reader][unit]") {
+    WavFixture wav;
+    int channels = 1;
+    SECTION("mono") {}
+    SECTION("stereo") {
+        channels = 2;
+    }
+    SECTION("three channels") {
+        channels = 3;
+    }
+    SECTION("odd metadata around extensible format") {
+        wav.metadata("JUNK", 1);
+        wav.extensible();
+        wav.metadata("LIST", 3);
+    }
+    SECTION("larger extension with odd padding") {
+        wav.extensible(1, 16, 23);
+        wav.bytes[16] = 41;
+        wav.bytes.push_back(0x55);
+        wav.bytes.push_back(0);
+    }
+    if (wav.bytes.size() == 12)
+        wav.extensible(channels);
+    wav.data(channels == 3 ? 6 : 4);
+    if (channels == 3)
+        wav.le16(24576);
+    std::vector<float> pcm;
+    int rate = 0;
+    REQUIRE(wav.read(pcm, rate));
+    CHECK(rate == 16000);
+    if (channels > 1) {
+        REQUIRE(pcm.size() == 1);
+        CHECK(pcm[0] == (channels == 3 ? 0.25f : 0.0f));
+    } else {
+        REQUIRE(pcm.size() == 2);
+        CHECK(pcm[0] == 0.5f);
+        CHECK(pcm[1] == -0.5f);
+    }
+}
+
+TEST_CASE("PCM16 reader rejects invalid extensible layouts", "[wav-reader][unit]") {
+    WavFixture wav;
+    wav.extensible();
+    SECTION("float subformat") {
+        wav.bytes[44] = 3;
+    }
+    SECTION("non-PCM GUID tail") {
+        wav.bytes[59] ^= 1;
+    }
+    SECTION("non-PCM GUID high tag byte") {
+        wav.bytes[45] = 1;
+    }
+    SECTION("short cbSize") {
+        wav.bytes[36] = 21;
+    }
+    SECTION("cbSize exceeds chunk") {
+        wav.bytes[36] = 23;
+    }
+    SECTION("short format chunk") {
+        wav.bytes[16] = 39;
+    }
+    SECTION("truncated extension") {
+        wav.bytes.pop_back();
+    }
+    SECTION("zero valid bits") {
+        wav.bytes[38] = 0;
+    }
+    SECTION("too many valid bits") {
+        wav.bytes[38] = 17;
+    }
+    SECTION("unsupported valid bits") {
+        wav.bytes[38] = 12;
+    }
+    SECTION("unsupported sample container") {
+        wav.bytes[34] = 24;
+    }
+    SECTION("incorrect block alignment") {
+        wav.bytes[32] = 4;
+    }
+    wav.data();
+    std::vector<float> pcm;
+    int rate = 0;
+    CHECK_FALSE(wav.read(pcm, rate));
 }

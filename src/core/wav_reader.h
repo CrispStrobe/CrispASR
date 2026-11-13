@@ -4,7 +4,8 @@
 // WAV passed via `--voice <path>`. Each had its own copy of the same RIFF
 // parser; this header is the single source of truth.
 //
-// Scope: PCM16 mono or multi-channel only (multi-channel is averaged to mono).
+// Scope: PCM16 (plain or WAVE_FORMAT_EXTENSIBLE) mono or multi-channel only.
+// Multi-channel audio is averaged to mono, independent of speaker positions.
 // Returns native sample rate as-read; callers resample via
 // `crispasr::core::resample_polyphase` (see core/audio_resample.h) if they
 // need a specific rate.
@@ -84,7 +85,7 @@ inline bool read_wav_mono_pcm16(const std::string& path, std::vector<float>& pcm
         return false;
     }
 
-    int16_t audio_format = 0;
+    uint16_t audio_format = 0;
     int16_t n_channels = 0;
     int32_t sr = 0;
     int16_t bits_per_sample = 0;
@@ -114,13 +115,37 @@ inline bool read_wav_mono_pcm16(const std::string& path, std::vector<float>& pcm
             if (std::fread(&sr, 4, 1, f) != 1) {
                 break;
             }
-            seek(6, SEEK_CUR); // byte_rate + block_align
+            uint16_t block_align = 0;
+            if (!skip(4) || std::fread(&block_align, 2, 1, f) != 1) {
+                break;
+            }
             if (std::fread(&bits_per_sample, 2, 1, f) != 1) {
                 break;
             }
+            uint32_t consumed = 16;
+            if (audio_format == 0xfffe) {
+                // WAVEFORMATEXTENSIBLE adds cbSize, valid bits, a speaker
+                // mask and a full subtype GUID. Only 16-bit integer PCM is
+                // supported here; a matching low GUID word is insufficient.
+                uint8_t extension[24];
+                if (chunk_size < 40 || std::fread(extension, 1, sizeof(extension), f) != sizeof(extension)) {
+                    break;
+                }
+                const uint16_t cb_size = extension[0] | (uint16_t(extension[1]) << 8);
+                const uint16_t valid_bits = extension[2] | (uint16_t(extension[3]) << 8);
+                static constexpr uint8_t pcm_guid[16] = {1,    0, 0, 0,    0, 0,    0x10, 0,
+                                                         0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71};
+                if (cb_size < 22 || cb_size > chunk_size - 18 || valid_bits != 16 || bits_per_sample != 16 ||
+                    n_channels <= 0 || block_align != uint32_t(n_channels) * 2 ||
+                    std::memcmp(extension + 8, pcm_guid, sizeof(pcm_guid)) != 0) {
+                    break;
+                }
+                audio_format = 1;
+                consumed = 40;
+            }
             // RIFF pads every odd-sized chunk to an even byte boundary; the
             // pad is not included in chunk_size, including for fmt extensions.
-            if (!skip((uint64_t)chunk_size - 16 + (chunk_size & 1))) {
+            if (!skip((uint64_t)chunk_size - consumed + (chunk_size & 1))) {
                 break;
             }
             found_fmt = true;
