@@ -2,6 +2,7 @@
 // See gguf_loader.h for the interface contract.
 
 #include "gguf_loader.h"
+#include "gguf_file.h"
 
 #include "ggml-backend-impl.h"
 #include "ggml-cpu.h"
@@ -192,89 +193,7 @@ std::vector<float> kv_f32_array(gguf_context* gctx, const char* key) {
 
 namespace {
 
-// Read a file slice into a backend tensor. Uses mmap on POSIX; falls back
-// to pread/lseek+read when mmap is unavailable (rare in practice).
-//
-// On POSIX the mmap lives for the duration of one load call — we copy via
-// ggml_backend_tensor_set then unmap. No mmap persists past load_weights().
-struct MappedFile {
-    int fd = -1;
-    void* base = nullptr;
-    size_t size = 0;
-    bool ok = false;
-
-    // When `writable` is true, the mapping is created with copy-on-write
-    // semantics (POSIX MAP_PRIVATE + PROT_READ|PROT_WRITE / Win32
-    // FILE_MAP_COPY). Reads share the file's page cache; writes get a
-    // private anonymous duplicate of the touched page. This lets backends
-    // that mutate weights post-load (e.g. parakeet's BN-into-conv fold) run
-    // unchanged on the zero-copy path without modifying the underlying file.
-    explicit MappedFile(const char* path, bool writable = false) {
-#if defined(_WIN32)
-        const DWORD page_protect = writable ? PAGE_WRITECOPY : PAGE_READONLY;
-        const DWORD view_access = writable ? FILE_MAP_COPY : FILE_MAP_READ;
-        HANDLE hFile = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
-        if (hFile == INVALID_HANDLE_VALUE)
-            return;
-        LARGE_INTEGER fsize;
-        if (!GetFileSizeEx(hFile, &fsize)) {
-            CloseHandle(hFile);
-            return;
-        }
-        size = (size_t)fsize.QuadPart;
-        HANDLE hMap = CreateFileMappingA(hFile, nullptr, page_protect, 0, 0, nullptr);
-        CloseHandle(hFile);
-        if (!hMap)
-            return;
-        base = MapViewOfFile(hMap, view_access, 0, 0, 0);
-        CloseHandle(hMap);
-        if (!base)
-            return;
-        ok = true;
-#else
-        fd = ::open(path, O_RDONLY);
-        if (fd < 0)
-            return;
-        struct stat st;
-        if (fstat(fd, &st) != 0) {
-            ::close(fd);
-            fd = -1;
-            return;
-        }
-        size = (size_t)st.st_size;
-        const int prot = writable ? (PROT_READ | PROT_WRITE) : PROT_READ;
-        const int flags = writable ? MAP_PRIVATE : MAP_SHARED;
-        base = ::mmap(nullptr, size, prot, flags, fd, 0);
-        ::close(fd);
-        fd = -1;
-        if (base == MAP_FAILED) {
-            base = nullptr;
-            return;
-        }
-        ok = true;
-#endif
-    }
-    ~MappedFile() {
-#if defined(_WIN32)
-        if (base)
-            UnmapViewOfFile(base);
-#else
-        if (base)
-            ::munmap(base, size);
-#endif
-    }
-    MappedFile(const MappedFile&) = delete;
-    MappedFile& operator=(const MappedFile&) = delete;
-
-    // Transfer ownership of the mmap region out of the RAII handle so it
-    // outlives the destructor. Used by the CRISPASR_GGUF_MMAP=1 path to
-    // hand the mapping to a backend buffer that owns it for the model's
-    // lifetime.
-    void release() {
-        base = nullptr;
-        size = 0;
-    }
-};
+using detail::MappedFile;
 
 // PLAN #51a: a CPU backend buffer whose backing memory is an mmap'd file
 // region. On free_buffer the mapping is unmapped — that's the entire
@@ -942,7 +861,7 @@ static bool load_weights_impl(const char* path, ggml_backend_t backend, IncludeT
         // Fallback: read via FILE* pread/fseek. This is the rare path —
         // most systems have working mmap. We implement it inline here so
         // models don't have to.
-        FILE* fp = fopen(path, "rb");
+        FILE* fp = detail::open_read(path);
         if (!fp) {
             fprintf(stderr, "%s: cannot open '%s' for fread fallback\n", tag, path);
             gguf_free(gctx);
@@ -1316,7 +1235,7 @@ bool load_weights_split(const char* path, ggml_backend_t gpu_backend, ggml_backe
     // copy where the kernel will demand-page; fall back to pread.
     MappedFile mf(path);
     if (!mf.ok) {
-        FILE* fp = fopen(path, "rb");
+        FILE* fp = detail::open_read(path);
         if (!fp) {
             fprintf(stderr, "%s: cannot open '%s' for fread fallback\n", tag, path);
             free_weights(out);
@@ -1581,7 +1500,7 @@ bool load_weights_repack(const char* path, ggml_backend_t cpu_backend, IsMatmulW
     MappedFile mf(path);
     const size_t data_off = gguf_get_data_offset(gctx);
     if (!mf.ok) {
-        FILE* fp = fopen(path, "rb");
+        FILE* fp = detail::open_read(path);
         if (!fp) {
             fprintf(stderr, "%s: cannot open '%s' for fread fallback\n", tag, path);
             free_weights(out);

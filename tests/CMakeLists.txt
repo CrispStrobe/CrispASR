@@ -35,6 +35,11 @@ function(crispasr_discover_ab_tests target labels)
         PROPERTIES LABELS "bench" ENVIRONMENT "CRISPASR_RUN_PERF=1")
 endfunction()
 
+# Shared GGUF mmap/COW and fread file access; no model or ggml linkage.
+add_executable(test-gguf-file test-gguf-file.cpp)
+add_test(NAME test-gguf-file COMMAND test-gguf-file)
+set_tests_properties(test-gguf-file PROPERTIES LABELS "unit;gguf")
+
 # Production RNNoise orchestration with link stubs; no model or library build.
 add_executable(test-rnnoise-bounds test-rnnoise-bounds.cpp)
 add_test(NAME test-rnnoise-bounds COMMAND test-rnnoise-bounds)
