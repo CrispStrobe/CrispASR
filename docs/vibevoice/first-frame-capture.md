@@ -84,7 +84,10 @@ CRISPASR_VIBEVOICE_SRC="$CRISPASR_VIBEVOICE_SRC" \
 Validation performed locally: production scheduler configuration controls 4/4;
 final native C++ syntax-only compile; Python byte-compilation; whitespace check.
 The actual upstream replay fixture and negative-history control were blocked
-while importing Torch from shared storage and were terminated without results.
+while importing from shared storage and were terminated without results. Local
+`/opt/miniconda` has Torch, NumPy and gguf but no diffusers package, and its
+local pip wheel cache has no diffusers wheel; the available diffusers package
+is on the shared filesystem. The real-upstream replay test remains unrun.
 No 7B or GPU inference was run. The fake-producer capture test validates runner
 orchestration only and does not validate native first-frame tensors.
 
