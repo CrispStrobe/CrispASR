@@ -1,3 +1,21 @@
+### Issue #589 semantic encoder legacy-weight recovery — active (2026-11-14)
+
+- Isolated `fix/589-semantic-ffn-recovery`: same quantized weight values and
+  identical PCM isolate semantic drift to activation rounding inside quantized
+  FFN matmul. F16 weight copies reduce prefix-three relative L2 from 0.20868 to
+  0.0000604; F32 copies reduce it to 0.000000424.
+- Opt-in base TTS recovery: `CRISPASR_VIBEVOICE_SEMANTIC_F16=1` decodes only
+  quantized semantic FFN weights once, with <=1 MiB F32 scratch and model-owned
+  F16 buffers. ASR, streaming checkpoints and defaults remain unchanged.
+- Local CPU checks: 46 assertions across Q4_0/Q4_K/Q8_0, chunk boundaries,
+  independent buffer lifetime and F16 no-op; recovered legacy Q4 codec output
+  is byte-identical to the F16-repacked codec, and the old path reproduces the
+  original Q4 bytes. The extra F16 weights occupy 603,963,392 bytes (~576 MiB).
+- Pending: full-model decoded output and actual GPU quality/memory validation
+  before considering a default change.
+- This diagnostic uses the 1.5B Q4 codec; reporter 7B Q8 and decoded-output
+  acceptance remain separate validation requirements.
+
 # CrispASR — Current work plan
 
 Updated 2026-11-07. Start with [the maintainer handoff](docs/maintenance-handoff.md).

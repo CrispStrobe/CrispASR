@@ -2637,6 +2637,7 @@ catch_discover_tests(test-tada-params
 add_executable(test-vibevoice-params
     test-vibevoice-params.cpp
     test-vibevoice-asr-capability.cpp
+    test-vibevoice-semantic-weights.cpp
 )
 target_include_directories(test-vibevoice-params PRIVATE
     ${PROJECT_SOURCE_DIR}/src

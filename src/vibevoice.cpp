@@ -23,6 +23,7 @@
 #include "core/conv.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
+#include "core/vibevoice_semantic_weights.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
 #include "vibevoice_wav_ref.h"
@@ -168,6 +169,7 @@ struct vibevoice_context {
     std::vector<ggml_tensor*> dec_ups_w_perm;
     ggml_context* ctx_perm = nullptr;
     ggml_backend_buffer_t buf_perm = nullptr;
+    vibevoice_semantic_weights::Copies semantic_ffn_weights;
     // Cached prediction head graph (reused across DPM steps)
     ggml_context* pred_graph_ctx = nullptr;
     ggml_cgraph* pred_graph = nullptr;
@@ -437,6 +439,18 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     ctx->buf_cpu = wl.buf_cpu;
     m.tensors = wl.tensors;
 
+    // Same-weight/PCM replay isolates semantic drift to activation rounding in
+    // quantized FFN matmul. F16 recovery is opt-in for base TTS until full-model
+    // GPU quality/memory checks pass (the 1.5B encoder needs ~576 MiB of copies).
+    const char* recover_semantic = crispasr_env::get("CRISPASR_VIBEVOICE_SEMANTIC_F16");
+    const bool base_tts = hp.has_decoder && hp.tts_n_layers == 0 && !hp.asr_streaming && !vibevoice_has_asr(ctx);
+    if (base_tts && recover_semantic && recover_semantic[0] == '1' &&
+        !vibevoice_semantic_weights::recover(m.tensors, ctx->backend, ctx->semantic_ffn_weights)) {
+        fprintf(stderr, "vibevoice: semantic FFN weight recovery failed\n");
+        vibevoice_free(ctx);
+        return nullptr;
+    }
+
     // VibeVoice decoder upsampling is ConvTranspose1d. The decomposed
     // mul_mat + col2im path has stable backend behavior across CPU/GPU.
     if (hp.has_decoder && !hp.encoder_ratios.empty()) {
@@ -536,6 +550,7 @@ extern "C" void vibevoice_free(struct vibevoice_context* ctx) {
         ggml_free(ctx->kv_ctx);
     if (ctx->sched)
         ggml_backend_sched_free(ctx->sched);
+    ctx->semantic_ffn_weights.clear();
     if (ctx->buf_perm)
         ggml_backend_buffer_free(ctx->buf_perm);
     if (ctx->ctx_perm)
