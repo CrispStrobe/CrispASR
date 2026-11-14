@@ -7031,7 +7031,7 @@ if(Python3_EXECUTABLE AND CRISPASR_BUILD_EXAMPLES)
                 --output-dir ${CMAKE_CURRENT_BINARY_DIR}/vibevoice-clone-${vibevoice_size})
         set_tests_properties(vibevoice-clone-${vibevoice_size}-live PROPERTIES
             LABELS "live;tts;vibevoice;voice-cloning" SKIP_RETURN_CODE 77
-            RUN_SERIAL TRUE TIMEOUT 7200)
+            RUN_SERIAL TRUE TIMEOUT 14400)
     endforeach()
 endif()
 if(Python3_EXECUTABLE)

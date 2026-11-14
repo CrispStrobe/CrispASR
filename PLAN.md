@@ -1,3 +1,16 @@
+### Issue #589 clone live regression modes — active Codex (2026-11-14)
+
+- Isolated `fix/589-clone-live-modes`: correct the clone live oracle to score
+  default disclosure plus request and explicitly opted-in requested-only audio
+  separately. Preserve raw transcripts, WER 0.25 and speaker delta >0.02;
+  model-free controls cover omissions, extra speech and separate speaker gates.
+  Seven model-free tests pass (both sizes, full raw transcript retention,
+  missing/repeated disclosure, missing request, unexpected extra phrase, and
+  independent speaker failures). Original oracle reproduced false rejection of
+  correct disclosure+request at WER 0.63636; corrected fixture passes at WER 0.
+  No threshold changes, speech stripping, new attestation gates, model/GPU run,
+  or CI addition. Live speech quality still requires a configured model run.
+
 ### Issue #589 neutral disclaimer reference lifetime — active Codex (2026-11-14)
 
 - Base `0946e6acd`; isolated `fix/589-disclaimer-voice`. The CLI caches a WAV
