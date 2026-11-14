@@ -1,3 +1,21 @@
+### VibeVoice release task guard — locally checked Codex (2026-11-14)
+
+- Base `6ac6a1848`; isolated `fix/v0854-vibevoice-task-guard`. Split checkpoint
+  task detection, converter task metadata and model-free tests from draft PR
+  #590 at `dc49a24`. Base/realtime TTS encoders no longer grant transcription;
+  legacy/current/streaming ASR retains capability. ASR synthesis now reports an
+  explicit task error before CLI/server voice lookup or native decoder checks.
+- The exact pre-change production source fails both the legacy-TTS capability
+  control and ASR synthesis diagnostic controls. The exact changed production
+  source passes all 70 assertions in 13 focused cases, including existing
+  parameter/null guards, streaming-ASR metadata and synthesis-checkpoint
+  non-rejection. Five weight-free converter tests and adapter syntax compilation
+  pass. The session C ABI calls the guarded native entry points directly; no
+  full session-library build was run. clang-format 18 and whitespace checks pass.
+- Broader TTS runtime, cloning, tokenizer, generation-budget and semantic changes
+  remain on the draft. No model/full-library build, GPU, hosted job, push,
+  version bump or model-quality acceptance is part of this split.
+
 # CrispASR — Current work plan
 
 Updated 2026-11-07. Start with [the maintainer handoff](docs/maintenance-handoff.md).

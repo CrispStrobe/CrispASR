@@ -172,16 +172,17 @@ public:
             fprintf(stderr, "crispasr[vibevoice]: failed to load model '%s'\n", p.model.c_str());
             return false;
         }
-        // For the ASR backend ("vibevoice"), verify encoder tensors exist
+        // For the ASR backend ("vibevoice"), verify checkpoint ASR capability
         // immediately so the user gets a clear diagnostic before any audio is
         // processed.  TTS-only aliases ("vibevoice-tts", "vibevoice-1.5b")
-        // legitimately lack these tensors and must not fail here.
+        // legitimately synthesize without ASR and must not fail here.
         if ((backend_name_ == "vibevoice" || backend_name_ == "vibevoice-streaming") && !vibevoice_has_asr(ctx_)) {
-            fprintf(stderr,
-                    "crispasr[vibevoice]: error: '%s' is a TTS-only model (no at_enc.*/st_enc.* tensors).\n"
-                    "  Use --backend vibevoice-tts for this model, or download the ASR model:\n"
-                    "  crispasr -m auto --backend vibevoice --auto-download\n",
-                    p.model.c_str());
+            fprintf(
+                stderr,
+                "crispasr[vibevoice]: error: '%s' is not an ASR checkpoint (TTS task or missing tokenizer encoders).\n"
+                "  Use --backend vibevoice-tts for this model, or download the ASR model:\n"
+                "  crispasr -m auto --backend vibevoice --auto-download\n",
+                p.model.c_str());
             vibevoice_free(ctx_);
             ctx_ = nullptr;
             return false;
@@ -305,6 +306,11 @@ public:
     }
 
     std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
+        if (vibevoice_has_asr(ctx_)) {
+            fprintf(stderr, "crispasr[vibevoice]: this is an ASR checkpoint and does not support TTS.\n"
+                            "  Use a GGUF converted from a VibeVoice TTS checkpoint.\n");
+            return {};
+        }
         if (ctx_) {
             vibevoice_set_tts_steps(ctx_, params.tts_steps);
             vibevoice_set_seed(ctx_, (uint32_t)params.seed);

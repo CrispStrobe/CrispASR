@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""Convert Microsoft VibeVoice-ASR to GGUF.
+"""Convert Microsoft VibeVoice ASR or TTS checkpoints to GGUF.
 
-Architecture: Two σ-VAE tokenizer encoders (acoustic + semantic) →
-  connectors → Qwen2-1.5B LLM decoder → prediction head.
-
-Only the ASR inference path is stored (encoder encoders, connectors, LM,
-prediction head). The acoustic/semantic decoders (synthesis) are skipped.
+ASR uses acoustic and semantic tokenizer encoders, connectors, and a Qwen2
+text decoder. Base TTS models share those encoders but are trained to synthesize;
+the source config.architectures determines the task stored in the GGUF.
+Pass --include-decoder to include the audio decoder tensors for TTS.
 
 Usage:
   python models/convert-vibevoice-to-gguf.py \
-      --input microsoft/VibeVoice-1.5B \
-      --output vibevoice-1.5b.gguf
+      --input microsoft/VibeVoice-ASR \
+      --output vibevoice-asr.gguf
 """
 
 import argparse
@@ -78,7 +77,18 @@ def main():
         total_downsample *= r
 
     architectures = cfg.get("architectures", [])
-    is_asr_streaming = any("ASRStreaming" in str(name) for name in architectures)
+    asr_architectures = {"VibeVoiceForASRTraining", "VibeVoiceForASRStreamingTraining"}
+    tts_architectures = {"VibeVoiceForConditionalGeneration",
+                         "VibeVoiceStreamingForConditionalGenerationInference"}
+    known = asr_architectures | tts_architectures
+    if not architectures or any(name not in known for name in architectures):
+        raise ValueError(f"Unsupported or missing config.architectures: {architectures!r}. "
+                         "Use the original VibeVoice ASR/TTS checkpoint config; "
+                         "the task cannot be inferred from tokenizer encoders or LM size.")
+    supports_asr = any(name in asr_architectures for name in architectures)
+    if supports_asr and any(name in tts_architectures for name in architectures):
+        raise ValueError(f"Conflicting ASR/TTS config.architectures: {architectures!r}")
+    is_asr_streaming = "VibeVoiceForASRStreamingTraining" in architectures
     preprocessor_path = os.path.join(model_dir, "preprocessor_config.json")
     preprocessor_cfg = {}
     if os.path.isfile(preprocessor_path):
@@ -123,7 +133,9 @@ def main():
 
     # Create GGUF
     model_name = os.path.basename(args.input.rstrip("/"))
-    arch = "vibevoice-tts" if tts_n_layers > 0 else "vibevoice-asr"
+    # Base TTS models also have tokenizer encoders and no separate TTS LM.
+    # Their presence/layer count cannot establish transcription training (#589).
+    arch = "vibevoice-asr" if supports_asr else "vibevoice-tts"
     writer = gguf.GGUFWriter(args.output, arch)
     writer.add_name(model_name)
 
@@ -144,6 +156,7 @@ def main():
     writer.add_array("vibevoice.encoder_ratios", encoder_ratios)
     writer.add_uint32("vibevoice.has_decoder", 1 if args.include_decoder else 0)
     writer.add_array("vibevoice.encoder_depths", encoder_depths)
+    writer.add_uint32("vibevoice.supports_asr", 1 if supports_asr else 0)
     writer.add_uint32("vibevoice.asr_streaming", 1 if is_asr_streaming else 0)
     if is_asr_streaming:
         writer.add_uint32("vibevoice.streaming.chunk_frames", chunk_frames)
