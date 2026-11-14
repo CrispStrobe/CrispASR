@@ -7038,3 +7038,10 @@ if(Python3_EXECUTABLE)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live_controls.py)
     set_tests_properties(vibevoice-clone-live-controls PROPERTIES LABELS "unit;vibevoice;voice-cloning")
 endif()
+
+# Optional upstream CPU parity probe. No model or Python dependency is needed by
+# the normal unit suite; build this target explicitly, then run the companion
+# test_vibevoice_negative_history.py script with --probe and --output-dir.
+add_executable(vibevoice-negative-history-probe EXCLUDE_FROM_ALL vibevoice-negative-history-probe.cpp)
+target_include_directories(vibevoice-negative-history-probe PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(vibevoice-negative-history-probe PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu Threads::Threads)

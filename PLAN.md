@@ -38,6 +38,27 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   the upstream decoder is cosine 0.999295 and relative L2 0.03756. Neither these
   intermediates nor the gate alone qualify generated speech or voice cloning.
 
+### Issue #589 base TTS negative CFG history — locally checked Codex (2026-11-14)
+
+- Base `6b98da68a`; isolated `fix/589-negative-history`. Implement the upstream
+  default refresh-negative recipe with independent decoder KV history, advancing
+  only for diffusion frames from the previous LM input. Keep the old frozen path
+  available while decoded speech validation is outstanding. Acceptance: cached
+  negative steps against upstream teacher-forced intermediates, independent
+  positive history, and decoded speech roundtrip before enabling by default.
+- `CRISPASR_VIBEVOICE_TTS_REFRESH_NEGATIVE=1` enables the independent negative
+  history; unset/0 preserves the frozen legacy condition. Negative hidden states
+  are available as `tts_negative_hidden_<frame>.bin` under the existing dump gate.
+  The shared production cached graph passes six teacher-forced states against a
+  seeded two-layer Transformers Qwen2 GQA model, including interleaved distinct
+  positive history and a later speech-start reset: minimum cosine 0.9999999958,
+  maximum relative L2 0.0000915, matched norms. The frozen frame-one control has
+  relative L2 1.2514 and fails decisively. The full production translation unit
+  compiles/links against the existing CPU ggml build. The optional
+  `vibevoice-negative-history-probe` target plus
+  `tests/test_vibevoice_negative_history.py` reproduce this without model weights.
+  Full-size upstream parity and decoded speech remain outstanding; no GPU run.
+
 ### Issue #589 base TTS generation budget — locally checked Codex (2026-11-14)
 
 - Base `683971758`; isolated `fix/589-base-generation-limit`. Removed the
