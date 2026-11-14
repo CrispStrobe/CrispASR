@@ -4035,12 +4035,16 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             fprintf(stderr, "vibevoice TTS (base): generating speech autoregressively (budget %d tokens)...\n",
                     max_gen);
 
+        // Match upstream's speech-only logits processor. Keep opt-in until
+        // decoded output qualifies the change on the affected Metal Q4 path.
+        const char* constraint_env = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_TOKEN_CONSTRAINT");
+        const bool constrain_tokens = constraint_env && constraint_env[0] == '1';
         for (int step = 0; step < max_gen; step++) {
-            // Argmax on logits
-            int best = 0;
-            for (int i = 1; i < (int)logits_v.size(); i++)
-                if (logits_v[i] > logits_v[best])
-                    best = i;
+            const int best = core_vibevoice_tts::select_base_token(logits_v.data(), logits_v.size(), constrain_tokens);
+            if (best < 0) {
+                stop_reason = "no valid control token";
+                break;
+            }
 
             if (verbosity >= 2 || (verbosity >= 1 && step < 10)) {
                 const char* piece = (best >= 0 && best < (int)m.vocab.size()) ? m.vocab[best].c_str() : "?";
