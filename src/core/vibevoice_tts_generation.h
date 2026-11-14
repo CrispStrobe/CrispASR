@@ -5,8 +5,25 @@
 #include <cmath>
 #include <limits>
 #include <cstddef>
+#include <cstdlib>
 
 namespace core_vibevoice_tts {
+inline int diffusion_steps(int configured) {
+    return configured > 0 ? configured : 20;
+}
+
+// Match the existing realtime precedence: an explicit parameter wins over env.
+inline float guidance_scale(bool base, float configured, const char* environment) {
+    if (configured > 0.0f)
+        return configured;
+    if (environment) {
+        const float value = static_cast<float>(std::atof(environment));
+        if (value > 0.0f)
+            return value;
+    }
+    return base ? 1.3f : 3.0f;
+}
+
 // Legacy GGUFs predate context metadata. These are the original base model
 // decoder_config values (1.5B: hidden_size=1536; 7B: hidden_size=3584).
 inline int legacy_context_length(int hidden_size) {

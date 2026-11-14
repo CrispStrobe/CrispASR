@@ -7038,6 +7038,9 @@ if(Python3_EXECUTABLE)
     add_test(NAME vibevoice-clone-live-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live_controls.py)
     set_tests_properties(vibevoice-clone-live-controls PROPERTIES LABELS "unit;vibevoice;voice-cloning")
+    add_test(NAME vibevoice-diffusion-config
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_diffusion_config.py)
+    set_tests_properties(vibevoice-diffusion-config PROPERTIES LABELS "unit;vibevoice" TIMEOUT 30)
     add_test(NAME vibevoice-token-constraint
         COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_token_constraint.py)
     set_tests_properties(vibevoice-token-constraint PROPERTIES LABELS "unit;vibevoice" TIMEOUT 30)

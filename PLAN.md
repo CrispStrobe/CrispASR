@@ -872,3 +872,15 @@ activating anything from [PLAN-ARCHIVE.md](PLAN-ARCHIVE.md); its old NOW/OPEN an
 queued labels are historical. `HISTORY.md` records completed work, not a new queue.
 All actual machine paths, credentials/account details, storage and job recovery
 instructions remain in gitignored local Markdown.
+
+### Issue #589 neutral prompt oracle — controls complete Codex (2026-11-14)
+
+- Isolated `diag/589-prefix-oracle`: audit the retained 7B Q4 neutral disclosure prompt and initial frame conditioning against the upstream processor; no new GPU run or quality threshold change.
+
+- Exact upstream processor/native prompt parity passes 39/39 in both tokenizer modes. Retained Q4 PCM contains all 28*3200 decoder samples (no trim); fresh/postclone prefix differs only at relative L2 0.000038. No paired hidden/latent intermediates retained, so first numerical divergence remains unlocated. No runtime fix or new model run.
+
+### Issue #589 base diffusion configuration — locally checked Codex (2026-11-14)
+
+- Isolated `diag/589-prefix-oracle`: honor base TTS CFG/step controls already exposed by the API, preserving defaults 1.3/20. Weight-free resolver/production-solver controls only; this does not fix the observed default neutral-prefix failure.
+
+- Base and realtime now share parameter/environment resolution; base uses the selected step count for schedule, loop bounds, and final solver update. Four weight-free native config/solver controls pass; default 20/1.3 scalar solver output is byte-identical, nondefault values affect output, and source wiring guard fails against the pre-fix base branch. Existing six token-selection controls pass. Full translation unit syntax check and clang-format18 pass. No model/GPU rerun; this repairs nondefault controls and does not explain the default Q4 neutral failure.

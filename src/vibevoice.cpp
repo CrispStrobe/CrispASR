@@ -3691,6 +3691,9 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
     // Detect model type: Realtime (has TTS LM) vs Base (single LM)
     bool is_base_model = (hp.tts_n_layers == 0);
+    const int num_steps = core_vibevoice_tts::diffusion_steps(ctx->params.tts_steps);
+    const float cfg_scale = core_vibevoice_tts::guidance_scale(is_base_model, ctx->params.cfg_scale,
+                                                               crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CFG_SCALE"));
 
     // 1. Tokenize text (append newline — VibeVoice TTS tokenizer does this)
     std::string text_with_nl = std::string(text) + "\n";
@@ -4002,7 +4005,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         }
 
         // Autoregressive generation
-        ddim_schedule sched = make_ddim_schedule(20);
+        ddim_schedule sched = make_ddim_schedule(num_steps);
         float scaling_factor = 0.196f, bias_factor = -0.049f;
         {
             auto* sf = G("speech_scaling_factor");
@@ -4084,10 +4087,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 std::vector<float> prev_x0(vae_dim, 0.0f);
                 fill_gaussian_noise(z.data(), vae_dim, rng);
 
-                // Use the VibeVoice-API default CFG scale
-                float base_cfg_scale = 1.3f;
-
-                for (int si = 0; si < 20; si++) {
+                for (int si = 0; si < num_steps; si++) {
                     float t = (float)sched.timesteps[si];
                     std::vector<float> t_sin(256);
                     compute_sinusoidal_embed(t, t_sin.data(), 256);
@@ -4122,13 +4122,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                     for (int i = 0; i < vae_dim; i++) {
                         float v_cond = v_both[i];             // positive
                         float v_uncond = v_both[vae_dim + i]; // negative
-                        v_cfg[i] = v_uncond + base_cfg_scale * (v_cond - v_uncond);
+                        v_cfg[i] = v_uncond + cfg_scale * (v_cond - v_uncond);
                     }
 
                     int t_cur = sched.timesteps[si];
                     std::vector<float> x0(vae_dim);
                     v_to_x0(z.data(), v_cfg.data(), x0.data(), vae_dim, sched.alphas_cumprod[t_cur]);
-                    bool is_last = (si == 19);
+                    bool is_last = (si == num_steps - 1);
                     if (si == 0 || is_last) {
                         dpm_first_order(sched, si, z.data(), x0.data(), vae_dim);
                     } else {
@@ -4647,7 +4647,6 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     // primary crash there was the Lk-bucket fast path — see run_lm_step below.)
     int text_kv = std::max(prefix_len, (int)text_ids.size());
     int max_ctx = voice_ctx + text_kv + n_frames + 16;
-    int num_steps = ctx->params.tts_steps > 0 ? ctx->params.tts_steps : 20;
 
     const ggml_type tts_kv_type = GGML_TYPE_F32;
     if (!ctx->kv_k || ctx->kv_max_ctx < max_ctx || ctx->kv_k->type != tts_kv_type) {
@@ -5342,20 +5341,6 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                                             d_lm * sizeof(float));
             }
         }
-    }
-
-    // Use 1.3 for Base models (prevents static drift), 3.0 for Realtime models.
-    // Overridable via --tts-cfg-scale / vibevoice_set_cfg_scale() /
-    // VIBEVOICE_TTS_CFG_SCALE (params win over env). Upstream's realtime demo
-    // defaults to 1.5; spontaneous BGM onsets (documented VibeVoice behavior,
-    // issue #171) can often be re-rolled away with a different cfg or --seed.
-    float cfg_scale = is_base_model ? 1.3f : 3.0f;
-    if (ctx->params.cfg_scale > 0.0f) {
-        cfg_scale = ctx->params.cfg_scale;
-    } else if (const char* ce = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CFG_SCALE")) {
-        float v = (float)atof(ce);
-        if (v > 0.0f)
-            cfg_scale = v;
     }
 
     std::vector<float> all_latents;
