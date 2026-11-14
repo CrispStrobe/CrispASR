@@ -134,6 +134,8 @@ struct vibevoice_model {
 struct vibevoice_context {
     vibevoice_model model;
     vibevoice_context_params params;
+    bool reference_wav_selected = false;
+    std::string reference_wav;
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
     ggml_backend_buffer_t buf = nullptr;
@@ -518,6 +520,13 @@ extern "C" void vibevoice_set_seed(struct vibevoice_context* ctx, uint32_t seed)
 extern "C" void vibevoice_set_cfg_scale(struct vibevoice_context* ctx, float scale) {
     if (ctx)
         ctx->params.cfg_scale = scale > 0.0f ? scale : 0.0f;
+}
+
+extern "C" void vibevoice_set_reference_wav(struct vibevoice_context* ctx, const char* path) {
+    if (!ctx)
+        return;
+    ctx->reference_wav_selected = path != nullptr;
+    ctx->reference_wav = path ? path : "";
 }
 
 extern "C" void vibevoice_free(struct vibevoice_context* ctx) {
@@ -3744,7 +3753,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         // loaded — that pack is unusable here, and gating on tts_seq_len==0 would
         // otherwise suppress a perfectly good WAV reference.
         if (is_base_model || ctx->voice.tts_seq_len == 0) {
-            const char* voice_wav = crispasr_env::get("CRISPASR_VIBEVOICE_VOICE_AUDIO");
+            const char* voice_wav = ctx->reference_wav_selected ? ctx->reference_wav.c_str()
+                                                                : crispasr_env::get("CRISPASR_VIBEVOICE_VOICE_AUDIO");
             if (voice_wav && voice_wav[0]) {
                 FILE* fv = fopen(voice_wav, "rb");
                 std::vector<float> ref_pcm;

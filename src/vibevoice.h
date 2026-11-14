@@ -149,6 +149,11 @@ int vibevoice_stream_lookahead_samples(const struct vibevoice_context* ctx);
 // Returns NULL if the model lacks decoder tensors (vibevoice.has_decoder=0).
 float* vibevoice_synthesize(struct vibevoice_context* ctx, const char* text, int* out_n_samples);
 
+// Select a context-owned base-model WAV reference. The path is copied.
+// NULL restores environment fallback; "" forces neutral/unconditioned speech.
+// Like synthesis, callers must serialize changes on a shared context.
+void vibevoice_set_reference_wav(struct vibevoice_context* ctx, const char* path);
+
 // Load a voice prompt GGUF for TTS. Returns 0 on success.
 // The voice prompt pre-fills KV caches with speaker identity.
 int vibevoice_load_voice(struct vibevoice_context* ctx, const char* voice_path);

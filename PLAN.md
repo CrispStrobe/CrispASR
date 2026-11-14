@@ -1,3 +1,22 @@
+### Issue #589 neutral disclaimer reference lifetime — active Codex (2026-11-14)
+
+- Base `0946e6acd`; isolated `fix/589-disclaimer-voice`. The CLI caches a WAV
+  reference and writes it to process environment; its neutral disclaimer call
+  therefore reuses the clone voice. Replace that handoff with context-owned
+  reference selection, preserve ordinary environment fallback, and explicitly
+  neutralize disclaimer requests. Mirror session voice selection without
+  changing existing ABI signatures. Acceptance: weight-free production adapter
+  and context isolation controls, including clone/neutral/clone sequencing.
+  The original adapter fails the explicit-WAV/canonical-env control and the
+  neutral-disclosure control. Final 18 weight-free controls pass using the
+  production adapter synthesis method, disclaimer composition, runtime setter
+  and reference lookup, and session dispatch. They cover path ownership,
+  context isolation, external canonical/legacy fallback, clone/neutral/clone,
+  per-request reference switches, and preservation of disclosure plus 300ms gap.
+  Runtime and adapter translation units pass syntax checks against pinned ggml;
+  ASan/UBSan covers the controls. No model rerun, GPU dispatch, disclosure removal
+  or threshold changes. Actual post-fix speech quality remains unvalidated.
+
 ### Issue #589 semantic encoder legacy-weight recovery — active (2026-11-14)
 
 - Isolated `fix/589-semantic-ffn-recovery`: same quantized weight values and

@@ -7038,6 +7038,9 @@ if(Python3_EXECUTABLE)
     add_test(NAME vibevoice-clone-live-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live_controls.py)
     set_tests_properties(vibevoice-clone-live-controls PROPERTIES LABELS "unit;vibevoice;voice-cloning")
+    add_test(NAME vibevoice-reference-lifetime
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_reference_lifetime.py)
+    set_tests_properties(vibevoice-reference-lifetime PROPERTIES LABELS "unit;vibevoice;voice-cloning" TIMEOUT 30)
 endif()
 
 # Optional upstream CPU parity probe. No model or Python dependency is needed by

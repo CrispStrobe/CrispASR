@@ -565,6 +565,8 @@ struct whisper_params {
     // Machine-readable provenance (watermark + C2PA) is always retained.
     // CLI: --no-spoken-disclaimer   Server: "spoken_disclaimer": false
     bool tts_no_spoken_disclaimer = false;
+    // Internal neutral disclosure request: suppress reference environment fallback.
+    bool tts_force_neutral_voice = false;
 
     // Turn off the imperceptible AI-content watermark on TTS output.
     // Equivalent to the CRISPASR_NO_WATERMARK env var; both emit a one-time

@@ -39,14 +39,6 @@ static bool file_exists(const std::string& path) {
     return stat(path.c_str(), &st) == 0;
 }
 
-static void set_env_overwrite(const char* name, const char* value) {
-#if defined(_WIN32)
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
-}
-
 static std::vector<float> resample_16k_to_24k(const float* in, int n_in) {
     std::vector<float> out;
     if (!in || n_in <= 0)
@@ -316,12 +308,13 @@ public:
         //      (matches qwen3-tts post-d35940b — server callers can pass the same
         //       {"voice": "<name>"} shape across all TTS backends.)
         //   2. Explicit --voice <path.gguf>: literal path to a voice GGUF.
-        //      --voice <path.wav>: 1.5B WAV-cloning path (see wav_ref_path_ below).
+        //      --voice <path.wav>: 1.5B WAV-cloning path (see wav_ref_path below).
         //   3. Per-language sibling pick (vibevoice-voice-<lang>-Spk1_woman.gguf
         //      → vibevoice-voice-<lang>-Spk0_man.gguf), if -l <lang> is set.
         //   4. Sibling vibevoice-voice-emma.gguf as English default (matches
         //      the auto-download companion).
-        std::string voice_path = params.tts_voice;
+        std::string voice_path = params.tts_force_neutral_voice ? std::string{} : params.tts_voice;
+        std::string wav_ref_path;
 
         // (1) Bare name → voice-dir lookup. A "bare name" is a token with no path
         // separators and no .gguf/.wav extension (e.g. `voice: "vik"` from a server
@@ -348,9 +341,9 @@ public:
         }
 
         // (2b) WAV reference → 1.5B cloning path. Don't attempt to load .wav as GGUF;
-        // store it and expose via VIBEVOICE_VOICE_AUDIO before each synthesize call.
+        // select it on this context for this synthesis call.
         if (ends_with_ci(voice_path, ".wav")) {
-            wav_ref_path_ = voice_path;
+            wav_ref_path = voice_path;
             voice_path.clear();
         }
 
@@ -358,7 +351,7 @@ public:
         // The realtime model wants a prompt voice. The 1.5B base model can
         // synthesize a generic voice without one, so keep the fallback only for
         // the realtime path.
-        if (!allow_generic_no_voice_ && voice_path.empty() && wav_ref_path_.empty()) {
+        if (!allow_generic_no_voice_ && voice_path.empty() && wav_ref_path.empty()) {
             auto slash = params.model.find_last_of("/\\");
             std::string dir = (slash == std::string::npos) ? "." : params.model.substr(0, slash);
             auto try_sibling = [&](const std::string& fname) -> std::string {
@@ -394,7 +387,7 @@ public:
 
         // Gate: the realtime model requires a prompt voice. The 1.5B base
         // model can run without one and generate its generic prior voice.
-        if (!allow_generic_no_voice_ && last_voice_key_.empty() && wav_ref_path_.empty()) {
+        if (!allow_generic_no_voice_ && last_voice_key_.empty() && wav_ref_path.empty()) {
             const char* voice_wav_env = crispasr_env::get("CRISPASR_VIBEVOICE_VOICE_AUDIO");
             if (!voice_wav_env || !voice_wav_env[0]) {
                 fprintf(stderr,
@@ -409,9 +402,12 @@ public:
         if (!ctx_ || text.empty())
             return {};
 
-        // Expose --voice <path.wav> to vibevoice_synthesize via env var.
-        if (!wav_ref_path_.empty())
-            set_env_overwrite("VIBEVOICE_VOICE_AUDIO", wav_ref_path_.c_str());
+        // Context-owned selection avoids process environment writes and stale
+        // references between requests. Null preserves the ordinary env fallback;
+        // an empty path explicitly suppresses it for the neutral disclosure.
+        vibevoice_set_reference_wav(ctx_, params.tts_force_neutral_voice ? ""
+                                          : wav_ref_path.empty()         ? nullptr
+                                                                         : wav_ref_path.c_str());
 
         int n_samples = 0;
         float* pcm = vibevoice_synthesize(ctx_, text.c_str(), &n_samples);
@@ -433,7 +429,6 @@ public:
 private:
     vibevoice_context* ctx_ = nullptr;
     std::string last_voice_key_;
-    std::string wav_ref_path_; // set when --voice <path.wav> is used (1.5B WAV cloning)
     std::string backend_name_ = "vibevoice";
     bool allow_generic_no_voice_ = false;
 };
