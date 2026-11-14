@@ -3645,6 +3645,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         return it != m.tensors.end() ? it->second : nullptr;
     };
 
+    // ASR checkpoints are trained to transcribe, even if decoder metadata is present.
+    if (vibevoice_has_asr(ctx)) {
+        fprintf(stderr, "vibevoice_synthesize: this is an ASR checkpoint and does not support TTS.\n"
+                        "  Use a GGUF converted from a VibeVoice TTS checkpoint.\n");
+        return nullptr;
+    }
+
     // Check prerequisites
     if (!hp.has_decoder || !G("at_dec.head.weight")) {
         fprintf(stderr, "vibevoice_synthesize: model lacks decoder tensors (convert with --include-decoder)\n");

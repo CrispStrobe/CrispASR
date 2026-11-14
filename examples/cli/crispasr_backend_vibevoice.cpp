@@ -298,6 +298,11 @@ public:
     }
 
     std::vector<float> synthesize(const std::string& text, const whisper_params& params) override {
+        if (vibevoice_has_asr(ctx_)) {
+            fprintf(stderr, "crispasr[vibevoice]: this is an ASR checkpoint and does not support TTS.\n"
+                            "  Use a GGUF converted from a VibeVoice TTS checkpoint.\n");
+            return {};
+        }
         if (ctx_) {
             vibevoice_set_tts_steps(ctx_, params.tts_steps);
             vibevoice_set_seed(ctx_, (uint32_t)params.seed);

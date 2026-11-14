@@ -1,3 +1,16 @@
+### PR #590 release reconciliation — locally checked Codex (2026-11-14)
+
+- Merge draft `dc49a24` with released main `1c7f6f79e` in isolated
+  `fix/590-main-task-guard-reconcile`. Preserve both task guards, CLI early
+  rejection, all gated TTS work, converter context lengths and semantic test
+  registration. Released v0.8.54 version/package/release bytes remain exact.
+- Merged production runtime passes 131 assertions in 17 focused model-free
+  cases (task capability, params, semantic weight recovery and generation).
+  Six converter tests, seven clone-oracle tests and 26 production CLI task /
+  reference / disclosure controls pass. CLI controls exercise both ASR aliases
+  rejecting TTS and ASR-to-TTS refusal before voice loading. clang-format 18 and
+  whitespace checks pass. No model, GPU, Vulkan, full build or hosted run.
+
 ### Issue #589 clone live regression modes — active Codex (2026-11-14)
 
 - Isolated `fix/589-clone-live-modes`: correct the clone live oracle to score
@@ -47,6 +60,23 @@
   before considering a default change.
 - This diagnostic uses the 1.5B Q4 codec; reporter 7B Q8 and decoded-output
   acceptance remain separate validation requirements.
+### VibeVoice release task guard — locally checked Codex (2026-11-14)
+
+- Base `6ac6a1848`; isolated `fix/v0854-vibevoice-task-guard`. Split checkpoint
+  task detection, converter task metadata and model-free tests from draft PR
+  #590 at `dc49a24`. Base/realtime TTS encoders no longer grant transcription;
+  legacy/current/streaming ASR retains capability. ASR synthesis now reports an
+  explicit task error before CLI/server voice lookup or native decoder checks.
+- The exact pre-change production source fails both the legacy-TTS capability
+  control and ASR synthesis diagnostic controls. The exact changed production
+  source passes all 70 assertions in 13 focused cases, including existing
+  parameter/null guards, streaming-ASR metadata and synthesis-checkpoint
+  non-rejection. Five weight-free converter tests and adapter syntax compilation
+  pass. The session C ABI calls the guarded native entry points directly; no
+  full session-library build was run. clang-format 18 and whitespace checks pass.
+- Broader TTS runtime, cloning, tokenizer, generation-budget and semantic changes
+  remain on the draft. No model/full-library build, GPU, hosted job, push,
+  version bump or model-quality acceptance is part of this split.
 
 # CrispASR — Current work plan
 
