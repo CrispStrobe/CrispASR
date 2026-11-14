@@ -120,9 +120,9 @@ float* vibevoice_run_connector(struct vibevoice_context* ctx, const char* prefix
 float* vibevoice_encode_speech(struct vibevoice_context* ctx, const float* samples, int n_samples, int* n_frames,
                                int* d_lm);
 
-// Returns true if the loaded model contains the acoustic (at_enc.*) and
-// semantic (st_enc.*) tokenizer encoder tensors needed for transcription.
-// TTS-only variants (vibevoice-realtime-0.5b etc.) return false.
+// Returns true for an ASR checkpoint with both tokenizer encoders.
+// Base TTS models also contain encoders; synthesis prediction-head tensors and
+// explicit TTS task metadata disqualify them, including legacy mislabeled GGUFs.
 bool vibevoice_has_asr(const struct vibevoice_context* ctx);
 
 // Native VibeVoice-ASR-Streaming session. Input is 24 kHz mono PCM. The
