@@ -18,7 +18,7 @@ import tempfile
 import wave
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "regression"))
-from run_one import compute_transcript_metrics, speaker_conditioning_gate, strip_ai_disclaimer
+from run_one import compute_transcript_metrics, speaker_conditioning_gate
 
 PREFIX = "CRISPASR_VIBEVOICE_CLONE_"
 TEXT = "The library opens early tomorrow so please bring the blue notebook."
@@ -104,7 +104,7 @@ def evaluate(config, output, timeout=1800):
         run([config["cli"], "--backend", config["recognizer_backend"],
              "-m", config["recognizer"], "-f", wav, "-l", "en", "-nt",
              "-of", stem, "-otxt"], output, f"{arm}-asr", timeout)
-        transcript = strip_ai_disclaimer(transcript_file.read_text())
+        transcript = transcript_file.read_text()
         _, wer = compute_transcript_metrics(config["text"], transcript)
         results[arm].update(transcript=transcript, wer=wer,
                             content_pass=bool(transcript.strip()) and wer <= config["wer_max"])
