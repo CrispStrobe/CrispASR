@@ -564,6 +564,59 @@ extern "C" void vibevoice_free(struct vibevoice_context* ctx) {
 // ggml graph helpers
 // ===========================================================================
 
+// Per-synthesis codec state. Only convolution input tails survive graph calls;
+// neither the graph nor its activation storage grows with generated duration.
+struct vibevoice_codec_stream {
+    struct edge {
+        std::vector<float> values;
+        ggml_tensor* input = nullptr;
+        ggml_tensor* output = nullptr;
+    };
+    std::map<std::string, edge> edges;
+
+    ggml_tensor* prepend(ggml_context* g, ggml_tensor* x, ggml_tensor* weight, int history, bool initial_zeros = true) {
+        if (history == 0)
+            return x;
+        const std::string key = ggml_get_name(weight);
+        auto found = edges.find(key);
+        const bool first = found == edges.end();
+        auto& e = edges[key];
+        if (first && initial_zeros)
+            e.values.resize((size_t)x->ne[0] * history, 0.0f);
+        auto* joined = x;
+        e.input = nullptr;
+        if (!e.values.empty()) {
+            e.input = ggml_new_tensor_2d(g, GGML_TYPE_F32, x->ne[0], e.values.size() / x->ne[0]);
+            ggml_set_input(e.input);
+            joined = ggml_concat(g, e.input, x, 1);
+        }
+        const int retained = std::min<int64_t>(history, joined->ne[1]);
+        e.output = ggml_cont(g, ggml_view_2d(g, joined, joined->ne[0], retained, joined->nb[1],
+                                             (joined->ne[1] - retained) * joined->nb[1]));
+        ggml_set_output(e.output);
+        return joined;
+    }
+
+    void expand(ggml_cgraph* gf) {
+        for (auto& kv : edges)
+            ggml_build_forward_expand(gf, kv.second.output);
+    }
+    void set_inputs() {
+        for (auto& kv : edges) {
+            auto& e = kv.second;
+            if (e.input)
+                ggml_backend_tensor_set(e.input, e.values.data(), 0, e.values.size() * sizeof(float));
+        }
+    }
+    void capture() {
+        for (auto& kv : edges) {
+            auto& e = kv.second;
+            e.values.resize(ggml_nelements(e.output));
+            ggml_backend_tensor_get(e.output, e.values.data(), 0, e.values.size() * sizeof(float));
+        }
+    }
+};
+
 // ConvRMSNorm: operates on [C, T] (ne[0]=C), normalizes over C per time step
 static ggml_tensor* build_conv_rms_norm(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, float eps = 1e-5f) {
     // x: [C, T], w: [C]. ggml_rms_norm normalizes over ne[0]=C. Good.
@@ -587,18 +640,23 @@ static ggml_tensor* build_conv_rms_norm(ggml_context* ctx, ggml_tensor* x, ggml_
 // Uses ggml_conv_1d (with transpose) — this works on ALL backends including
 // Metal/CUDA/Vulkan via im2col. The conv_1d_cf direct kernel is CPU-only
 // and saves ~2 transposes per call, but im2col+transpose is fast on GPU.
-static ggml_tensor* build_causal_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride) {
+static ggml_tensor* build_causal_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int stride,
+                                        vibevoice_codec_stream* stream = nullptr) {
     int K = (int)w->ne[0];
     int dilation = 1;
     int pad_left = (K - 1) * dilation - (stride - 1); // VibeVoice/EnCodec convention
     if (pad_left < 0)
         pad_left = 0;
+    if (stream) {
+        x = stream->prepend(ctx, x, w, pad_left);
+        pad_left = 0;
+    }
     // x is [C, T], transpose to [T, C] for ggml_conv_1d
     x = ggml_cont(ctx, ggml_transpose(ctx, x)); // [T, C]
     int T_in = (int)x->ne[0];
     // Compute extra right padding for stride alignment
     int pad_right = 0;
-    if (stride > 1) {
+    if (!stream && stride > 1) {
         double n_frames = (double)(T_in - K + pad_left) / stride + 1.0;
         int ideal_length = ((int)ceil(n_frames) - 1) * stride + (K - pad_left);
         pad_right = ideal_length - T_in;
@@ -620,12 +678,17 @@ static ggml_tensor* build_causal_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_
 // Causal depthwise Conv1d using ggml_conv_1d_dw (im2col, works on ALL backends).
 // Input/output in [C, T] format.
 // Uses transpose + ggml_conv_1d_dw + transpose to stay GPU-compatible.
-static ggml_tensor* build_causal_dw_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b) {
+static ggml_tensor* build_causal_dw_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
+                                           vibevoice_codec_stream* stream = nullptr) {
     if (!w)
         return x; // weight missing — model may not contain this encoder; return input unchanged
     int K = (int)w->ne[0];
     int pad_left = K - 1;
 
+    if (stream) {
+        x = stream->prepend(ctx, x, w, pad_left);
+        pad_left = 0;
+    }
     // Transpose [C, T] → [T, C] for ggml_conv_1d_dw
     x = ggml_cont(ctx, ggml_transpose(ctx, x));
     if (pad_left > 0)
@@ -646,11 +709,12 @@ static ggml_tensor* build_causal_dw_conv1d(ggml_context* ctx, ggml_tensor* x, gg
 static ggml_tensor* build_block1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* norm_w, ggml_tensor* dw_conv_w,
                                   ggml_tensor* dw_conv_b, ggml_tensor* gamma, ggml_tensor* ffn_norm_w,
                                   ggml_tensor* ffn_up_w, ggml_tensor* ffn_up_b, ggml_tensor* ffn_down_w,
-                                  ggml_tensor* ffn_down_b, ggml_tensor* ffn_gamma) {
+                                  ggml_tensor* ffn_down_b, ggml_tensor* ffn_gamma,
+                                  vibevoice_codec_stream* stream = nullptr) {
     // Mixer path
     ggml_tensor* residual = x;
     ggml_tensor* h = build_conv_rms_norm(ctx, x, norm_w);
-    h = build_causal_dw_conv1d(ctx, h, dw_conv_w, dw_conv_b);
+    h = build_causal_dw_conv1d(ctx, h, dw_conv_w, dw_conv_b, stream);
     if (gamma) {
         if (h->ne[0] != gamma->ne[0])
             fprintf(stderr, "  BUG: gamma shape mismatch: h=[%lld,%lld] gamma=[%lld]\n", (long long)h->ne[0],
@@ -715,7 +779,9 @@ static ggml_tensor* build_block1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor
 // Defined below; used by the per-layer encoder taps.
 static void vibevoice_dump_f32(const char* dir, const char* name, const float* data, size_t n);
 
-static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const char* prefix, int n_samples) {
+static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const char* prefix, int n_samples,
+                                                  vibevoice_codec_stream* stream = nullptr,
+                                                  ggml_context** graph_context = nullptr) {
     auto& hp = ctx->model.hp;
     auto& ts = ctx->model.tensors;
 
@@ -728,6 +794,8 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
     size_t mem = ctx->compute_meta.size();
     ggml_init_params ip = {mem, ctx->compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
+    if (graph_context)
+        *graph_context = ctx0;
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 65536, false);
 
     // Input: channels-first [C=1, T=n_samples]
@@ -758,7 +826,7 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
         ggml_tensor* ds_b = G(bn);
         if (ds_w) {
             int stride = (si == 0) ? 1 : ratios[si - 1]; // stem has stride 1
-            h = build_causal_conv1d(ctx0, h, ds_w, ds_b, stride);
+            h = build_causal_conv1d(ctx0, h, ds_w, ds_b, stride, stream);
         }
         // Per-layer taps for localising an encoder divergence (#369): the
         // stage API bottoms out at the encoder OUTPUT, so a cos 0.83 there says
@@ -783,7 +851,7 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
                               G(std::string(base) + ".dw_conv.bias"), G(std::string(base) + ".gamma"),
                               G(std::string(base) + ".ffn_ln.weight"), G(std::string(base) + ".ffn.up.weight"),
                               G(std::string(base) + ".ffn.up.bias"), G(std::string(base) + ".ffn.down.weight"),
-                              G(std::string(base) + ".ffn.down.bias"), G(std::string(base) + ".ffn_gamma"));
+                              G(std::string(base) + ".ffn.down.bias"), G(std::string(base) + ".ffn_gamma"), stream);
         }
         if (dump_layers) {
             char sn[64];
@@ -814,12 +882,14 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
         ggml_tensor* head_w = G(wn);
         ggml_tensor* head_b = G(bn);
         if (head_w)
-            h = build_causal_conv1d(ctx0, h, head_w, head_b, 1);
+            h = build_causal_conv1d(ctx0, h, head_w, head_b, 1, stream);
     }
 
     ggml_set_name(h, "encoder_out");
     ggml_set_output(h);
     ggml_build_forward_expand(gf, h);
+    if (stream)
+        stream->expand(gf);
     return gf;
 }
 
@@ -2909,7 +2979,19 @@ static ggml_cgraph* build_pred_head_graph(vibevoice_context* ctx, int n_frames) 
 // Input/output in [C, T] format. Upsamples by 'stride'.
 // Output trimmed to T_in * stride (removes K - stride from end).
 static ggml_tensor* build_transposed_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b,
-                                            int stride, ggml_tensor* w_perm = nullptr) {
+                                            int stride, ggml_tensor* w_perm = nullptr,
+                                            vibevoice_codec_stream* stream = nullptr) {
+    if (stream) {
+        // A transposed convolution can affect only ceil((K-stride)/stride)
+        // preceding inputs. Start with the same empty history as upstream,
+        // then crop the prepended outputs after the usual right trim.
+        const int history = ((int)w->ne[0] - 1) / stride;
+        const int current_time = (int)x->ne[1] * stride;
+        x = stream->prepend(ctx, x, w, history, false);
+        auto* full = build_transposed_conv1d(ctx, x, w, b, stride, w_perm);
+        return ggml_cont(ctx, ggml_view_2d(ctx, full, full->ne[0], current_time, full->nb[1],
+                                           (full->ne[1] - current_time) * full->nb[1]));
+    }
     if (w_perm) {
         const int K = (int)w->ne[0];
         return core_convt::convt1d_decomp(ctx, x, w_perm, b, stride, K, /*crop_left=*/0,
@@ -2949,7 +3031,9 @@ static ggml_tensor* build_transposed_conv1d(ggml_context* ctx, ggml_tensor* x, g
 // ── Build σ-VAE decoder graph ───────────────────────────────────────────────
 
 // Decode acoustic latents [vae_dim, T_frames] → audio [1, T_audio].
-static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames) {
+static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames,
+                                            vibevoice_codec_stream* stream = nullptr,
+                                            ggml_context** graph_context = nullptr) {
     auto& hp = ctx->model.hp;
     auto& ts = ctx->model.tensors;
     const bool dump_decoder = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_DUMP_DECODER") != nullptr;
@@ -2961,6 +3045,8 @@ static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames
     size_t mem = ctx->compute_meta.size();
     ggml_init_params ip = {mem, ctx->compute_meta.data(), true};
     ggml_context* ctx0 = ggml_init(ip);
+    if (graph_context)
+        *graph_context = ctx0;
     ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 65536, false);
 
     ggml_tensor* inp = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hp.vae_dim_acoustic, n_frames);
@@ -2975,7 +3061,7 @@ static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames
     const auto& ratios = hp.encoder_ratios;
 
     // 1. Stem conv (us.0): Conv1d(vae_dim → C_max, K=7, stride=1)
-    h = build_causal_conv1d(ctx0, h, G("at_dec.us.0.0.conv.weight"), G("at_dec.us.0.0.conv.bias"), 1);
+    h = build_causal_conv1d(ctx0, h, G("at_dec.us.0.0.conv.weight"), G("at_dec.us.0.0.conv.bias"), 1, stream);
     if (dump_decoder) {
         ggml_set_name(h, "dec_stem");
         ggml_set_output(h);
@@ -2989,7 +3075,7 @@ static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames
                           G(std::string(base) + ".dw_conv.bias"), G(std::string(base) + ".gamma"),
                           G(std::string(base) + ".ffn_ln.weight"), G(std::string(base) + ".ffn.up.weight"),
                           G(std::string(base) + ".ffn.up.bias"), G(std::string(base) + ".ffn.down.weight"),
-                          G(std::string(base) + ".ffn.down.bias"), G(std::string(base) + ".ffn_gamma"));
+                          G(std::string(base) + ".ffn.down.bias"), G(std::string(base) + ".ffn_gamma"), stream);
     }
     if (dump_decoder) {
         ggml_set_name(h, "dec_stage0");
@@ -3004,7 +3090,7 @@ static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames
         snprintf(bn_str, sizeof(bn_str), "at_dec.us.%d.0.convtr.bias", si);
         int stride = ratios[si - 1];
         ggml_tensor* wp = (si - 1 < (int)ctx->dec_ups_w_perm.size()) ? ctx->dec_ups_w_perm[si - 1] : nullptr;
-        h = build_transposed_conv1d(ctx0, h, G(wn), G(bn_str), stride, wp);
+        h = build_transposed_conv1d(ctx0, h, G(wn), G(bn_str), stride, wp, stream);
         if (dump_decoder) {
             char nm[32];
             snprintf(nm, sizeof(nm), "dec_up%d", si);
@@ -3020,7 +3106,7 @@ static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames
                               G(std::string(base) + ".dw_conv.bias"), G(std::string(base) + ".gamma"),
                               G(std::string(base) + ".ffn_ln.weight"), G(std::string(base) + ".ffn.up.weight"),
                               G(std::string(base) + ".ffn.up.bias"), G(std::string(base) + ".ffn.down.weight"),
-                              G(std::string(base) + ".ffn.down.bias"), G(std::string(base) + ".ffn_gamma"));
+                              G(std::string(base) + ".ffn.down.bias"), G(std::string(base) + ".ffn_gamma"), stream);
         }
         if (dump_decoder) {
             char nm[32];
@@ -3031,13 +3117,68 @@ static ggml_cgraph* build_vae_decoder_graph(vibevoice_context* ctx, int n_frames
     }
 
     // 4. Head: Conv1d(32 → 1, K=7, stride=1) → mono audio
-    h = build_causal_conv1d(ctx0, h, G("at_dec.head.weight"), G("at_dec.head.bias"), 1);
+    h = build_causal_conv1d(ctx0, h, G("at_dec.head.weight"), G("at_dec.head.bias"), 1, stream);
 
     ggml_set_name(h, "dec_audio");
     ggml_set_output(h);
     ggml_build_forward_expand(gf, h);
 
+    if (stream)
+        stream->expand(gf);
     return gf;
+}
+
+// Decode one generated acoustic frame, preserving the causal histories, then
+// encode its unmodified PCM into one semantic frame. The ASR encoder helper
+// normalizes waveform loudness; upstream generated-audio feedback does not.
+static std::vector<float> vibevoice_generated_semantic(vibevoice_context* ctx, const float* latent,
+                                                       vibevoice_codec_stream& decoder,
+                                                       vibevoice_codec_stream& semantic, std::vector<float>& pcm) {
+    const auto& hp = ctx->model.hp;
+    struct graph_owner {
+        ggml_context* value = nullptr;
+        ~graph_owner() {
+            if (value)
+                ggml_free(value);
+        }
+    } decoder_graph, semantic_graph;
+    auto* gf = build_vae_decoder_graph(ctx, 1, &decoder, &decoder_graph.value);
+    ggml_backend_sched_reset(ctx->sched);
+    if (vibevoice_vae_should_use_cpu(ctx->backend, ctx->backend_cpu)) {
+        for (int i = 0; i < ggml_graph_n_nodes(gf); ++i)
+            ggml_backend_sched_set_tensor_backend(ctx->sched, ggml_graph_node(gf, i), ctx->backend_cpu);
+    }
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+        return {};
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "dec_latent"), latent, 0,
+                            (size_t)hp.vae_dim_acoustic * sizeof(float));
+    decoder.set_inputs();
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+        return {};
+    auto* audio = ggml_graph_get_tensor(gf, "dec_audio");
+    pcm.resize(ggml_nelements(audio));
+    ggml_backend_tensor_get(audio, pcm.data(), 0, pcm.size() * sizeof(float));
+    decoder.capture();
+
+    gf = build_tokenizer_encoder_graph(ctx, "st_enc", (int)pcm.size(), &semantic, &semantic_graph.value);
+    ggml_backend_sched_reset(ctx->sched);
+    if (vibevoice_enc_should_use_cpu(ctx)) {
+        for (int i = 0; i < ggml_graph_n_nodes(gf); ++i)
+            ggml_backend_sched_set_tensor_backend(ctx->sched, ggml_graph_node(gf, i), ctx->backend_cpu);
+    }
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf))
+        return {};
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "audio_in"), pcm.data(), 0, pcm.size() * sizeof(float));
+    semantic.set_inputs();
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
+        return {};
+    auto* encoded = ggml_graph_get_tensor(gf, "encoder_out");
+    if (encoded->ne[0] != hp.vae_dim_semantic || encoded->ne[1] != 1)
+        return {};
+    std::vector<float> features((size_t)hp.vae_dim_semantic);
+    ggml_backend_tensor_get(encoded, features.data(), 0, features.size() * sizeof(float));
+    semantic.capture();
+    return features;
 }
 
 // ── LM hidden state extraction (no KV cache) ───────────────────────────────
@@ -3829,6 +3970,10 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 seed = ctx->params.seed;
             mt19937_seed(rng, seed);
         }
+        // Opt in until reference intermediates and decoded speech are qualified.
+        const char* semantic_setting = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_SEMANTIC_FEEDBACK");
+        const bool semantic_feedback = semantic_setting && semantic_setting[0] == '1';
+        vibevoice_codec_stream feedback_decoder, feedback_semantic;
         int speech_frames = 0;
         const char* stop_reason = "generation budget";
 
@@ -3922,6 +4067,42 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 if (speech_embed.empty()) {
                     stop_reason = "acoustic connector failed";
                     break;
+                }
+
+                if (semantic_feedback) {
+                    std::vector<float> scaled_frame(vae_dim);
+                    for (int i = 0; i < vae_dim; ++i)
+                        scaled_frame[i] = z[i] / scaling_factor - bias_factor;
+                    std::vector<float> pcm;
+                    auto features = vibevoice_generated_semantic(ctx, scaled_frame.data(), feedback_decoder,
+                                                                 feedback_semantic, pcm);
+                    if (features.empty()) {
+                        stop_reason = "generated semantic encoder failed";
+                        break;
+                    }
+                    auto semantic_embed = run_connector_stage(ctx, "se_conn", features.data(), 1, hp.vae_dim_semantic);
+                    if (semantic_embed.size() != speech_embed.size()) {
+                        stop_reason = "semantic connector failed";
+                        break;
+                    }
+                    if (dump_dir) {
+                        char name[80];
+                        snprintf(name, sizeof(name), "tts_feedback_pcm_f%04d", speech_frames - 1);
+                        vibevoice_dump_f32(dump_dir, name, pcm.data(), pcm.size());
+                        snprintf(name, sizeof(name), "tts_feedback_semantic_f%04d", speech_frames - 1);
+                        vibevoice_dump_f32(dump_dir, name, features.data(), features.size());
+                        snprintf(name, sizeof(name), "tts_feedback_acoustic_embed_f%04d", speech_frames - 1);
+                        vibevoice_dump_f32(dump_dir, name, speech_embed.data(), speech_embed.size());
+                        snprintf(name, sizeof(name), "tts_feedback_semantic_embed_f%04d", speech_frames - 1);
+                        vibevoice_dump_f32(dump_dir, name, semantic_embed.data(), semantic_embed.size());
+                    }
+                    for (size_t i = 0; i < speech_embed.size(); ++i)
+                        speech_embed[i] += semantic_embed[i];
+                    if (dump_dir) {
+                        char name[80];
+                        snprintf(name, sizeof(name), "tts_feedback_combined_embed_f%04d", speech_frames - 1);
+                        vibevoice_dump_f32(dump_dir, name, speech_embed.data(), speech_embed.size());
+                    }
                 }
 
                 // LM step with speech embedding

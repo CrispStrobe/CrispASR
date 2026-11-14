@@ -171,6 +171,13 @@ target_link_libraries(test-omnivoice-codec PRIVATE crispasr-core ggml ggml-base 
 add_test(NAME omnivoice-codec-lifecycle COMMAND test-omnivoice-codec)
 set_tests_properties(omnivoice-codec-lifecycle PROPERTIES LABELS "unit;tts;omnivoice")
 
+# Actual VibeVoice causal codec builders: streaming/prefix parity, no model.
+add_executable(test-vibevoice-codec-stream test-vibevoice-codec-stream.cpp)
+target_include_directories(test-vibevoice-codec-stream PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/ggml/src)
+target_link_libraries(test-vibevoice-codec-stream PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu Threads::Threads)
+add_test(NAME vibevoice-codec-stream-parity COMMAND test-vibevoice-codec-stream)
+set_tests_properties(vibevoice-codec-stream-parity PROPERTIES LABELS "unit;tts;vibevoice")
+
 add_executable(test-step-graph-cache test-step-graph-cache.cpp)
 target_include_directories(test-step-graph-cache PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-step-graph-cache PRIVATE Catch2::Catch2WithMain ggml ggml-base)

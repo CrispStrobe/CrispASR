@@ -12,6 +12,32 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Issue #589 generated semantic feedback — gated implementation Codex (2026-11-14)
+
+- Base `6b98da68a`; isolated `issue589-feedback`. Added upstream's generated
+  latent → acoustic decoder → raw PCM semantic encoder → semantic connector,
+  summed with the acoustic connector. `CRISPASR_VIBEVOICE_TTS_SEMANTIC_FEEDBACK=1`
+  enables this base-model path; default stays off pending decoded speech.
+  `CRISPASR_VIBEVOICE_TTS_DUMP` records per-frame PCM, semantic features and both
+  connector outputs plus their sum. Realtime feedback is unchanged.
+- Causal convolution histories retain `K-stride` inputs; transposed convolution
+  histories retain only inputs that can still affect the next output. Each
+  synthesis owns fresh histories. Two codec graphs process one frame at a time;
+  graph owners release their contexts after evaluation. Real-model state stays
+  at 298822 floats, with 3200 PCM samples and 128 semantic features per frame.
+- Synthetic production-builder checks pass 120 streaming/full-prefix comparisons
+  plus bounded-state assertions, covering depthwise/downsample/transposed
+  convolutions, initial short chunks, multi-frame overlap and biases. Disabling
+  history capture makes the same regression fail. Syntax, clang-format 18 and
+  whitespace checks pass; no full build, GPU, push or hosted dispatch.
+- Three real frames: streamed semantic outputs on identical official PCM are
+  byte-exact against native prefix evaluation. With the separately investigated
+  F16 semantic FFNs, upstream agreement is cosine 0.999999998 and relative L2
+  0.0000604 (norm 69.03023 vs 69.03043). Native decoder stream/prefix relative L2
+  is 0.000934, reflecting shape-dependent numeric differences; its agreement to
+  the upstream decoder is cosine 0.999295 and relative L2 0.03756. Neither these
+  intermediates nor the gate alone qualify generated speech or voice cloning.
+
 ### Issue #589 base TTS generation budget — locally checked Codex (2026-11-14)
 
 - Base `683971758`; isolated `fix/589-base-generation-limit`. Removed the
