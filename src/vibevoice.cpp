@@ -3670,6 +3670,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     int vae_dim = hp.vae_dim_acoustic;
     int d_lm = hp.d_lm;
     const char* dump_dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_DUMP");
+    const char* capture_dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_FIRST_FRAME");
     const auto tts_t0 = std::chrono::high_resolution_clock::now();
 
     // VibeVoice TTS hits Apple's GPU watchdog
@@ -3935,6 +3936,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         // at each step instead of (or in addition to) logits.
 
         // For simplicity, use the existing transcribe infrastructure:
+        if (capture_dir && (prefix_len > 2048 || num_steps > 100)) {
+            fprintf(stderr, "vibevoice first-frame capture: limit is 2048 prompt tokens / 100 diffusion steps\n");
+            return nullptr;
+        }
+        // Bounded diagnostic: host-owned inputs, no graph output marking or default change.
+        vibevoice_dump_i32(capture_dir, "tts_prompt_ids", prompt.data(), prompt.size());
+        vibevoice_dump_f32(capture_dir, "tts_prompt_embeds", prefix_embeds.data(), prefix_embeds.size());
         // Prefill, then autoregressive generate. On speech_diffusion_id, run diffusion.
 
         // Prefill
@@ -3970,6 +3978,10 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             vibevoice_dump_f32(dump_dir, "tts_prefill_hidden", hidden_v.data(), hidden_v.size());
             vibevoice_dump_f32(dump_dir, "tts_prefill_logits", logits_v.data(), logits_v.size());
         }
+        int32_t capture_prefill_dimensions[] = {prefix_len, (int32_t)logits_v.size()};
+        vibevoice_dump_i32(capture_dir, "tts_prefill_dimensions", capture_prefill_dimensions, 2);
+        vibevoice_dump_f32(capture_dir, "tts_prefill_hidden", hidden_v.data(), hidden_v.size());
+        vibevoice_dump_f32(capture_dir, "tts_prefill_logits", logits_v.data(), logits_v.size());
         int n_past = prefix_len;
         const auto t_pure_infer_start = std::chrono::high_resolution_clock::now();
 
@@ -4042,8 +4054,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         // decoded output qualifies the change on the affected Metal Q4 path.
         const char* constraint_env = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_TOKEN_CONSTRAINT");
         const bool constrain_tokens = constraint_env && constraint_env[0] == '1';
+        std::vector<int32_t> capture_tokens;
         for (int step = 0; step < max_gen; step++) {
+            if (capture_dir && step >= 64)
+                return nullptr;
             const int best = core_vibevoice_tts::select_base_token(logits_v.data(), logits_v.size(), constrain_tokens);
+            if (capture_dir)
+                capture_tokens.push_back(best);
             if (best < 0) {
                 stop_reason = "no valid control token";
                 break;
@@ -4086,7 +4103,26 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 std::vector<float> z(vae_dim);
                 std::vector<float> prev_x0(vae_dim, 0.0f);
                 fill_gaussian_noise(z.data(), vae_dim, rng);
+                const char* first_dir = speech_frames == 0 ? capture_dir : nullptr;
+                vibevoice_dump_f32(first_dir, "tts_noise_frame0", z.data(), z.size());
+                vibevoice_dump_f32(first_dir, "tts_pos_condition_frame0", hidden_v.data(), hidden_v.size());
+                vibevoice_dump_f32(first_dir, "tts_neg_condition_frame0", neg_cond.data(), neg_cond.size());
+                vibevoice_dump_f32(first_dir, "tts_negative_input_frame0", negative_input.data(),
+                                   negative_input.size());
+                int32_t position_info[] = {step, n_past, neg_n_past};
+                vibevoice_dump_i32(first_dir, "tts_frame0_positions", position_info, 3);
+                vibevoice_dump_i32(first_dir, "tts_frame0_selected_tokens", capture_tokens.data(),
+                                   capture_tokens.size());
+                vibevoice_dump_i32(first_dir, "tts_frame0_timesteps", sched.timesteps.data(), sched.timesteps.size());
+                auto capture_stage = [&](const char* label, int si, const std::vector<float>& values) {
+                    if (!first_dir || si >= 100)
+                        return;
+                    char name[96];
+                    snprintf(name, sizeof(name), "tts_frame0_%s_s%03d", label, si);
+                    vibevoice_dump_f32(first_dir, name, values.data(), values.size());
+                };
 
+                int completed_steps = 0;
                 for (int si = 0; si < num_steps; si++) {
                     float t = (float)sched.timesteps[si];
                     std::vector<float> t_sin(256);
@@ -4125,6 +4161,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                         v_cfg[i] = v_uncond + cfg_scale * (v_cond - v_uncond);
                     }
 
+                    capture_stage("v_both", si, v_both);
+                    capture_stage("v_cfg", si, v_cfg);
                     int t_cur = sched.timesteps[si];
                     std::vector<float> x0(vae_dim);
                     v_to_x0(z.data(), v_cfg.data(), x0.data(), vae_dim, sched.alphas_cumprod[t_cur]);
@@ -4134,9 +4172,21 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                     } else {
                         dpm_second_order(sched, si, z.data(), x0.data(), prev_x0.data(), si - 1, vae_dim);
                     }
+                    capture_stage("x0", si, x0);
+                    capture_stage("z", si, z);
+                    ++completed_steps;
                     prev_x0 = x0;
                 }
 
+                vibevoice_dump_f32(first_dir, "tts_latent_frame0", z.data(), z.size());
+                if (first_dir) {
+                    if (completed_steps != num_steps)
+                        return nullptr;
+                    int32_t complete[] = {vae_dim, d_lm, num_steps};
+                    vibevoice_dump_i32(first_dir, "capture_complete", complete, 3);
+                    fprintf(stderr, "vibevoice first-frame capture complete (diagnostic exit; no audio)\n");
+                    return nullptr;
+                }
                 all_latents.insert(all_latents.end(), z.begin(), z.end());
                 speech_frames++;
 

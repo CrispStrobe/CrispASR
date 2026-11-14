@@ -884,3 +884,7 @@ instructions remain in gitignored local Markdown.
 - Isolated `diag/589-prefix-oracle`: honor base TTS CFG/step controls already exposed by the API, preserving defaults 1.3/20. Weight-free resolver/production-solver controls only; this does not fix the observed default neutral-prefix failure.
 
 - Base and realtime now share parameter/environment resolution; base uses the selected step count for schedule, loop bounds, and final solver update. Four weight-free native config/solver controls pass; default 20/1.3 scalar solver output is byte-identical, nondefault values affect output, and source wiring guard fails against the pre-fix base branch. Existing six token-selection controls pass. Full translation unit syntax check and clang-format18 pass. No model/GPU rerun; this repairs nondefault controls and does not explain the default Q4 neutral failure.
+
+### Issue #589 first diffusion capture — active Codex (2026-11-14)
+
+- Isolated `diag/589-first-frame`, base `a8151a2e`: opt-in bounded first-frame host-buffer instrumentation and same-GGUF upstream-head/scheduler replay. No default change, GPU run, publication or quality claim.
