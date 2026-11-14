@@ -7004,6 +7004,11 @@ catch_discover_tests(test-qwen3-tts-capture
     PROPERTIES LABELS "unit;tts;qwen3-tts;capture"
 )
 
+add_executable(test-vibevoice-tts-generation test-vibevoice-tts-generation.cpp)
+target_include_directories(test-vibevoice-tts-generation PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-vibevoice-tts-generation PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-vibevoice-tts-generation PROPERTIES LABELS "unit;vibevoice")
+
 add_executable(test-vibevoice-tts-tokenizer test-vibevoice-tts-tokenizer.cpp)
 target_include_directories(test-vibevoice-tts-tokenizer PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-vibevoice-tts-tokenizer PRIVATE Catch2::Catch2WithMain)

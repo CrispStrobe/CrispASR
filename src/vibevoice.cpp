@@ -18,6 +18,7 @@
 #include "core/attention.h"
 #include "core/bpe.h"
 #include "core/vibevoice_tts_tokenizer.h"
+#include "core/vibevoice_tts_generation.h"
 #include "core/vibevoice_asr_prompt.h"
 #include "core/conv.h"
 #include "core/ffn.h"
@@ -85,6 +86,7 @@ struct vibevoice_hparams {
     int d_ffn = 8960;
     int vocab_size = 151936;
     int head_dim = 128;
+    int context_length = 65536;
     float rope_theta = 1000000.0f;
     int vae_dim_acoustic = 64;
     int vae_dim_semantic = 128;
@@ -274,6 +276,10 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     hp.d_ffn = core_gguf::kv_u32(gctx, "vibevoice.d_ffn", 8960);
     hp.vocab_size = core_gguf::kv_u32(gctx, "vibevoice.vocab_size", 151936);
     hp.head_dim = core_gguf::kv_u32(gctx, "vibevoice.head_dim", 128);
+    // Legacy base GGUFs omit the decoder context. Source configs use 64K
+    // for 1.5B and 32K for 7B (hidden_size=3584).
+    hp.context_length =
+        core_gguf::kv_u32(gctx, "vibevoice.context_length", core_vibevoice_tts::legacy_context_length(hp.d_lm));
     hp.rope_theta = core_gguf::kv_f32(gctx, "vibevoice.rope_theta", 1000000.0f);
     hp.vae_dim_acoustic = core_gguf::kv_u32(gctx, "vibevoice.vae_dim_acoustic", 64);
     hp.vae_dim_semantic = core_gguf::kv_u32(gctx, "vibevoice.vae_dim_semantic", 128);
@@ -3575,7 +3581,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             vibevoice_dump_f32(dump_dir, "tts_prompt_embeds", prefix_embeds.data(), prefix_embeds.size());
 
         // Allocate KV cache
-        int max_gen = ctx->params.max_new_tokens > 0 ? ctx->params.max_new_tokens : 512;
+        const int max_gen =
+            core_vibevoice_tts::generation_budget(ctx->params.max_new_tokens, prefix_len, hp.context_length);
+        if (max_gen <= 0) {
+            fprintf(stderr, "vibevoice TTS (base): prompt exhausts decoder context (%d / %d)\n", prefix_len,
+                    hp.context_length);
+            return nullptr;
+        }
         int max_ctx = prefix_len + max_gen;
         if (!ctx->kv_k || ctx->kv_max_ctx < max_ctx || ctx->kv_k->type != GGML_TYPE_F16) {
             if (ctx->kv_ctx)
@@ -3818,12 +3830,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             mt19937_seed(rng, seed);
         }
         int speech_frames = 0;
-        int max_speech_frames = std::max(12, (int)(text_ids.size() * 3));
+        const char* stop_reason = "generation budget";
 
         if (verbosity >= 1)
-            fprintf(stderr, "vibevoice TTS (base): generating speech autoregressively...\n");
+            fprintf(stderr, "vibevoice TTS (base): generating speech autoregressively (budget %d tokens)...\n",
+                    max_gen);
 
-        for (int step = 0; step < max_gen && speech_frames < max_speech_frames; step++) {
+        for (int step = 0; step < max_gen; step++) {
             // Argmax on logits
             int best = 0;
             for (int i = 1; i < (int)logits_v.size(); i++)
@@ -3836,6 +3849,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
             }
 
             if (best == SPEECH_END || best == EOS_TOKEN) {
+                stop_reason = best == SPEECH_END ? "speech end" : "EOS";
                 if (verbosity >= 1)
                     fprintf(stderr, "  stop at step %d (token %d), %d speech frames\n", step, best, speech_frames);
                 break;
@@ -3905,24 +3919,35 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
 
                 // Feed speech latent back via acoustic connector
                 auto speech_embed = run_connector_stage(ctx, "at_conn", z.data(), 1, vae_dim);
-                if (speech_embed.empty())
+                if (speech_embed.empty()) {
+                    stop_reason = "acoustic connector failed";
                     break;
+                }
 
                 // LM step with speech embedding
-                if (!run_dec(speech_embed.data(), 1, n_past, logits_v, hidden_v))
+                if (!run_dec(speech_embed.data(), 1, n_past, logits_v, hidden_v)) {
+                    stop_reason = "decoder failed";
                     break;
+                }
                 n_past++;
             } else {
                 // Regular text token — embed and feed to LM
                 const int32_t tid = best;
                 auto tok_emb = run_token_embedding_lookup(ctx, &tid, 1);
-                if (tok_emb.size() != (size_t)hp.d_lm)
+                if (tok_emb.size() != (size_t)hp.d_lm) {
+                    stop_reason = "token embedding failed";
                     break;
-                if (!run_dec(tok_emb.data(), 1, n_past, logits_v, hidden_v))
+                }
+                if (!run_dec(tok_emb.data(), 1, n_past, logits_v, hidden_v)) {
+                    stop_reason = "decoder failed";
                     break;
+                }
                 n_past++;
             }
         }
+
+        if (verbosity >= 1)
+            fprintf(stderr, "vibevoice TTS (base): stopped: %s; %d speech frames\n", stop_reason, speech_frames);
 
         if (all_latents.empty()) {
             fprintf(stderr, "vibevoice TTS (base): no speech frames generated\n");

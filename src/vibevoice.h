@@ -19,8 +19,10 @@ struct vibevoice_stream;
 
 struct vibevoice_context_params {
     int n_threads;
-    int max_new_tokens;
-    int verbosity; // 0=silent 1=normal 2=verbose
+    int max_new_tokens; // ASR: 0 = duration-scaled; base TTS: 0 = upstream
+                        // min(2 * full prompt length, remaining model context).
+                        // Positive base TTS values further limit that budget.
+    int verbosity;      // 0=silent 1=normal 2=verbose
     bool use_gpu;
     int tts_steps;   // DPM-Solver++ inference steps (default 20, min 4)
     uint32_t seed;   // RNG seed for TTS diffusion noise (0 = env/default)

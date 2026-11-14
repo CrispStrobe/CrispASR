@@ -12,6 +12,28 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Issue #589 base TTS generation budget — locally checked Codex (2026-11-14)
+
+- Base `683971758`; isolated `fix/589-base-generation-limit`. Removed the
+  `3 * text tokens` speech-frame cutoff. Generation now uses
+  `min(2 * full prompt tokens, remaining decoder context, explicit positive token cap)`.
+  The full processor prompt includes voice-reference frames. This follows
+  [upstream generate](https://github.com/vibevoice-community/VibeVoice/blob/952326ddb264062466a888cf32a5b2f4e803e16e/vibevoice/modular/modeling_vibevoice_inference.py#L370)
+  (lines 370, 373 and 421), rather than a duration multiplier. New GGUFs preserve
+  decoder context metadata; legacy 1.5B/7B defaults remain 65536/32768, matching
+  their source configs. Verbose output distinguishes token-budget exhaustion
+  from model speech-end/EOS and connector/decoder failures.
+- The extracted old 512-token fallback first failed six policy assertions.
+  Final weight-free C++ checks pass 15 assertions across two cases under
+  ASan/UBSan and via the exact production CMake test registration in an isolated
+  harness. Converter tests pass all six cases, including both context lengths.
+  The production `vibevoice.cpp` translation unit compiles against the pinned
+  ggml headers; only existing ggml deprecation warnings remain. Formatting and
+  whitespace checks pass. No full build, model run, push or hosted dispatch.
+- This repairs a demonstrated forced cutoff (nine target text tokens stopped
+  exactly at 27 frames). It does not establish a fix for near-silence beginning
+  earlier in the long 7B synthetic reference; decoded speech remains unqualified.
+
 ### Ultra local-head Dart binding — complete Codex (2026-11-13)
 
 - Base `8b7d95403`; isolated `feat/ultra-dart-20261113`. Added the missing

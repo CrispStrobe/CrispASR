@@ -41,7 +41,7 @@ class Writer:
 
 
 class ConverterTaskTest(unittest.TestCase):
-    def convert(self, architecture):
+    def convert(self, architecture, context_length=65536):
         tokenizer = types.SimpleNamespace(
             get_vocab=lambda: {"x": 0}, unk_token_id=-1,
             convert_tokens_to_ids=lambda token: {"<|text_chunk_end|>": 151665,
@@ -59,7 +59,8 @@ class ConverterTaskTest(unittest.TestCase):
             model = Path(tmp)
             config = {"architectures": architecture if isinstance(architecture, list) else [architecture], "decoder_config": {
                 "hidden_size": 8, "num_hidden_layers": 1, "num_attention_heads": 2,
-                "num_key_value_heads": 1, "intermediate_size": 16, "vocab_size": 4}}
+                "num_key_value_heads": 1, "intermediate_size": 16, "vocab_size": 4,
+                "max_position_embeddings": context_length}}
             if architecture is None:
                 config.pop("architectures")
             (model / "config.json").write_text(json.dumps(config))
@@ -82,6 +83,12 @@ class ConverterTaskTest(unittest.TestCase):
         values = self.convert("VibeVoiceForConditionalGeneration")
         self.assertEqual(values["general.architecture"], "vibevoice-tts")
         self.assertEqual(values["vibevoice.supports_asr"], 0)
+
+    def test_base_tts_preserves_decoder_context(self):
+        for context_length in (32768, 65536):
+            with self.subTest(context_length=context_length):
+                values = self.convert("VibeVoiceForConditionalGeneration", context_length)
+                self.assertEqual(values["vibevoice.context_length"], context_length)
 
     def test_realtime_tts_keeps_its_trained_task(self):
         values = self.convert("VibeVoiceStreamingForConditionalGenerationInference")
