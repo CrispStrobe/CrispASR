@@ -171,6 +171,13 @@ target_link_libraries(test-omnivoice-codec PRIVATE crispasr-core ggml ggml-base 
 add_test(NAME omnivoice-codec-lifecycle COMMAND test-omnivoice-codec)
 set_tests_properties(omnivoice-codec-lifecycle PROPERTIES LABELS "unit;tts;omnivoice")
 
+# Actual VibeVoice causal codec builders: streaming/prefix parity, no model.
+add_executable(test-vibevoice-codec-stream test-vibevoice-codec-stream.cpp)
+target_include_directories(test-vibevoice-codec-stream PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/ggml/src)
+target_link_libraries(test-vibevoice-codec-stream PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu Threads::Threads)
+add_test(NAME vibevoice-codec-stream-parity COMMAND test-vibevoice-codec-stream)
+set_tests_properties(vibevoice-codec-stream-parity PROPERTIES LABELS "unit;tts;vibevoice")
+
 add_executable(test-step-graph-cache test-step-graph-cache.cpp)
 target_include_directories(test-step-graph-cache PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-step-graph-cache PRIVATE Catch2::Catch2WithMain ggml ggml-base)
@@ -2626,9 +2633,11 @@ catch_discover_tests(test-tada-params
 )
 
 # ─── test-vibevoice-params — Catch2 unit tests for vibevoice_context_params defaults
-# and null-guard coverage. No GGUF required. ───────────────────────────────────
+# and task-capability coverage. Tiny generated GGUFs; no model required. ───────────────────────────────────
 add_executable(test-vibevoice-params
     test-vibevoice-params.cpp
+    test-vibevoice-asr-capability.cpp
+    test-vibevoice-semantic-weights.cpp
 )
 target_include_directories(test-vibevoice-params PRIVATE
     ${PROJECT_SOURCE_DIR}/src
@@ -2641,6 +2650,13 @@ catch_discover_tests(test-vibevoice-params
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit;vibevoice"
 )
+
+add_executable(test-vibevoice-asr-live test-vibevoice-asr-live.cpp)
+target_link_libraries(test-vibevoice-asr-live PRIVATE vibevoice)
+add_test(NAME test-vibevoice-asr-live
+    COMMAND test-vibevoice-asr-live ${PROJECT_SOURCE_DIR}/samples/jfk.wav)
+set_tests_properties(test-vibevoice-asr-live PROPERTIES
+    LABELS "integration;live;vibevoice" SKIP_RETURN_CODE 77 TIMEOUT 900)
 
 # ─── test-voxcpm2-params — Catch2 unit tests for voxcpm2_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
@@ -5726,6 +5742,11 @@ set_tests_properties(test-package-lib-bundle PROPERTIES
 # Discover Python before constructing commands or guarding their registration.
 # A later find_package leaves clean builds without the guarded unit tests.
 find_package(Python3 COMPONENTS Interpreter QUIET)
+if (Python3_Interpreter_FOUND)
+    add_test(NAME test-vibevoice-converter-task
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_converter_task.py)
+    set_tests_properties(test-vibevoice-converter-task PROPERTIES LABELS "unit;vibevoice")
+endif()
 
 if (Python3_Interpreter_FOUND)
     add_test(NAME mini-bs-roformer-converter
@@ -6990,3 +7011,41 @@ catch_discover_tests(test-qwen3-tts-capture
     TEST_SPEC "[unit][qwen3-tts][capture]"
     PROPERTIES LABELS "unit;tts;qwen3-tts;capture"
 )
+
+add_executable(test-vibevoice-tts-generation test-vibevoice-tts-generation.cpp)
+target_include_directories(test-vibevoice-tts-generation PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-vibevoice-tts-generation PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-vibevoice-tts-generation PROPERTIES LABELS "unit;vibevoice")
+
+add_executable(test-vibevoice-tts-tokenizer test-vibevoice-tts-tokenizer.cpp)
+target_include_directories(test-vibevoice-tts-tokenizer PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-vibevoice-tts-tokenizer PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-vibevoice-tts-tokenizer)
+
+# Explicitly configured base-model cloning checks; no model downloads in CTest.
+if(Python3_EXECUTABLE AND CRISPASR_BUILD_EXAMPLES)
+    foreach(vibevoice_size IN ITEMS 1.5b 7b)
+        add_test(NAME vibevoice-clone-${vibevoice_size}-live
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live.py
+                --size ${vibevoice_size} --crispasr $<TARGET_FILE:crispasr-cli>
+                --output-dir ${CMAKE_CURRENT_BINARY_DIR}/vibevoice-clone-${vibevoice_size})
+        set_tests_properties(vibevoice-clone-${vibevoice_size}-live PROPERTIES
+            LABELS "live;tts;vibevoice;voice-cloning" SKIP_RETURN_CODE 77
+            RUN_SERIAL TRUE TIMEOUT 14400)
+    endforeach()
+endif()
+if(Python3_EXECUTABLE)
+    add_test(NAME vibevoice-clone-live-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live_controls.py)
+    set_tests_properties(vibevoice-clone-live-controls PROPERTIES LABELS "unit;vibevoice;voice-cloning")
+    add_test(NAME vibevoice-reference-lifetime
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_reference_lifetime.py)
+    set_tests_properties(vibevoice-reference-lifetime PROPERTIES LABELS "unit;vibevoice;voice-cloning" TIMEOUT 30)
+endif()
+
+# Optional upstream CPU parity probe. No model or Python dependency is needed by
+# the normal unit suite; build this target explicitly, then run the companion
+# test_vibevoice_negative_history.py script with --probe and --output-dir.
+add_executable(vibevoice-negative-history-probe EXCLUDE_FROM_ALL vibevoice-negative-history-probe.cpp)
+target_include_directories(vibevoice-negative-history-probe PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(vibevoice-negative-history-probe PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu Threads::Threads)

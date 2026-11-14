@@ -1,3 +1,53 @@
+### Issue #589 clone live regression modes — active Codex (2026-11-14)
+
+- Isolated `fix/589-clone-live-modes`: correct the clone live oracle to score
+  default disclosure plus request and explicitly opted-in requested-only audio
+  separately. Preserve raw transcripts, WER 0.25 and speaker delta >0.02;
+  model-free controls cover omissions, extra speech and separate speaker gates.
+  Seven model-free tests pass (both sizes, full raw transcript retention,
+  missing/repeated disclosure, missing request, unexpected extra phrase, and
+  independent speaker failures). Original oracle reproduced false rejection of
+  correct disclosure+request at WER 0.63636; corrected fixture passes at WER 0.
+  No threshold changes, speech stripping, new attestation gates, model/GPU run,
+  or CI addition. Live speech quality still requires a configured model run.
+
+### Issue #589 neutral disclaimer reference lifetime — active Codex (2026-11-14)
+
+- Base `0946e6acd`; isolated `fix/589-disclaimer-voice`. The CLI caches a WAV
+  reference and writes it to process environment; its neutral disclaimer call
+  therefore reuses the clone voice. Replace that handoff with context-owned
+  reference selection, preserve ordinary environment fallback, and explicitly
+  neutralize disclaimer requests. Mirror session voice selection without
+  changing existing ABI signatures. Acceptance: weight-free production adapter
+  and context isolation controls, including clone/neutral/clone sequencing.
+  The original adapter fails the explicit-WAV/canonical-env control and the
+  neutral-disclosure control. Final 18 weight-free controls pass using the
+  production adapter synthesis method, disclaimer composition, runtime setter
+  and reference lookup, and session dispatch. They cover path ownership,
+  context isolation, external canonical/legacy fallback, clone/neutral/clone,
+  per-request reference switches, and preservation of disclosure plus 300ms gap.
+  Runtime and adapter translation units pass syntax checks against pinned ggml;
+  ASan/UBSan covers the controls. No model rerun, GPU dispatch, disclosure removal
+  or threshold changes. Actual post-fix speech quality remains unvalidated.
+
+### Issue #589 semantic encoder legacy-weight recovery — active (2026-11-14)
+
+- Isolated `fix/589-semantic-ffn-recovery`: same quantized weight values and
+  identical PCM isolate semantic drift to activation rounding inside quantized
+  FFN matmul. F16 weight copies reduce prefix-three relative L2 from 0.20868 to
+  0.0000604; F32 copies reduce it to 0.000000424.
+- Opt-in base TTS recovery: `CRISPASR_VIBEVOICE_SEMANTIC_F16=1` decodes only
+  quantized semantic FFN weights once, with <=1 MiB F32 scratch and model-owned
+  F16 buffers. ASR, streaming checkpoints and defaults remain unchanged.
+- Local CPU checks: 46 assertions across Q4_0/Q4_K/Q8_0, chunk boundaries,
+  independent buffer lifetime and F16 no-op; recovered legacy Q4 codec output
+  is byte-identical to the F16-repacked codec, and the old path reproduces the
+  original Q4 bytes. The extra F16 weights occupy 603,963,392 bytes (~576 MiB).
+- Pending: full-model decoded output and actual GPU quality/memory validation
+  before considering a default change.
+- This diagnostic uses the 1.5B Q4 codec; reporter 7B Q8 and decoded-output
+  acceptance remain separate validation requirements.
+
 # CrispASR — Current work plan
 
 Updated 2026-11-07. Start with [the maintainer handoff](docs/maintenance-handoff.md).
@@ -11,6 +61,75 @@ before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — open lanes, fully scoped (2026-11-03)
+
+### Issue #589 generated semantic feedback — gated implementation Codex (2026-11-14)
+
+- Base `6b98da68a`; isolated `issue589-feedback`. Added upstream's generated
+  latent → acoustic decoder → raw PCM semantic encoder → semantic connector,
+  summed with the acoustic connector. `CRISPASR_VIBEVOICE_TTS_SEMANTIC_FEEDBACK=1`
+  enables this base-model path; default stays off pending decoded speech.
+  `CRISPASR_VIBEVOICE_TTS_DUMP` records per-frame PCM, semantic features and both
+  connector outputs plus their sum. Realtime feedback is unchanged.
+- Causal convolution histories retain `K-stride` inputs; transposed convolution
+  histories retain only inputs that can still affect the next output. Each
+  synthesis owns fresh histories. Two codec graphs process one frame at a time;
+  graph owners release their contexts after evaluation. Real-model state stays
+  at 298822 floats, with 3200 PCM samples and 128 semantic features per frame.
+- Synthetic production-builder checks pass 120 streaming/full-prefix comparisons
+  plus bounded-state assertions, covering depthwise/downsample/transposed
+  convolutions, initial short chunks, multi-frame overlap and biases. Disabling
+  history capture makes the same regression fail. Syntax, clang-format 18 and
+  whitespace checks pass; no full build, GPU, push or hosted dispatch.
+- Three real frames: streamed semantic outputs on identical official PCM are
+  byte-exact against native prefix evaluation. With the separately investigated
+  F16 semantic FFNs, upstream agreement is cosine 0.999999998 and relative L2
+  0.0000604 (norm 69.03023 vs 69.03043). Native decoder stream/prefix relative L2
+  is 0.000934, reflecting shape-dependent numeric differences; its agreement to
+  the upstream decoder is cosine 0.999295 and relative L2 0.03756. Neither these
+  intermediates nor the gate alone qualify generated speech or voice cloning.
+
+### Issue #589 base TTS negative CFG history — locally checked Codex (2026-11-14)
+
+- Base `6b98da68a`; isolated `fix/589-negative-history`. Implement the upstream
+  default refresh-negative recipe with independent decoder KV history, advancing
+  only for diffusion frames from the previous LM input. Keep the old frozen path
+  available while decoded speech validation is outstanding. Acceptance: cached
+  negative steps against upstream teacher-forced intermediates, independent
+  positive history, and decoded speech roundtrip before enabling by default.
+- `CRISPASR_VIBEVOICE_TTS_REFRESH_NEGATIVE=1` enables the independent negative
+  history; unset/0 preserves the frozen legacy condition. Negative hidden states
+  are available as `tts_negative_hidden_<frame>.bin` under the existing dump gate.
+  The shared production cached graph passes six teacher-forced states against a
+  seeded two-layer Transformers Qwen2 GQA model, including interleaved distinct
+  positive history and a later speech-start reset: minimum cosine 0.9999999958,
+  maximum relative L2 0.0000915, matched norms. The frozen frame-one control has
+  relative L2 1.2514 and fails decisively. The full production translation unit
+  compiles/links against the existing CPU ggml build. The optional
+  `vibevoice-negative-history-probe` target plus
+  `tests/test_vibevoice_negative_history.py` reproduce this without model weights.
+  Full-size upstream parity and decoded speech remain outstanding; no GPU run.
+
+### Issue #589 base TTS generation budget — locally checked Codex (2026-11-14)
+
+- Base `683971758`; isolated `fix/589-base-generation-limit`. Removed the
+  `3 * text tokens` speech-frame cutoff. Generation now uses
+  `min(2 * full prompt tokens, remaining decoder context, explicit positive token cap)`.
+  The full processor prompt includes voice-reference frames. This follows
+  [upstream generate](https://github.com/vibevoice-community/VibeVoice/blob/952326ddb264062466a888cf32a5b2f4e803e16e/vibevoice/modular/modeling_vibevoice_inference.py#L370)
+  (lines 370, 373 and 421), rather than a duration multiplier. New GGUFs preserve
+  decoder context metadata; legacy 1.5B/7B defaults remain 65536/32768, matching
+  their source configs. Verbose output distinguishes token-budget exhaustion
+  from model speech-end/EOS and connector/decoder failures.
+- The extracted old 512-token fallback first failed six policy assertions.
+  Final weight-free C++ checks pass 15 assertions across two cases under
+  ASan/UBSan and via the exact production CMake test registration in an isolated
+  harness. Converter tests pass all six cases, including both context lengths.
+  The production `vibevoice.cpp` translation unit compiles against the pinned
+  ggml headers; only existing ggml deprecation warnings remain. Formatting and
+  whitespace checks pass. No full build, model run, push or hosted dispatch.
+- This repairs a demonstrated forced cutoff (nine target text tokens stopped
+  exactly at 27 frames). It does not establish a fix for near-silence beginning
+  earlier in the long 7B synthetic reference; decoded speech remains unqualified.
 
 ### Ultra local-head Dart binding — complete Codex (2026-11-13)
 

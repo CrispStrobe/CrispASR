@@ -51,6 +51,7 @@ inline const std::vector<float>& crispasr_tts_get_disclaimer(CrispasrBackend* ba
         // Synthesize with no voice reference → default/neutral voice
         whisper_params neutral = params;
         neutral.tts_voice.clear();
+        neutral.tts_force_neutral_voice = true;
         neutral.tts_instruct.clear();
         neutral.tts_speaker_id = 0;
 

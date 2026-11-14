@@ -19,8 +19,10 @@ struct vibevoice_stream;
 
 struct vibevoice_context_params {
     int n_threads;
-    int max_new_tokens;
-    int verbosity; // 0=silent 1=normal 2=verbose
+    int max_new_tokens; // ASR: 0 = duration-scaled; base TTS: 0 = upstream
+                        // min(2 * full prompt length, remaining model context).
+                        // Positive base TTS values further limit that budget.
+    int verbosity;      // 0=silent 1=normal 2=verbose
     bool use_gpu;
     int tts_steps;   // DPM-Solver++ inference steps (default 20, min 4)
     uint32_t seed;   // RNG seed for TTS diffusion noise (0 = env/default)
@@ -120,9 +122,9 @@ float* vibevoice_run_connector(struct vibevoice_context* ctx, const char* prefix
 float* vibevoice_encode_speech(struct vibevoice_context* ctx, const float* samples, int n_samples, int* n_frames,
                                int* d_lm);
 
-// Returns true if the loaded model contains the acoustic (at_enc.*) and
-// semantic (st_enc.*) tokenizer encoder tensors needed for transcription.
-// TTS-only variants (vibevoice-realtime-0.5b etc.) return false.
+// Returns true for an ASR checkpoint with both tokenizer encoders.
+// Base TTS models also contain encoders; synthesis prediction-head tensors and
+// explicit TTS task metadata disqualify them, including legacy mislabeled GGUFs.
 bool vibevoice_has_asr(const struct vibevoice_context* ctx);
 
 // Native VibeVoice-ASR-Streaming session. Input is 24 kHz mono PCM. The
@@ -146,6 +148,11 @@ int vibevoice_stream_lookahead_samples(const struct vibevoice_context* ctx);
 // n_samples is set to the number of output samples. Caller frees with free().
 // Returns NULL if the model lacks decoder tensors (vibevoice.has_decoder=0).
 float* vibevoice_synthesize(struct vibevoice_context* ctx, const char* text, int* out_n_samples);
+
+// Select a context-owned base-model WAV reference. The path is copied.
+// NULL restores environment fallback; "" forces neutral/unconditioned speech.
+// Like synthesis, callers must serialize changes on a shared context.
+void vibevoice_set_reference_wav(struct vibevoice_context* ctx, const char* path);
 
 // Load a voice prompt GGUF for TTS. Returns 0 on success.
 // The voice prompt pre-fills KV caches with speaker identity.

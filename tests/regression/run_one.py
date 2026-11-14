@@ -744,6 +744,36 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
     return failures
 
 
+def speaker_conditioning_gate(reference: Path, clone: Path, baseline: Path,
+                              min_delta: float = 0.02) -> tuple[bool, dict]:
+    """Compare cloning against the same-text unconditioned control.
+
+    Resemblyzer is an optional reference-environment dependency; a missing
+    dependency fails an explicitly requested speaker gate rather than skipping.
+    """
+    try:
+        import numpy as np
+        from resemblyzer import VoiceEncoder, preprocess_wav
+
+        encoder = VoiceEncoder("cpu")
+        embeddings = []
+        for path in (reference, clone, baseline):
+            audio = preprocess_wav(path)
+            if len(audio) < 6400 or not np.isfinite(audio).all() or np.sqrt(np.mean(audio ** 2)) < 1e-4:
+                return False, {"error": f"missing, short or silent speaker audio: {path}"}
+            embeddings.append(encoder.embed_utterance(audio))
+        ref, cloned, base = embeddings
+        def cosine(a, b):
+            return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+        clone_cos, base_cos = cosine(cloned, ref), cosine(base, ref)
+        delta = clone_cos - base_cos
+        metrics = {"clone_reference": clone_cos, "baseline_reference": base_cos,
+                   "delta": delta, "min_delta": min_delta}
+        return math.isfinite(delta) and delta > min_delta, metrics
+    except Exception as error:
+        return False, {"error": f"{type(error).__name__}: {error}"}
+
+
 def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
                       crispasr_bin: Path) -> int:
     """Run one TTS backend's TTS->ASR roundtrip regression.
@@ -771,7 +801,7 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     # covers not just an over-the-bar WER but also a synth/ASR timeout or crash
     # or empty output: on a slow CI runner those must not red the nightly for a
     # model we've explicitly decided not to gate. Emits ADVISORY and returns 0.
-    advisory = bool(entry.get("advisory", False))
+    advisory = bool(entry.get("advisory", False)) and entry.get("speaker_conditioning") is None
 
     def advisory_skip(reason: str) -> int:
         print(f"\033[33m  ADVISORY\033[0m  {name}: {reason} — non-gating, not failing the run")
@@ -947,6 +977,36 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     print(f"    transcript: {transcript!r}")
     if raw_transcript != transcript:
         print(f"    (raw incl. AI-disclosure: {raw_transcript!r})")
+    # Optional voice-cloning gate: content alone cannot detect an ignored voice.
+    # A separate baseline process uses the identical seed and text without voice.
+    speaker = entry.get("speaker_conditioning")
+    if speaker is not None:
+        if voice_local is None or voice_local.suffix.lower() != ".wav":
+            die(f"{name}: speaker_conditioning requires a WAV voice reference")
+        baseline_wav = work_dir / f"tts_{name}_unconditioned.wav"
+        baseline_cmd = list(syn_cmd)
+        voice_index = baseline_cmd.index("--voice")
+        del baseline_cmd[voice_index:voice_index + 2]
+        baseline_cmd[baseline_cmd.index("--tts-output") + 1] = str(baseline_wav)
+        if speaker.get("baseline_backend"):
+            if "--backend" in baseline_cmd:
+                baseline_cmd[baseline_cmd.index("--backend") + 1] = speaker["baseline_backend"]
+            else:
+                baseline_cmd += ["--backend", speaker["baseline_backend"]]
+        try:
+            base_proc = _run_captured(baseline_cmd, check=False, timeout=tts_timeout,
+                                      label="tts-unconditioned-control")
+            speaker_ok, metrics = (speaker_conditioning_gate(
+                voice_local, out_wav, baseline_wav, float(speaker.get("min_delta", 0.02)))
+                if base_proc.returncode == 0 else (False, {"baseline_rc": base_proc.returncode}))
+        except subprocess.TimeoutExpired:
+            speaker_ok, metrics = False, {"error": "unconditioned control timed out"}
+        print(f"  speaker conditioning {'PASS' if speaker_ok else 'FAIL'}: {metrics}")
+        (work_dir / f"tts_{name}_speaker.json").write_text(json.dumps(metrics, indent=2) + "\n")
+        if not speaker_ok:
+            _preserve_tts_wav(name, out_wav)
+            _preserve_tts_wav(name + "_unconditioned", baseline_wav)
+            return 1
     return 0 if (ok or advisory) else 1
 
 

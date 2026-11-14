@@ -23,6 +23,11 @@ Workflow:
   # 3. Diff
   python tools/diff_vibevoice_tts.py /tmp/vv_rt_ref /tmp/vv_cpp_dump
 
+For base-model voice conditioning, use --voice-only with the output of
+vibevoice_tts_ref_voice_clone.py and matching native tts_voice_* dumps. This
+requires effective-input PCM plus every voice stage and gates magnitude error
+as well as cosine; use identical weights/PCM to isolate runtime arithmetic.
+
 NOTE: the python reference's manual-fallback path does not update the TTS-LM
 KV cache per frame, so frames > 0 from `all_latents.bin` are NOT a valid
 reference. Only frame-0 stages (text, prefill, frame-0 prediction, frame-0
@@ -37,6 +42,15 @@ import numpy as np
 
 
 # (python_ref_name, cpp_dump_name, dtype, label)
+VOICE_STAGES = [
+    ("tts_voice_original_normalized_pcm", "tts_voice_encoder_input", "f32", "upstream vs native preprocessing PCM"),
+    ("tts_voice_encoder_input", "tts_voice_encoder_input", "f32", "voice effective encoder PCM"),
+    ("tts_voice_acoustic_mean", "tts_voice_acoustic_mean", "f32", "voice acoustic encoder mean"),
+    ("tts_voice_acoustic_scaled", "tts_voice_acoustic_scaled", "f32", "voice acoustic scaled"),
+    ("tts_voice_acoustic_connected", "tts_voice_acoustic_connected", "f32", "voice acoustic connector"),
+    ("tts_voice_embeds", "tts_voice_embeds", "f32", "voice conditioning prompt"),
+]
+
 STAGES = [
     ("text_token_ids",       "tts_token_ids",              "i32", "tokenizer ids"),
     ("base_lm_hidden",       "tts_base_lm_hidden_voice",   "f32", "base LM hidden (voice mode)"),
@@ -74,9 +88,10 @@ def load_bin(path: Path, dtype: str):
 def cos_rms(a: np.ndarray, b: np.ndarray):
     a = a.astype(np.float64).ravel()
     b = b.astype(np.float64).ravel()
-    n = min(a.size, b.size)
-    a = a[:n]
-    b = b[:n]
+    if a.size != b.size or not a.size:
+        rms_a = float(np.sqrt(np.mean(a * a))) if a.size else 0.0
+        rms_b = float(np.sqrt(np.mean(b * b))) if b.size else 0.0
+        return -1.0, rms_a, rms_b, float("inf")
     na = np.linalg.norm(a)
     nb = np.linalg.norm(b)
     cos = float(a @ b / (na * nb + 1e-12))
@@ -100,6 +115,10 @@ def main():
     ap.add_argument("cpp_dir", help="C++ VIBEVOICE_TTS_DUMP dir")
     ap.add_argument("--threshold", type=float, default=0.999,
                     help="cos threshold below which a stage is flagged (default 0.999)")
+    ap.add_argument("--voice-only", action="store_true",
+                    help="compare original/effective PCM and four voice stages; all are required")
+    ap.add_argument("--relative-rms-max", type=float, default=0.02,
+                    help="voice-only RMS error / reference RMS gate (default 0.02)")
     args = ap.parse_args()
 
     ref = Path(args.ref_dir)
@@ -116,7 +135,7 @@ def main():
     print(f"# C++ dump:   {cpp}")
     print()
 
-    if (ref / "perframe_noise_f000.bin").exists():
+    if not args.voice_only and (ref / "perframe_noise_f000.bin").exists():
         first_fail = None
         for stage, label in PERFRAME_STAGES:
             ref_files = sorted(ref.glob(f"perframe_{stage}_f*.bin"))
@@ -156,10 +175,12 @@ def main():
     print("-" * len(header))
 
     first_fail = None
-    for ref_name, cpp_name, dtype, label in STAGES:
+    for ref_name, cpp_name, dtype, label in (VOICE_STAGES if args.voice_only else STAGES):
         ref_path = ref / f"{ref_name}.bin"
         ref_arr = load_bin(ref_path, dtype)
         if ref_arr is None:
+            if args.voice_only and first_fail is None:
+                first_fail = label + " (reference missing)"
             print(f"{label:<42} {'-':>8} {'-':>9} {'-':>9} {'-':>9}  SKIP   ref missing ({ref_name}.bin)")
             continue
         if cpp_name is None:
@@ -173,6 +194,8 @@ def main():
         cpp_path = cpp / f"{cpp_name}.bin"
         cpp_arr = load_bin(cpp_path, dtype)
         if cpp_arr is None:
+            if args.voice_only and first_fail is None:
+                first_fail = label + " (native missing)"
             print(f"{label:<42} {'-':>8} {'-':>9} {'-':>9} {'-':>9}  SKIP   cpp missing ({cpp_name}.bin)")
             continue
         if dtype == "i32":
@@ -186,6 +209,9 @@ def main():
             continue
         cos, ra, rb, rd = cos_rms(ref_arr, cpp_arr)
         status = fmt_status(cos)
+        if args.voice_only:
+            status = ("PASS" if np.isfinite(cos) and cos >= args.threshold
+                      and rd <= args.relative_rms_max * max(ra, 1e-12) else "FAIL")
         if status == "FAIL" and first_fail is None:
             first_fail = label
         if status == "WARN" and first_fail is None and cos < args.threshold:
