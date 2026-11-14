@@ -703,6 +703,12 @@ jobs:
       - name: Run speaker-db unit tests
         run: ctest --test-dir build -C Release -R "speaker|cluster|centroid|whisper_params" -E "live|NOT_BUILT" --output-on-failure --timeout 120
 
+      - name: Build GGUF file path test
+        run: cmake --build build --config Release --target test-gguf-file -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Test GGUF file paths on Windows
+        run: ctest --test-dir build -C Release -R "^test-gguf-file$" --no-tests=error --output-on-failure --timeout 120
+
   # ====================================================================
   # iOS (cross-compile gate — no runtime test)
   # ====================================================================
