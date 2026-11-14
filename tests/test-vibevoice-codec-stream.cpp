@@ -1,4 +1,5 @@
 // Exercise the production private codec builders with synthetic weights.
+#include "core/ggml_cpu_backend.h"
 #include "../src/vibevoice.cpp"
 #ifdef NDEBUG
 #undef NDEBUG
