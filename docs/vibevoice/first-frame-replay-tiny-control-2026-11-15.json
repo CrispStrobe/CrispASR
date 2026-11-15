@@ -1,0 +1,149 @@
+{
+  "scope": "tiny generated F32 GGUF roundtrip through actual upstream head and scheduler; no native runtime or 7B model parity",
+  "test": "tests/test_vibevoice_first_frame_replay.py",
+  "result": "PASS",
+  "elapsed_seconds": 5.735,
+  "dependencies": {
+    "torch": "2.9.1",
+    "numpy": "2.2.6",
+    "gguf": "0.18.0",
+    "diffusers": "0.35.2"
+  },
+  "fallback": "PYTHONNOUSERSITE=1; isolated local diffusers==0.35.2 installed --no-deps once; no global environment changes",
+  "fixture": {
+    "hidden": 8,
+    "latent": 4,
+    "head_layers": 1,
+    "ffn_ratio": 2,
+    "solver_steps": 2,
+    "seed": 42
+  },
+  "matching": {
+    "scope": "upstream prediction head and scheduler; native injected LM conditions; no prefill parity",
+    "weights_sha256": "e6f20e394fc52c71abc99f6a4550a94613731bf00d8848706fb7ef9729ad7ab8",
+    "source_sha256": {
+      "vibevoice/modular/modular_vibevoice_diffusion_head.py": "8a90ac685b9e32793749e2c58b48906758486d8b0bc0d92c8dfd141aa053852e",
+      "vibevoice/schedule/dpm_solver.py": "be10eae978afda40a6bc082806fa1e8f0f4b4e451fd1d21cec97347116ffba73"
+    },
+    "dequantized_weight_bytes": 11808,
+    "stages": [
+      {
+        "stage": "tts_frame0_v_both_s000",
+        "cosine": 1.0000000000000002,
+        "norm_ref": 1.2554042656063142,
+        "norm_native": 1.2554042656063142,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_cfg_s000",
+        "cosine": 1.0,
+        "norm_ref": 0.8606136144436729,
+        "norm_native": 0.8606136144436729,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_z_s000",
+        "cosine": 1.0,
+        "norm_ref": 0.41220411512833044,
+        "norm_native": 0.41220411512833044,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_both_s001",
+        "cosine": 1.0,
+        "norm_ref": 0.8357052359758796,
+        "norm_native": 0.8357052359758796,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_cfg_s001",
+        "cosine": 0.9999999999999999,
+        "norm_ref": 0.5969823507124766,
+        "norm_native": 0.5969823507124766,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_z_s001",
+        "cosine": 1.0,
+        "norm_ref": 0.6611016875713499,
+        "norm_native": 0.6611016875713499,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_latent_frame0",
+        "cosine": 1.0,
+        "norm_ref": 0.6611016875713499,
+        "norm_native": 0.6611016875713499,
+        "max_abs": 0.0
+      }
+    ]
+  },
+  "perturbed": {
+    "scope": "upstream prediction head and scheduler; native injected LM conditions; no prefill parity",
+    "weights_sha256": "e6f20e394fc52c71abc99f6a4550a94613731bf00d8848706fb7ef9729ad7ab8",
+    "source_sha256": {
+      "vibevoice/modular/modular_vibevoice_diffusion_head.py": "8a90ac685b9e32793749e2c58b48906758486d8b0bc0d92c8dfd141aa053852e",
+      "vibevoice/schedule/dpm_solver.py": "be10eae978afda40a6bc082806fa1e8f0f4b4e451fd1d21cec97347116ffba73"
+    },
+    "dequantized_weight_bytes": 11808,
+    "stages": [
+      {
+        "stage": "tts_frame0_v_both_s000",
+        "cosine": 0.9837833317231347,
+        "norm_ref": 1.2554042656063142,
+        "norm_native": 1.1264261061397438,
+        "max_abs": 0.25
+      },
+      {
+        "stage": "tts_frame0_v_cfg_s000",
+        "cosine": 1.0,
+        "norm_ref": 0.8606136144436729,
+        "norm_native": 0.8606136144436729,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_z_s000",
+        "cosine": 1.0,
+        "norm_ref": 0.41220411512833044,
+        "norm_native": 0.41220411512833044,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_both_s001",
+        "cosine": 1.0,
+        "norm_ref": 0.8357052359758796,
+        "norm_native": 0.8357052359758796,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_cfg_s001",
+        "cosine": 0.9999999999999999,
+        "norm_ref": 0.5969823507124766,
+        "norm_native": 0.5969823507124766,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_z_s001",
+        "cosine": 1.0,
+        "norm_ref": 0.6611016875713499,
+        "norm_native": 0.6611016875713499,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_latent_frame0",
+        "cosine": 1.0,
+        "norm_ref": 0.6611016875713499,
+        "norm_native": 0.6611016875713499,
+        "max_abs": 0.0
+      }
+    ]
+  },
+  "disk_available_GiB_after": 17,
+  "minimum_reserve_GiB": 12,
+  "gpu_or_real_model_runs": 0,
+  "limitations": [
+    "Native captured inputs not available; earliest native divergence remains unmeasured",
+    "7B head replay memory feasibility unestablished",
+    "Upstream LM/prefill replay not implemented"
+  ]
+}

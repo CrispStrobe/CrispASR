@@ -19,6 +19,74 @@ run_one = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(run_one)
 
 
+class VibeVoiceBoundaryTests(unittest.TestCase):
+    def test_voice_diff_rejects_scale_and_shape_errors_and_missing_stages(self):
+        import numpy as np
+        spec = importlib.util.spec_from_file_location("voice_diff", ROOT / "tools/diff_vibevoice_tts.py")
+        diff = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(diff)
+        for defect in ("none", "scale", "shape", "missing"):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as temporary:
+                ref, native = Path(temporary) / "ref", Path(temporary) / "native"
+                ref.mkdir()
+                native.mkdir()
+                for ref_name, native_name, _, _ in diff.VOICE_STAGES:
+                    np.asarray([1, 2, 3], dtype="<f4").tofile(ref / f"{ref_name}.bin")
+                    if defect != "missing":
+                        values = [2, 4, 6] if defect == "scale" else [1, 2] if defect == "shape" else [1, 2, 3]
+                        np.asarray(values, dtype="<f4").tofile(native / f"{native_name}.bin")
+                with patch.object(sys, "argv", ["diff", str(ref), str(native), "--voice-only"]), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(diff.main(), 0 if defect == "none" else 1)
+
+
+class SpeakerConditioningTests(unittest.TestCase):
+    def test_requested_speaker_gate_cannot_be_advisory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary)
+            commands = []
+            def execute(argv, **kwargs):
+                commands.append(argv)
+                if "--tts-output" in argv:
+                    Path(argv[argv.index("--tts-output") + 1]).write_bytes(b"RIFF" + b"0" * 2048)
+                return subprocess.CompletedProcess(argv, 0, "The quick brown fox", "")
+            manifest = {"backends": [{"name": "asr", "backend_id": "whisper",
+                                      "gguf": {"repo": "r", "file": "asr", "revision": "p"}}],
+                        "tts_backends": [{"name": "clone", "gguf": {"repo": "r", "file": "tts", "revision": "p"},
+                                          "voice": {"repo": "r", "file": "ref.wav", "revision": "p"},
+                                          "tts_phrase": "The quick brown fox", "roundtrip_asr_backend": "asr",
+                                          "wer_max": 0, "advisory": True,
+                                          "tts_extra_args": ["--backend", "original"],
+                                          "speaker_conditioning": {"baseline_backend": "generic"}}]}
+            with patch.object(run_one, "hf_download", side_effect=lambda repo, file, revision, directory: work / file), \
+                    patch.object(run_one, "_run_captured", side_effect=execute), \
+                    patch.object(run_one, "speaker_conditioning_gate", return_value=(False, {"delta": 0})), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(run_one.tts_roundtrip_for("clone", manifest, work, Path("cli")), 1)
+            self.assertNotIn("--voice", commands[-1])
+            self.assertEqual(commands[-1].count("--backend"), 1)
+            self.assertEqual(commands[-1][commands[-1].index("--backend") + 1], "generic")
+
+    def test_ignored_voice_fails_even_when_output_is_non_silent(self):
+        self._speaker_control([1.0, 0.0], [1.0, 0.0], False)
+
+    def test_cloning_must_move_toward_reference(self):
+        self._speaker_control([1.0, 0.0], [0.0, 1.0], True)
+
+    def test_silent_reference_fails_closed(self):
+        self._speaker_control([1.0, 0.0], [0.0, 1.0], False, silent=True)
+
+    def _speaker_control(self, cloned, baseline, expected, silent=False):
+        import types
+        import numpy as np
+        values = iter(np.asarray(v, dtype=np.float32) for v in ([1.0, 0.0], cloned, baseline))
+        fake = types.SimpleNamespace(
+            VoiceEncoder=lambda device: types.SimpleNamespace(embed_utterance=lambda audio: next(values)),
+            preprocess_wav=lambda path: np.full(8000, 0.0 if silent else 0.1, dtype=np.float32))
+        with patch.dict(sys.modules, {"resemblyzer": fake}):
+            passed, _ = run_one.speaker_conditioning_gate(Path("r"), Path("c"), Path("b"))
+        self.assertEqual(passed, expected)
+
+
 class RegressionDiagnosticsTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "fake CLI uses a POSIX shebang and chmod")
     def test_failed_tts_roundtrip_keeps_commands_and_wav_after_work_cleanup(self):

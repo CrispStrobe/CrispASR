@@ -1,297 +1,216 @@
 #!/usr/bin/env python3
-"""Dump VibeVoice-1.5B voice-clone reference features (acoustic + semantic).
+"""Dump base VibeVoice serving voice conditioning from local source weights.
 
-Runs the official VibeVoice pipeline on a reference WAV and dumps the
-intermediate encoder/connector outputs so they can be compared with the
-C++ implementation via crispasr-diff or manual cosine comparison.
+The serving method supplies acoustic posterior sampling, scaling and connection.
+Only encoder/connector tensors are read, never whole shards or the LM/decoder.
+Requires an upstream checkout containing modeling_vibevoice_inference.py:
 
-Dumped stages (all little-endian float32):
+  CRISPASR_VIBEVOICE_SRC=/path/to/VibeVoice python \
+    tools/vibevoice_tts_ref_voice_clone.py --model /path/to/checkpoint \
+    --voice reference.wav --output-dir voice-ref
 
-  voice_at_enc_mean.bin     [T_at, vae_dim_acoustic]   acoustic encoder mean
-  voice_at_scaled.bin       [T_at, vae_dim_acoustic]   after (x + bias) * scale
-  voice_at_conn.bin         [T_at, d_lm]               acoustic connector output
-  voice_st_enc_mean.bin     [T_st, vae_dim_semantic]    semantic encoder mean
-  voice_st_conn.bin         [T_st, d_lm]               semantic connector output
-  voice_combined.bin        [T, d_lm]                   acoustic + semantic (final)
-  tts_voice_embeds.bin      [T, d_lm]                   same as voice_combined (for diff harness compat)
-
-Usage:
-  python tools/vibevoice_tts_ref_voice_clone.py \
-      --model microsoft/VibeVoice-1.5B \
-      --voice samples/jfk.wav \
-      --output-dir /tmp/vv_voice_ref
+--mean-acoustic disables posterior noise for a controlled native mean-path
+comparison. It is a diagnostic variation, not the default serving recipe.
+Compare dumps with tools/diff_vibevoice_tts.py REF_DIR NATIVE_DIR --voice-only;
+the input PCM and all four conditioning stages are required by that mode.
 """
 from __future__ import annotations
 
 import argparse
+import ast
+import gc
 import json
+import logging
 import math
 import os
-import struct
-import wave
+import typing
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Optional, Union
 
 import numpy as np
 
 
-def vibevoice_modular_dir():
-    """Locate installed source without executing the package's broken init."""
-    import importlib.util
-    spec = importlib.util.find_spec("vibevoice")
-    if spec is None or not spec.submodule_search_locations:
-        raise ImportError("Install the upstream vibevoice package before dumping references")
-    return Path(next(iter(spec.submodule_search_locations))) / "modular"
-
-# Patch transformers AutoModel.register to allow re-registration (vibevoice package conflict)
-def _patch_automodel_register():
-    from transformers.models.auto import auto_factory
-    _orig = auto_factory._LazyAutoMapping.register
-    def _patched(self, key, value, exist_ok=False):
-        return _orig(self, key, value, exist_ok=True)
-    auto_factory._LazyAutoMapping.register = _patched
-_patch_automodel_register()
-
-
-def dump_f32(path: Path, arr: np.ndarray):
-    arr = np.ascontiguousarray(arr, dtype=np.float32)
-    arr.tofile(str(path))
-    print(f"  wrote {path.name}: {arr.shape} float32 ({arr.nbytes} bytes)")
-
-
-def load_wav_mono_24k(path: str) -> np.ndarray:
-    """Load a WAV file and return mono float32 PCM at 24 kHz."""
-    import torch
-    import torchaudio
-
-    wav, sr = torchaudio.load(path)
-    if wav.shape[0] > 1:
-        wav = wav.mean(dim=0, keepdim=True)
-    if sr != 24000:
-        wav = torchaudio.functional.resample(wav, sr, 24000)
-    return wav  # [1, N_samples]
-
-
-def normalize_audio(wav: np.ndarray, target_db: float = -25.0) -> np.ndarray:
-    """Normalize audio to target dB FS (matching VibeVoice's AudioNormalizer)."""
-    rms = np.sqrt(np.mean(wav ** 2))
-    if rms < 1e-10:
-        return wav
-    target_rms = 10 ** (target_db / 20.0)
-    scalar = target_rms / rms
-    # Clamp to [-1, 1]
-    result = wav * scalar
-    result = np.clip(result, -1.0, 1.0)
-    return result
+def source_definition(path, name, namespace, parent=None):
+    """Execute an actual upstream definition without package import side effects."""
+    body = ast.parse(path.read_text(), filename=str(path)).body
+    if parent:
+        body = next(n for n in body if isinstance(n, (ast.ClassDef, ast.FunctionDef)) and n.name == parent).body
+    node = next(n for n in body if isinstance(n, (ast.ClassDef, ast.FunctionDef)) and n.name == name)
+    module = ast.Module(body=[node], type_ignores=[])
+    exec(compile(ast.fix_missing_locations(module), str(path), "exec"), namespace)
+    return namespace[name]
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", default="microsoft/VibeVoice-1.5B")
-    parser.add_argument("--voice", required=True, help="Reference WAV for voice cloning")
-    parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--no-normalize", action="store_true",
-                        help="Skip audio normalization")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", required=True, type=Path)
+    parser.add_argument("--voice", required=True, type=Path)
+    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--source", type=Path, default=os.environ.get("CRISPASR_VIBEVOICE_SRC"))
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--mean-acoustic", action="store_true")
+    parser.add_argument("--semantic-diagnostics", action="store_true")
+    parser.add_argument("--no-normalize", action="store_true")
+    parser.add_argument("--gguf-weights", type=Path,
+                        help="controlled comparison using dequantized native GGUF encoder/connector weights")
+    parser.add_argument("--effective-pcm", type=Path,
+                        help="controlled comparison using native effective 24kHz mono raw float32 PCM")
     args = parser.parse_args()
+    if args.source is None:
+        parser.error("--source or CRISPASR_VIBEVOICE_SRC must point to the upstream source checkout")
 
     import torch
-    from safetensors.torch import load_file
-
-    out = Path(args.output_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    model_path = Path(args.model)
-
-    # ── 1. Load config ──────────────────────────────────────────────────
-    cfg_path = model_path / "config.json"
-    with open(cfg_path) as f:
-        cfg = json.load(f)
-
-    dec_cfg = cfg.get("decoder_config", {})
-    at_cfg = cfg.get("acoustic_tokenizer_config", cfg.get("acoustic_tokenizer", {}))
-    st_cfg = cfg.get("semantic_tokenizer_config", cfg.get("semantic_tokenizer", {}))
-
-    d_lm = dec_cfg["hidden_size"]
-    vae_dim_at = at_cfg.get("vae_dim", 64)
-    vae_dim_st = st_cfg.get("vae_dim", 128)
-
-    print(f"config: d_lm={d_lm}, vae_dim_acoustic={vae_dim_at}, vae_dim_semantic={vae_dim_st}")
-
-    # ── 2. Load model ───────────────────────────────────────────────────
-    print(f"loading model from {model_path}")
-
-    # Load weights directly from safetensors (avoids vibevoice package version conflicts)
-    from safetensors.torch import load_file as load_safetensors
-
-    index_path = model_path / "model.safetensors.index.json"
-    if index_path.exists():
-        with open(index_path) as f2:
-            weight_map = json.load(f2)["weight_map"]
-        # Only load encoder + connector shards (skip the heavy LM layers)
-        needed_prefixes = ("model.acoustic_tokenizer.encoder.",
-                          "model.semantic_tokenizer.encoder.",
-                          "model.acoustic_connector.", "model.semantic_connector.")
-        needed_shards = set()
-        for k, shard in weight_map.items():
-            if any(k.startswith(p) for p in needed_prefixes) or k in ("model.speech_scaling_factor", "model.speech_bias_factor"):
-                needed_shards.add(shard)
-        state_dict = {}
-        for shard_name in sorted(needed_shards):
-            print(f"  loading shard: {shard_name}")
-            sd = load_safetensors(str(model_path / shard_name))
-            state_dict.update(sd)
-    else:
-        state_dict = load_safetensors(str(model_path / "model.safetensors"))
-    print(f"  {len(state_dict)} tensors loaded")
-
-    # Build a minimal model object with just what we need
-    class MinimalModel:
-        pass
-    model = MinimalModel()
-    model_inner = MinimalModel()
-    model.model = model_inner
-
-    # Extract scaling factors
-    sf_t = state_dict.get("model.speech_scaling_factor")
-    bf_t = state_dict.get("model.speech_bias_factor")
-    model_inner.speech_scaling_factor = sf_t.float() if sf_t is not None else torch.tensor(0.196)
-    model_inner.speech_bias_factor = bf_t.float() if bf_t is not None else torch.tensor(-0.049)
-
-    # Import model classes directly (bypass vibevoice.__init__ which triggers broken imports)
+    import librosa
+    from safetensors import safe_open
+    from reference_backends import vibevoice as ref
     import importlib.util
-    _vv_pkg = str(vibevoice_modular_dir())
 
-    spec_tok = importlib.util.spec_from_file_location(
-        "vibevoice.modular.modular_vibevoice_tokenizer", f"{_vv_pkg}/modular_vibevoice_tokenizer.py")
-    mod_tok = importlib.util.module_from_spec(spec_tok)
-    spec_tok.loader.exec_module(mod_tok)
+    print("loading upstream encoder definitions", flush=True)
+    modular = args.source / "vibevoice" / "modular"
+    tokenizer_path = modular / "modular_vibevoice_tokenizer.py"
+    # Execute the original nn.Module definitions without importing the unrelated
+    # Transformers model/AutoModel registry or optional GPU compiler plugins.
+    namespace = {"torch": torch, "nn": torch.nn, "F": torch.nn.functional,
+                 "np": np, "math": math, "tp": typing, "partial": partial,
+                 "Optional": Optional, "Union": Union, "Dict": dict, "List": list,
+                 "Tuple": tuple, "APEX_AVAILABLE": False,
+                 "logger": logging.getLogger("vibevoice-reference"),
+                 "ACT2FN": {"gelu": torch.nn.functional.gelu},
+                 "CONV_NORMALIZATIONS": frozenset(("none", "weight_norm", "spectral_norm",
+                                                  "time_layer_norm", "layer_norm", "time_group_norm"))}
+    definitions = []
+    for node in ast.parse(tokenizer_path.read_text()).body:
+        if isinstance(node, ast.ClassDef) and node.name == "TokenizerDecoder":
+            break
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+            definitions.append(node)
+    exec(compile(ast.fix_missing_locations(ast.Module(body=definitions, type_ignores=[])),
+                 str(tokenizer_path), "exec"), namespace)
+    enc_cls = namespace["TokenizerEncoder"]
+    transformers_dir = Path(importlib.util.find_spec("transformers").origin).parent
+    LlamaRMSNorm = source_definition(transformers_dir / "models/llama/modeling_llama.py", "LlamaRMSNorm",
+                                     {"nn": torch.nn, "torch": torch,
+                                      "use_kernel_forward_from_hub": lambda name: lambda cls: cls})
+    connector_cls = source_definition(modular / "modeling_vibevoice.py", "SpeechConnector",
+                                      {"nn": torch.nn, "LlamaRMSNorm": LlamaRMSNorm})
+    posterior_cls = source_definition(modular / "modular_vibevoice_tokenizer.py",
+                                      "VibeVoiceTokenizerEncoderOutput",
+                                      {"torch": torch, "Optional": Optional, "Union": Union,
+                                       "dataclass": __import__("dataclasses").dataclass})
+    serving_method = source_definition(modular / "modeling_vibevoice_inference.py",
+                                       "_process_speech_inputs", {"torch": torch},
+                                       "VibeVoiceForConditionalGenerationInference")
+    normalizer_cls = source_definition(args.source / "vibevoice" / "processor" / "audio_utils.py",
+                                       "AudioNormalizer", {"np": np, "Optional": Optional})
+    cfg = json.loads((args.model / "config.json").read_text())
+    output_dim = cfg["decoder_config"]["hidden_size"]
 
-    spec_cfg = importlib.util.spec_from_file_location(
-        "vibevoice.modular.configuration_vibevoice", f"{_vv_pkg}/configuration_vibevoice.py")
-    mod_cfg = importlib.util.module_from_spec(spec_cfg)
-    spec_cfg.loader.exec_module(mod_cfg)
+    gguf_tensors = None
+    if args.gguf_weights:
+        import gguf
+        from gguf.quants import dequantize
+        reader = gguf.GGUFReader(str(args.gguf_weights))
+        gguf_tensors = {tensor.name: tensor for tensor in reader.tensors}
+        converter = Path(__file__).resolve().parents[1] / "models/convert-vibevoice-to-gguf.py"
+        shorten = source_definition(converter, "shorten", {}, parent="main")
+        source_keys = json.loads((args.model / "model.safetensors.index.json").read_text())["weight_map"]
 
-    spec_model = importlib.util.spec_from_file_location(
-        "vibevoice.modular.modeling_vibevoice", f"{_vv_pkg}/modeling_vibevoice.py")
-    mod_model = importlib.util.module_from_spec(spec_model)
-    spec_model.loader.exec_module(mod_model)
+    def gguf_tensor(key):
+        tensor = gguf_tensors[shorten(key)]
+        array = dequantize(tensor.data, tensor.tensor_type).reshape(tuple(reversed(tensor.shape)))
+        return torch.from_numpy(np.array(array, dtype=np.float32, copy=True))
 
-    # Build acoustic tokenizer encoder (σ-VAE)
-    at_cfg_dict = cfg.get("acoustic_tokenizer_config", {})
-    at_config = mod_cfg.VibeVoiceAcousticTokenizerConfig(**at_cfg_dict)
-    at_model = mod_tok.VibeVoiceAcousticTokenizerModel(at_config).float().eval()
-    at_state = {k.replace("model.acoustic_tokenizer.", ""): v for k, v in state_dict.items()
-                if k.startswith("model.acoustic_tokenizer.")}
-    at_model.load_state_dict(at_state, strict=False)
-    model_inner.acoustic_tokenizer = at_model
+    def load_state(prefix):
+        if gguf_tensors is None:
+            return ref._lazy_state(args.model, prefix)
+        return {key[len(prefix):]: gguf_tensor(key) for key in source_keys if key.startswith(prefix)}
 
-    # Build semantic tokenizer encoder
-    st_cfg_dict = cfg.get("semantic_tokenizer_config", {})
-    st_config = mod_cfg.VibeVoiceSemanticTokenizerConfig(**st_cfg_dict)
-    st_model = mod_tok.VibeVoiceSemanticTokenizerModel(st_config).float().eval()
-    st_state = {k.replace("model.semantic_tokenizer.", ""): v for k, v in state_dict.items()
-                if k.startswith("model.semantic_tokenizer.")}
-    st_model.load_state_dict(st_state, strict=False)
-    model_inner.semantic_tokenizer = st_model
+    def scalar(key):
+        if gguf_tensors is not None:
+            return gguf_tensor(key)
+        index_path = args.model / "model.safetensors.index.json"
+        shard = (json.loads(index_path.read_text())["weight_map"][key] if index_path.exists()
+                 else "model.safetensors")
+        with safe_open(str(args.model / shard), framework="pt") as f:
+            return f.get_tensor(key).float()
 
-    # Build connectors (simple FC1 → RMSNorm → FC2)
-    SpeechConnector = mod_model.SpeechConnector
-    ac_conn = SpeechConnector(vae_dim_at, d_lm).float().eval()
-    ac_state = {k.replace("model.acoustic_connector.", ""): v for k, v in state_dict.items()
-                if k.startswith("model.acoustic_connector.")}
-    ac_conn.load_state_dict(ac_state)
-    model_inner.acoustic_connector = ac_conn
-
-    se_conn = SpeechConnector(vae_dim_st, d_lm).float().eval()
-    se_state = {k.replace("model.semantic_connector.", ""): v for k, v in state_dict.items()
-                if k.startswith("model.semantic_connector.")}
-    se_conn.load_state_dict(se_state)
-    model_inner.semantic_connector = se_conn
-    print("  model components loaded successfully")
-
-    # ── 3. Load and normalize reference audio ────────────────────────────
-    print(f"loading voice reference: {args.voice}")
-    wav_tensor = load_wav_mono_24k(args.voice)  # [1, N]
-
+    audio, _ = librosa.load(str(args.voice), sr=24000, mono=True)
     if not args.no_normalize:
-        # Apply the same normalization as the C++ code
-        wav_np = wav_tensor.squeeze().numpy()
-        wav_np = normalize_audio(wav_np, target_db=-25.0)
-        wav_tensor = torch.from_numpy(wav_np).unsqueeze(0)  # [1, N]
+        audio = normalizer_cls()(audio)
+    original_normalized_audio = audio.copy()
+    if args.effective_pcm:
+        audio = np.fromfile(args.effective_pcm, dtype="<f4")
+    at_cfg = cfg["acoustic_tokenizer_config"]
 
-    n_samples = wav_tensor.shape[1]
-    print(f"  samples: {n_samples} ({n_samples / 24000:.2f}s @ 24kHz)")
+    def run_encoder(raw, prefix):
+        # These fields mirror the upstream acoustic/semantic tokenizer constructors.
+        config = SimpleNamespace(**raw)
+        config.dimension = raw["vae_dim"]
+        config.n_filters = raw["encoder_n_filters"]
+        config.ratios = raw["encoder_ratios"]
+        config.depths = ([int(d) for d in raw["encoder_depths"].split("-")]
+                         if isinstance(raw["encoder_depths"], str) else raw["encoder_depths"])
+        config.norm = raw["conv_norm"]
+        config.bias = raw["conv_bias"]
+        encoder = enc_cls(config).eval()
+        encoder.load_state_dict(load_state(prefix), strict=True)
+        with torch.no_grad():
+            result = encoder(torch.from_numpy(audio)[None, None]).permute(0, 2, 1)[0].numpy().copy()
+        del encoder
+        gc.collect()
+        return result
 
-    # ── 4. Run acoustic tokenizer encoder ─────────────────────────────────
-    print("running acoustic tokenizer encoder...")
+    print("running upstream acoustic encoder", flush=True)
+    mean = run_encoder(at_cfg, "model.acoustic_tokenizer.encoder.")
+    acoustic_connector = connector_cls(at_cfg["vae_dim"], output_dim).eval()
+    acoustic_connector.load_state_dict(load_state("model.acoustic_connector."), strict=True)
+
+    class AcousticTokenizer:
+        std_dist_type = "none" if args.mean_acoustic else at_cfg.get("std_dist_type", "fix")
+
+        def encode(self, audio):
+            # The actual upstream encoder has already run, then been freed.
+            return posterior_cls(mean=torch.from_numpy(mean)[None], std=torch.tensor(at_cfg["fix_std"]))
+
+    model = SimpleNamespace(acoustic_tokenizer=AcousticTokenizer(),
+                            acoustic_connector=acoustic_connector,
+                            speech_bias_factor=scalar("model.speech_bias_factor"),
+                            speech_scaling_factor=scalar("model.speech_scaling_factor"))
+    torch.manual_seed(args.seed)
     with torch.no_grad():
-        at_output = model.model.acoustic_tokenizer.encode(wav_tensor.unsqueeze(1))  # [1, 1, N]
-        at_mean = at_output.mean  # [1, T, vae_dim_at]
-
-    at_mean_np = at_mean.squeeze(0).numpy()  # [T, vae_dim_at]
-    T_at = at_mean_np.shape[0]
-    print(f"  acoustic encoder mean: [{T_at}, {vae_dim_at}]")
-    dump_f32(out / "voice_at_enc_mean.bin", at_mean_np)
-
-    # ── 5. Apply scaling (acoustic only) ─────────────────────────────────
-    sf = model.model.speech_scaling_factor.item()
-    bf = model.model.speech_bias_factor.item()
-    print(f"  scaling: sf={sf:.6f}, bf={bf:.6f}")
-
-    at_scaled = (at_mean + bf) * sf
-    at_scaled_np = at_scaled.squeeze(0).numpy()
-    dump_f32(out / "voice_at_scaled.bin", at_scaled_np)
-
-    # ── 6. Run acoustic connector ─────────────────────────────────────────
-    print("running acoustic connector...")
-    with torch.no_grad():
-        at_conn = model.model.acoustic_connector(at_scaled)  # [1, T, d_lm]
-
-    at_conn_np = at_conn.squeeze(0).numpy()  # [T, d_lm]
-    print(f"  acoustic connector: [{at_conn_np.shape[0]}, {at_conn_np.shape[1]}]")
-    dump_f32(out / "voice_at_conn.bin", at_conn_np)
-
-    # ── 7. Run semantic tokenizer encoder ─────────────────────────────────
-    print("running semantic tokenizer encoder...")
-    with torch.no_grad():
-        st_output = model.model.semantic_tokenizer.encode(wav_tensor.unsqueeze(1))
-        st_mean = st_output.mean  # [1, T, vae_dim_st]
-
-    st_mean_np = st_mean.squeeze(0).numpy()
-    T_st = st_mean_np.shape[0]
-    print(f"  semantic encoder mean: [{T_st}, {vae_dim_st}]")
-    dump_f32(out / "voice_st_enc_mean.bin", st_mean_np)
-
-    # ── 8. Run semantic connector (NO scaling) ────────────────────────────
-    print("running semantic connector...")
-    with torch.no_grad():
-        st_conn = model.model.semantic_connector(st_mean)  # [1, T, d_lm]
-
-    st_conn_np = st_conn.squeeze(0).numpy()
-    print(f"  semantic connector: [{st_conn_np.shape[0]}, {st_conn_np.shape[1]}]")
-    dump_f32(out / "voice_st_conn.bin", st_conn_np)
-
-    # ── 9. Combine: element-wise sum ──────────────────────────────────────
-    if T_at != T_st:
-        print(f"  WARNING: frame mismatch T_at={T_at} T_st={T_st}")
-        T = min(T_at, T_st)
-        at_conn_np = at_conn_np[:T]
-        st_conn_np = st_conn_np[:T]
-    else:
-        T = T_at
-
-    combined = at_conn_np + st_conn_np
-    print(f"  combined (acoustic + semantic): [{T}, {d_lm}]")
-    dump_f32(out / "voice_combined.bin", combined)
-    dump_f32(out / "tts_voice_embeds.bin", combined)  # compat name for diff harness
-
-    # ── Summary ──────────────────────────────────────────────────────────
-    at_rms = np.sqrt(np.mean(at_conn_np ** 2))
-    st_rms = np.sqrt(np.mean(st_conn_np ** 2))
-    cb_rms = np.sqrt(np.mean(combined ** 2))
-    print(f"\n  acoustic RMS: {at_rms:.6f}")
-    print(f"  semantic RMS: {st_rms:.6f}")
-    print(f"  combined RMS: {cb_rms:.6f}")
-    print(f"  semantic/acoustic ratio: {st_rms / at_rms:.4f}")
-    print(f"\nDone. {T} voice frames dumped to {out}")
+        scaled, connected = serving_method(SimpleNamespace(model=model),
+                                            torch.from_numpy(audio)[None],
+                                            torch.ones((1, math.ceil(len(audio) / 3200)), dtype=torch.bool))
+    stages = {"tts_voice_original_normalized_pcm": original_normalized_audio,
+              "tts_voice_encoder_input": audio,
+              "tts_voice_acoustic_mean": mean,
+              "tts_voice_acoustic_scaled": scaled[0].numpy(),
+              "tts_voice_acoustic_connected": connected.numpy(),
+              "tts_voice_embeds": connected.numpy()}
+    if args.semantic_diagnostics:
+        st_cfg = cfg["semantic_tokenizer_config"]
+        semantic_mean = run_encoder(st_cfg, "model.semantic_tokenizer.encoder.")
+        semantic_connector = connector_cls(st_cfg["vae_dim"], output_dim).eval()
+        semantic_connector.load_state_dict(load_state("model.semantic_connector."), strict=True)
+        with torch.no_grad():
+            semantic = semantic_connector(torch.from_numpy(semantic_mean)[None])[0].numpy()
+        stages["diagnostic_semantic_mean"] = semantic_mean
+        stages["diagnostic_semantic_connected"] = semantic
+        stages["diagnostic_legacy_dual_sum"] = connected.numpy() + semantic
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    shapes = {}
+    for name, value in stages.items():
+        array = np.ascontiguousarray(value, dtype="<f4")
+        array.tofile(args.output_dir / f"{name}.bin")
+        shapes[name] = list(array.shape)
+        print(f"{name}: {array.shape}", flush=True)
+    (args.output_dir / "shapes.json").write_text(json.dumps({
+        "conditioning": "acoustic-only", "posterior": AcousticTokenizer.std_dist_type,
+        "seed": args.seed, "sample_rate": 24000,
+        "weights": "native-gguf" if args.gguf_weights else "original-checkpoint",
+        "pcm": "native-effective" if args.effective_pcm else "original-preprocessing", "stages": shapes}, indent=2) + "\n")
 
 
 if __name__ == "__main__":
