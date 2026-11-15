@@ -43,7 +43,18 @@
   cgroup capacity with 29.98 GiB effective availability. Corrected input transport
   is accepted as version 2 (998,636-byte source); all 123 operand hashes must
   verify before the first numerical stage.
+  Version 2 verified every operand but refused before math because this CPU
+  image lacks `/usr/bin/time`; the corrected launch uses the same Python
+  command directly with explicitly cumulative stdlib child peak RSS. Version 3
+  is accepted (998,783-byte source); 1800-second stage caps and >22 GiB
+  effective-memory/cgroup guards remain unchanged.
   [Facility receipt](docs/vibevoice/retained-cpu-facility-2026-11-15.json).
+- Bounded local lookup of only the 39 exact Q4_K embedding rows is bit-exact
+  against actual retained native effective input: 559,104 bytes, zero unequal
+  values, max absolute difference and relative L2 both zero. No full-model
+  construction/inference or new GPU call. This rules out the initial embedding
+  boundary for this capture; first divergent block/head remains unmeasured.
+  [Input receipt](docs/vibevoice/retained-embedding-control-2026-11-15.json).
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)
 
