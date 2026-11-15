@@ -898,3 +898,17 @@ instructions remain in gitignored local Markdown.
   [Receipt](docs/vibevoice/first-frame-replay-tiny-control-2026-11-15.json).
 - This is control plumbing only. No native/7B model or GPU run occurred; upstream
   prefill replay and earliest native numerical divergence remain unmeasured.
+
+### Issue #589 39-token upstream prefill preparation — tiny controls (2026-11-15)
+
+- Existing `diag/589-first-frame`: added one-layer-at-a-time actual Qwen2 replay
+  from same GGUF values, original decoder config, exact effective-input gate and
+  chunked LM head. Native runtime/capture pin remains unchanged.
+- Tiny39-token/two-layer full-vs-streamed upstream raw blocks are bit-exact.
+  Original F32/default-flash native test FAIL remains recorded; matching F16 KV
+  plus retained nonflash native outputs passes all four hidden/logit boundaries
+  with relative L2 below3.5e-7. Negative .25 perturbation detected.
+  [Receipt](docs/vibevoice/prefill-tiny-control-2026-11-15.json).
+- No7B/GPU/Vulkan job or production-default change. Raw native block taps are
+  still absent; exact insertion sites/layout and real7B limitations are in the
+  [prefill replay note](docs/vibevoice/prefill-replay.md).
