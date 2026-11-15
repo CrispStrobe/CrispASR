@@ -43,7 +43,24 @@ def compare_files(upstream_path, native_path):
                 max_abs=float(np.max(np.abs(x-y))))
 
 
-def replay(model_path, config, inputs, output, prompt_ids=None):
+def rounded_kv_cache(config):
+    import torch
+    from transformers.cache_utils import DynamicCache
+    class RoundedKV(DynamicCache):
+        def update(self, key_states, value_states, layer_idx, cache_kwargs=None):
+            # Match native F16 storage after RoPE for K and before attention for V.
+            # Keep upstream attention in F32; this does not reproduce native flash
+            # accumulation. A fresh cache is used for each layer's sole prefill.
+            key16, value16 = key_states.half(), value_states.half()
+            if not torch.isfinite(key16).all() or not torch.isfinite(value16).all():
+                raise ValueError('nonfinite or overflowing F16 K/V')
+            return super().update(key16.float(), value16.float(), layer_idx, cache_kwargs)
+    return RoundedKV(config=config)
+
+
+def replay(model_path, config, inputs, output, prompt_ids=None, kv_precision='f32'):
+    if kv_precision not in ('f32', 'f16'):
+        raise ValueError('kv_precision must be f32 or f16')
     import torch
     import gguf
     from gguf.quants import dequantize
@@ -121,8 +138,9 @@ def replay(model_path, config, inputs, output, prompt_ids=None):
             with torch.device('meta'):
                 layer = upstream.Qwen2DecoderLayer(config, index)
             load(layer, f'lm.layers.{index}.')
+            cache = rounded_kv_cache(config) if kv_precision == 'f16' else None
             hidden = layer(hidden, attention_mask=mask, position_ids=positions,
-                           past_key_values=None, use_cache=False, cache_position=cache_position,
+                           past_key_values=cache, use_cache=cache is not None, cache_position=cache_position,
                            position_embeddings=position_embeddings)
             raw = hidden[0].numpy()
             raw.astype('<f4').tofile(output / f'prefill_block_{index:03}.bin')
@@ -130,7 +148,7 @@ def replay(model_path, config, inputs, output, prompt_ids=None):
             normalized.astype('<f4').tofile(output / f'prefill_truncated_norm_{index:03}.bin')
             rows.append(dict(block=index, raw_norm=float(np.linalg.norm(raw.astype('float64'))),
                              last_normalized_norm=float(np.linalg.norm(normalized.astype('float64')))))
-            del layer
+            del layer, cache
             gc.collect()
         last = norm(hidden)[0, -1]
         last.numpy().astype('<f4').tofile(output / 'tts_prefill_hidden.bin')
@@ -142,11 +160,13 @@ def replay(model_path, config, inputs, output, prompt_ids=None):
             del chunk
         np.concatenate(logits).astype('<f4').tofile(output / 'tts_prefill_logits.bin')
     receipt = dict(scope='actual upstream layer-at-a-time 39-token prefill; no real-model/native parity claim',
-        kv_precision='F32 upstream; native base F16-KV matching mode not implemented',
+        kv_precision=kv_precision,
+        kv_rounding=('post-RoPE K and unrotated V rounded through F16, then F32 upstream eager attention'
+                     if kv_precision == 'f16' else 'unrounded upstream F32 K/V'),
         weights_sha256=sha(model_path), upstream_qwen2_sha256=sha(inspect.getfile(upstream)),
         config=config.to_dict(), largest_dequantized_layer_bytes=max(layer_sizes),
         head_row_chunk=256, raw_per_block_bytes=inputs.nbytes, blocks=rows, embedding_gate=embedding_gate,
-        native_taps='missing: capture effective input and post-residual raw block outputs to localize native divergence')
+        native_taps='compare captured effective input and gated post-residual raw block outputs; missing files remain explicit')
     (output / 'prefill-replay.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
 
@@ -158,8 +178,10 @@ def main():
     parser.add_argument('--capture', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--expected-sha256', required=True)
+    parser.add_argument('--kv-precision', choices=('f32','f16'), default='f32',
+                        help='f32 default control; f16 rounds K/V to match native base storage, not flash arithmetic')
     args = parser.parse_args()
-    print('Prefill replay uses upstream F32 KV; a matching native F16-KV mode is not implemented. Interpret precision differences separately.', file=sys.stderr)
+    print('Prefill replay K/V mode: '+args.kv_precision+'; upstream eager attention does not reproduce native flash accumulation.', file=sys.stderr)
     if sha(args.gguf) != args.expected_sha256:
         parser.error('GGUF weight identity mismatch')
     from transformers import Qwen2Config
@@ -175,7 +197,7 @@ def main():
     if ids_path.stat().st_size != 39 * 4:
         parser.error('require exact39 prompt IDs')
     prompt_ids = np.fromfile(ids_path, dtype='<i4')
-    report = replay(args.gguf, config, inputs, args.output, prompt_ids)
+    report = replay(args.gguf, config, inputs, args.output, prompt_ids, args.kv_precision)
     comparisons = []
     for name in [f'prefill_block_{i:03}' for i in range(config.num_hidden_layers)] + ['tts_prefill_hidden', 'tts_prefill_logits']:
         native_name = 'tts_' + name if name.startswith('prefill_block_') else name

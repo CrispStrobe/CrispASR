@@ -19,11 +19,18 @@ outputs. A temporary dequantization copy of the current tensor, Torch runtime
 and intermediate activations are additional memory. These are checked logical
 bounds; a real 7B replay has not been executed or given an RSS qualification.
 
-The real replay currently uses upstream **F32 K/V**. It does not yet implement
-the tiny control's qualified F16-K/V rounding mode. The CLI prints that limitation
-and the result receipt records it, so raw native F16-cache differences must not
-be called a port defect or matched-precision comparison. The tiny matched-control
-results below do not qualify this optional mode in the real replay tool.
+`--kv-precision f32` is the unchanged default upstream control.
+`--kv-precision f16` explicitly rounds post-RoPE K and unrotated V through F16,
+then evaluates upstream eager attention in F32. It uses the qualified rounded
+DynamicCache with a fresh cache for each layer's sole prefill, discarded before
+the next layer. This matches native base KV storage values, not native flash
+attention's accumulation. Both modes record their precision in the receipt.
+Nonfinite/overflowing F16 K/V is refused rather than silently compared.
+
+The [tiny mode receipt](prefill-kv-mode-control-2026-11-15.json) records exact
+full-vs-streamed rounded raw blocks, exact retained per-depth normalized hidden
+and final logits, unchanged default F32 raw blocks, four refusal controls and a
+0.25 perturbation. This does not establish real7B or GPU parity.
 
 Prepared command, after obtaining a matching native capture and original model
 configuration (this preparation does not launch it):
@@ -33,6 +40,7 @@ PYTHONNOUSERSITE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   "$CRISPASR_LOCAL_PYTHON" tools/vibevoice_prefill_replay.py \
   --gguf "$CRISPASR_7B_Q4_K" \
   --expected-sha256 ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3 \
+  --kv-precision f16 \
   --config "$CRISPASR_ORIGINAL_CONFIG" \
   --capture "$CRISPASR_CAPTURE_ROOT/neutral-seed42/native" \
   --output "$CRISPASR_CAPTURE_ROOT/neutral-seed42/upstream-prefill"

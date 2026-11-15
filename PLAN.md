@@ -938,3 +938,13 @@ instructions remain in gitignored local Markdown.
   [Receipt](docs/vibevoice/prefill-only-control-2026-11-15.json).
 - First-frame mode remains available. Real prefill replay explicitly warns that
   its upstream K/V is F32; no matchedF16 real-replay mode or quality claim added.
+
+### Issue #589 explicit F16-KV upstream prefill replay — tiny-qualified (2026-11-15)
+
+- Existing `diag/589-first-frame`: selectable `--kv-precision f16` uses qualified
+  rounded DynamicCache, one layer at a time. F32 remains the default and its
+  retained raw outputs are unchanged. This matches KV storage, not flash math.
+- Guarded tiny full-vs-streamed rounded raw blocks and retained hidden/logits are
+  exact; invalid mode/count/input/F16 overflow controls and0.25 perturbation pass.
+  [Receipt](docs/vibevoice/prefill-kv-mode-control-2026-11-15.json).
+- No native rebuild,7B/GPU run, production-default or threshold change.
