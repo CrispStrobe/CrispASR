@@ -1,13 +1,25 @@
-### Issue #589 disclosure quality — active dedicated Codex owner (2026-11-15)
+### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
 - Clean base `9ddae4590`; isolated `quality/issue589-disclosure-20261115`.
   Supersedes the diagnostic park. Exact Q4_K pack SHA-256
   `ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3`.
-- Reproduce retained settings first, isolate the earliest divergent model stage,
-  then repair the product and rerun real ASR/TTS roundtrips with raw transcripts
-  and speaker metrics. WER limit remains 0.25; observed failure is 0.428571.
-- PR #590 remains draft until real quality acceptance. No physical Vulkan claim,
-  merge, full CI dispatch, or work on the independent #592/#593 lanes.
+- The original 3/7 WER failure was reproduced byte-for-byte. Product source
+  `4fdea66e3` fixes base-TTS diffusion noise cadence from speech frame 1 by
+  consuming both upstream CFG rows; frame zero remains unchanged.
+- The exact Q4_K CUDA roundtrip now genuinely passes: all six freshly synthesized
+  arms and all eleven raw ASR transcripts have WER 0.0 against unchanged 0.25.
+  Both speaker deltas are 0.3631222248 against unchanged 0.02. One hundred
+  retained files, the exact pack/source, all 17 runtime members, and six linked
+  binary manifests passed the independent audit. No baseline was substituted.
+  [Measured quality receipt](docs/vibevoice/base-cfg-quality-roundtrip-2026-11-15.json).
+- This accepts one synthetic-reference 7B Q4_K CUDA pack. Original Mac/config
+  provenance, Metal, physical Vulkan, and broad 1.5B/7B two-speaker acceptance
+  remain unproved. PR #590 remains draft for remaining acceptance review; no
+  merge, full CI dispatch, or work on independent #592/#593 lanes is included.
+
+Historical diagnostic chronology follows. Its pending-quality statements record
+the earlier stage; the measured roundtrip above supersedes those pending states.
+
 - Accepted diagnostic run `crispasr-589-quality-stage-v1`, version 1, first
   reproduces source `0f6c4853` and the original CUDA settings, then builds
   diagnostic source `dd362a822` for raw prefill blocks and first-frame replay.
