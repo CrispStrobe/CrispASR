@@ -32,6 +32,23 @@ full-vs-streamed rounded raw blocks, exact retained per-depth normalized hidden
 and final logits, unchanged default F32 raw blocks, four refusal controls and a
 0.25 perturbation. This does not establish real7B or GPU parity.
 
+Offline workers with a 1 MB script limit can select
+`--bounded-qwen2-source "$CRISPASR_QWEN2_SOURCES"`. That directory must contain
+the exact pinned Transformers 4.57.6 `modeling_qwen2.py`,
+`modeling_rope_utils.py` and `masking_utils.py`; all three hashes are checked.
+The adapter executes the original decoder, attention, MLP, norm, rotation and
+causal-predicate bodies. It excludes metadata/deprecation decorators and inactive
+gradient-checkpointing plumbing. Its mask assembly and single-update F16 cache
+are restricted to this initial, unpadded, one-batch 39-token full-attention
+prefill with default RoPE and zero dropout. Other configurations are refused.
+The original full-Transformers path and all weight/payload/embedding guards
+remain unchanged.
+
+The [bounded-source controls](bounded-qwen2-control-2026-11-15.json) compare full
+upstream, full-package layerwise and extracted execution for both F32/F16 GGUF
+weights and F32/F16 KV. Masks, RoPE values, raw blocks and output payloads are
+bit-exact. These are tiny qualification controls, not real 7B parity or quality.
+
 Prepared command, after obtaining a matching native capture and original model
 configuration (this preparation does not launch it):
 

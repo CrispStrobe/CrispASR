@@ -43,7 +43,9 @@ def compare_files(upstream_path, native_path):
                 max_abs=float(np.max(np.abs(x-y))))
 
 
-def rounded_kv_cache(config):
+def rounded_kv_cache(config, upstream=None):
+    if upstream is not None and hasattr(upstream, 'rounded_cache'):
+        return upstream.rounded_cache(config)
     import torch
     from transformers.cache_utils import DynamicCache
     class RoundedKV(DynamicCache):
@@ -58,13 +60,16 @@ def rounded_kv_cache(config):
     return RoundedKV(config=config)
 
 
-def replay(model_path, config, inputs, output, prompt_ids=None, kv_precision='f32'):
+def replay(model_path, config, inputs, output, prompt_ids=None, kv_precision='f32', upstream_module=None):
     if kv_precision not in ('f32', 'f16'):
         raise ValueError('kv_precision must be f32 or f16')
     import torch
     import gguf
     from gguf.quants import dequantize
-    from transformers.models.qwen2 import modeling_qwen2 as upstream
+    if upstream_module is None:
+        from transformers.models.qwen2 import modeling_qwen2 as upstream
+    else:
+        upstream = upstream_module
     torch.set_num_threads(1)
     if not (0 < config.hidden_size <= 8192 and 0 < config.num_hidden_layers <= 128
             and 0 < config.vocab_size <= 262144):
@@ -138,7 +143,7 @@ def replay(model_path, config, inputs, output, prompt_ids=None, kv_precision='f3
             with torch.device('meta'):
                 layer = upstream.Qwen2DecoderLayer(config, index)
             load(layer, f'lm.layers.{index}.')
-            cache = rounded_kv_cache(config) if kv_precision == 'f16' else None
+            cache = rounded_kv_cache(config, upstream) if kv_precision == 'f16' else None
             hidden = layer(hidden, attention_mask=mask, position_ids=positions,
                            past_key_values=cache, use_cache=cache is not None, cache_position=cache_position,
                            position_embeddings=position_embeddings)
@@ -167,6 +172,10 @@ def replay(model_path, config, inputs, output, prompt_ids=None, kv_precision='f3
         config=config.to_dict(), largest_dequantized_layer_bytes=max(layer_sizes),
         head_row_chunk=256, raw_per_block_bytes=inputs.nbytes, blocks=rows, embedding_gate=embedding_gate,
         native_taps='compare captured effective input and gated post-residual raw block outputs; missing files remain explicit')
+    if upstream_module is not None:
+        receipt.update(upstream_execution_scope=upstream.execution_scope,
+                       upstream_source_hashes=upstream.source_hashes,
+                       execution_adapter_sha256=sha(Path(__file__).with_name('vibevoice_qwen2_bounded_upstream.py')))
     (output / 'prefill-replay.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
 
@@ -178,14 +187,26 @@ def main():
     parser.add_argument('--capture', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--expected-sha256', required=True)
+    parser.add_argument('--bounded-qwen2-source', type=Path,
+                        help='qualified pinned upstream source extraction for offline workers; optional')
     parser.add_argument('--kv-precision', choices=('f32','f16'), default='f32',
                         help='f32 default control; f16 rounds K/V to match native base storage, not flash arithmetic')
     args = parser.parse_args()
     print('Prefill replay K/V mode: '+args.kv_precision+'; upstream eager attention does not reproduce native flash accumulation.', file=sys.stderr)
     if sha(args.gguf) != args.expected_sha256:
         parser.error('GGUF weight identity mismatch')
-    from transformers import Qwen2Config
-    config = Qwen2Config(**json.loads(args.config.read_text())['decoder_config'])
+    upstream = None
+    values = json.loads(args.config.read_text())['decoder_config']
+    if args.bounded_qwen2_source:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('bounded_qwen2', Path(__file__).with_name('vibevoice_qwen2_bounded_upstream.py'))
+        adapter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adapter)
+        config = adapter.config_from_dict(values)
+        upstream = adapter.load(args.bounded_qwen2_source)
+    else:
+        from transformers import Qwen2Config
+        config = Qwen2Config(**values)
     dimensions = np.fromfile(args.capture / 'tts_prefill_dimensions.bin', dtype='<i4')
     if list(dimensions) != [39, config.vocab_size]:
         parser.error('require exact captured 39-token prefill and config vocabulary')
@@ -197,7 +218,7 @@ def main():
     if ids_path.stat().st_size != 39 * 4:
         parser.error('require exact39 prompt IDs')
     prompt_ids = np.fromfile(ids_path, dtype='<i4')
-    report = replay(args.gguf, config, inputs, args.output, prompt_ids, args.kv_precision)
+    report = replay(args.gguf, config, inputs, args.output, prompt_ids, args.kv_precision, upstream)
     comparisons = []
     for name in [f'prefill_block_{i:03}' for i in range(config.num_hidden_layers)] + ['tts_prefill_hidden', 'tts_prefill_logits']:
         native_name = 'tts_' + name if name.startswith('prefill_block_') else name
