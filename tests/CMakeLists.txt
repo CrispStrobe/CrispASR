@@ -7044,6 +7044,12 @@ if(Python3_EXECUTABLE)
     add_test(NAME vibevoice-token-constraint
         COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_token_constraint.py)
     set_tests_properties(vibevoice-token-constraint PROPERTIES LABELS "unit;vibevoice" TIMEOUT 30)
+    if(UNIX AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        add_test(NAME vibevoice-base-cfg-rng
+            COMMAND ${CMAKE_COMMAND} -E env "CXX=${CMAKE_CXX_COMPILER}"
+                ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_base_cfg_rng.py)
+        set_tests_properties(vibevoice-base-cfg-rng PROPERTIES LABELS "unit;vibevoice;tts" TIMEOUT 60)
+    endif()
     add_test(NAME vibevoice-reference-lifetime
         COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_reference_lifetime.py)
     set_tests_properties(vibevoice-reference-lifetime PROPERTIES LABELS "unit;vibevoice;voice-cloning" TIMEOUT 30)

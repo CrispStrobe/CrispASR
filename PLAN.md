@@ -69,7 +69,14 @@
   [Noise receipt](docs/vibevoice/base-cfg-noise-control-2026-11-15.json).
   Next is one candidate full original ASR/TTS/speaker roundtrip on exactff68
   weights/settings with unchanged0.25 WER/0.02 speaker-delta gates. PR590 stays
-  draft; no old-source baseline or GPU inference has been repeated.
+  draft. Candidate source4fdea66e3 is accepted as quality run version2; the
+  first bounded startup check at11:09UTC finds it queued with no GPU assignment
+  or inference. No duplicate, cancellation, old-source baseline or alternate pack.
+- The three-frame production-C++ regression is registered in CTest on Unix
+  GNU/Clang configurations. Fresh isolated configure and the exact CTest entry
+  pass all3 controls in1.50s, with unchanged runtime/test bytes from candidate
+  source4fdea66e3. This test-registration follow-up requires no quality rerun.
+  [CTest receipt](docs/vibevoice/base-cfg-ctest-control-2026-11-15.json).
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)
 
