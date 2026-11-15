@@ -888,3 +888,13 @@ instructions remain in gitignored local Markdown.
 ### Issue #589 first diffusion capture — active Codex (2026-11-14)
 
 - Isolated `diag/589-first-frame`, base `a8151a2e`: opt-in bounded first-frame host-buffer instrumentation and same-GGUF upstream-head/scheduler replay. No default change, GPU run, publication or quality claim.
+
+### Issue #589 tiny upstream first-frame replay prerequisite — checked (2026-11-15)
+
+- Existing `diag/589-first-frame`: isolated local diffusers 0.35.2 fallback with
+  user site disabled repairs the stalled shared-storage import prerequisite.
+  Tiny F32 GGUF reconstruction matches actual upstream head/scheduler exactly at
+  seven boundaries; one first-prediction perturbation is reported as 0.25 there.
+  [Receipt](docs/vibevoice/first-frame-replay-tiny-control-2026-11-15.json).
+- This is control plumbing only. No native/7B model or GPU run occurred; upstream
+  prefill replay and earliest native numerical divergence remain unmeasured.

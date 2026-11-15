@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""UNVALIDATED PROTOTYPE: replay a bounded native first frame through actual upstream head and scheduler.
+"""Tiny-control-validated prototype: replay a bounded native first frame through actual upstream head and scheduler.
 
 This injects native LM conditions; it does NOT establish upstream LM/prefill parity.
 Only prediction-head GGUF tensors are dequantized. No model download or GPU use.

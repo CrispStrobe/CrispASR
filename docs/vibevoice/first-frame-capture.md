@@ -57,12 +57,15 @@ python tools/vibevoice_first_frame_replay.py \
   --output "$CRISPASR_CAPTURE_ROOT/neutral-seed42/upstream-head"
 ```
 
-The replay script is an **unvalidated prototype**: the tiny actual-upstream
-control could not run because shared-storage Python imports stalled in kernel
-D-state. Do not launch a 7B replay with it until that control passes. It refuses
-captures over 64 MiB and heads over 2 GiB of dequantized weights; the 7B head's
-size/feasibility has not been established. It loads only prediction-head tensors
-and computes with one CPU thread. No streaming-weight implementation is claimed.
+The replay script passed a tiny actual-upstream F32-GGUF roundtrip on 2026-11-15:
+all seven prediction/CFG/solver boundaries match exactly; a deliberately perturbed
+first prediction boundary reports maximum absolute error 0.25 only there.
+See the [control receipt](first-frame-replay-tiny-control-2026-11-15.json).
+This validates reconstruction/comparison plumbing, not native inference parity.
+The 7B replay remains a prototype: head size/feasibility is unestablished. The
+script refuses captures over 64 MiB and heads over 2 GiB of dequantized weights;
+it loads only prediction-head tensors and computes with one CPU thread.
+No streaming-weight implementation is claimed.
 It checks upstream/native timestep equality and reports cosine, both norms and
 maximum absolute error at each branch/CFG/solver boundary. The receipt hashes
 the actual upstream head and scheduler files. A completed comparison report
@@ -78,16 +81,21 @@ weights or GPU):
 
 ```sh
 CRISPASR_VIBEVOICE_SRC="$CRISPASR_VIBEVOICE_SRC" \
-  python tests/test_vibevoice_first_frame_replay.py
+  PYTHONNOUSERSITE=1 PYTHONPATH="$CRISPASR_LOCAL_REPLAY_DEPS" \
+  OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+  "$CRISPASR_LOCAL_PYTHON" tests/test_vibevoice_first_frame_replay.py
 ```
 
 Validation performed locally: production scheduler configuration controls 4/4;
 final native C++ syntax-only compile; Python byte-compilation; whitespace check.
-The actual upstream replay fixture and negative-history control were blocked
-while importing from shared storage and were terminated without results. Local
-`/opt/miniconda` has Torch, NumPy and gguf but no diffusers package, and its
-local pip wheel cache has no diffusers wheel; the available diffusers package
-is on the shared filesystem. The real-upstream replay test remains unrun.
+The initial actual-upstream replay and negative-history controls were blocked
+by shared-storage imports on 2026-11-14. The replay prerequisite was repaired
+once on 2026-11-15: disable user site packages and install only
+`diffusers==0.35.2` with `--no-deps` into an isolated local target. Local Torch
+2.9.1, NumPy 2.2.6 and gguf 0.18.0 were reused without global package changes.
+The tiny matching/perturbation control passed in 5.735 seconds. Disk reserve
+remained 17 GiB, above the required 12 GiB. Native negative-history testing was
+not repeated as part of this prerequisite repair.
 No 7B or GPU inference was run. The fake-producer capture test validates runner
 orchestration only and does not validate native first-frame tensors.
 
