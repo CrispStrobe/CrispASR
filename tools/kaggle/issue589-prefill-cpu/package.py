@@ -43,7 +43,7 @@ def main():
                 files[prefix+member.name]=source.extractfile(member).read()
     archive(root,commit,['src','include','tools/vibevoice_prefill_replay.py','tools/vibevoice_first_frame_capture.py',
         'tools/kaggle/kaggle_harness.py','tools/kaggle/issue589-prefill-cpu/capture.cpp','LICENSE'],'source/')
-    archive(args.ggml_repo,GGML,[], 'source/ggml/')
+    archive(args.ggml_repo,GGML,['src','include','cmake','CMakeLists.txt','ggml.pc.in','LICENSE','AUTHORS'], 'source/ggml/')
     config_path='vibevoice/configs/qwen2.5_7b_32k.json'
     files['blueprint-config.json']=subprocess.check_output(['git','-C',str(args.blueprint_repo),'show',BLUEPRINT+':'+config_path])
     package_versions={}

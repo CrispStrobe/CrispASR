@@ -46,10 +46,31 @@ def unpack(payload,destination):
         archive.extractall(destination,members=members,filter='data')
 
 
+def memory_status(cgroup_root=Path('/sys/fs/cgroup')):
+    host=dict(line.split(':',1) for line in Path('/proc/meminfo').read_text().splitlines())
+    limits=[]
+    for maximum,current in [('memory.max','memory.current'),('memory/memory.limit_in_bytes','memory/memory.usage_in_bytes'),
+                            ('memory.limit_in_bytes','memory.usage_in_bytes')]:
+        cap,used=cgroup_root/maximum,cgroup_root/current
+        if not cap.is_file() or not used.is_file():continue
+        value=cap.read_text().strip()
+        if value=='max':continue
+        ceiling=int(value);usage=int(used.read_text())
+        if ceiling>=1<<60:continue
+        if ceiling<=0 or usage<0:raise RuntimeError('invalid cgroup memory accounting')
+        limits.append(dict(path=maximum,limit_bytes=ceiling,current_bytes=usage,remaining_bytes=ceiling-usage))
+    if not limits:raise RuntimeError('finite cgroup memory cap unavailable; refusing model inference')
+    available=min(int(host['MemAvailable'].split()[0])*1024,*[item['remaining_bytes'] for item in limits])
+    cap=min(int(host['MemTotal'].split()[0])*1024,*[item['limit_bytes'] for item in limits])
+    return dict(effective_available_bytes=available,effective_cap_bytes=cap,cgroup=limits)
+
+
 def main():
     work=Path('/kaggle/temp/issue589-prefill-cpu')
     work.mkdir(parents=True,exist_ok=False)
     output=Path('/kaggle/working/issue589-prefill-cpu-results');output.mkdir(exist_ok=False)
+    initial_memory=memory_status()
+    if initial_memory['effective_available_bytes']<=22*2**30:raise RuntimeError('insufficient effective memory before runtime imports: '+json.dumps(initial_memory))
     lock=open('/kaggle/working/issue589-prefill-cpu.lock','a')
     fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     os.set_inheritable(lock.fileno(),True)
@@ -86,13 +107,14 @@ def main():
     def record():
         (output/'result.json').write_text(json.dumps(results,indent=2)+'\n')
     def guard():
-        mem=dict(line.split(':',1) for line in Path('/proc/meminfo').read_text().splitlines())
-        state=dict(free_bytes=shutil.disk_usage(work).free,available_kib=int(mem['MemAvailable'].split()[0]),
+        memory=memory_status()
+        state=dict(free_bytes=shutil.disk_usage(work).free,available_kib=memory['effective_available_bytes']//1024,memory=memory,
             load1=os.getloadavg()[0],load_max=max(8.,2*os.cpu_count()))
         if state['free_bytes']<=12*2**30 or state['available_kib']<=22*2**20 or state['load1']>state['load_max']:
             raise RuntimeError('resource guard failed: '+json.dumps(state))
         if sum(p.stat().st_size for p in output.rglob('*') if p.is_file())>256<<20:
             raise RuntimeError('retained output exceeds256MiB')
+        state['rss_watchdog_kib']=min(18*2**20,(memory['effective_available_bytes']-4*2**30)//1024)
         return state
     def rss_tree(pid):
         total=0
@@ -115,7 +137,7 @@ def main():
                 while process.poll() is None:
                     observed=rss_tree(process.pid)
                     stage['observed_process_tree_peak_kib']=max(stage['observed_process_tree_peak_kib'],observed)
-                    if observed>18*2**20:
+                    if observed>stage['guards']['rss_watchdog_kib']:
                         os.killpg(process.pid,signal.SIGKILL);process.wait()
                         stage['memory_watchdog']=True;raise RuntimeError(name+' exceeded18GiB RSS watchdog')
                     if time.monotonic()-started>timeout:raise subprocess.TimeoutExpired(command,timeout)
