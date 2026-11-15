@@ -8,6 +8,15 @@
   and speaker metrics. WER limit remains 0.25; observed failure is 0.428571.
 - PR #590 remains draft until real quality acceptance. No physical Vulkan claim,
   merge, full CI dispatch, or work on the independent #592/#593 lanes.
+- Accepted diagnostic run `crispasr-589-quality-stage-v1`, version 1, first
+  reproduces source `0f6c4853` and the original CUDA settings, then builds
+  diagnostic source `dd362a822` for raw prefill blocks and first-frame replay.
+  The exact model dataset is ready; the worker must hash the mounted pack before
+  inference. The old unconfirmed CPU submission was not repeated.
+- Original upstream model config is unavailable (model repository returns 404;
+  the pinned GGUF repository contains no config JSON). Exposed decoder metadata
+  matches the pinned blueprint dimensions and RoPE; original conversion-config
+  provenance remains unproved. No new model-quality result or product fix yet.
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)
 
