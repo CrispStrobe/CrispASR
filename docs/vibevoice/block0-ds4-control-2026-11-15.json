@@ -1,0 +1,67 @@
+{
+  "scope": "Bounded block-zero arithmetic controls over retained same-GGUF inputs.\n\nThis models the pinned CUDA Q4_K MMQ DS4 activation conversion on CPU, plus\nseparate Q/probability F16 controls. It does not emulate CUDA instruction/reduction\norder, qualify a GPU kernel, or establish a speech-quality cause.\n",
+  "scalar_mmq_control": {
+    "scope": "tiny CPU algebra only; no CUDA execution",
+    "rows": 4,
+    "tokens": 3,
+    "columns": 256,
+    "scalar_batched_bit_exact": true,
+    "negative_control": "original partial sums differ from reconstructed Q8 sums"
+  },
+  "weights_sha256": "ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3",
+  "upstream_source_hashes": {
+    "modeling_qwen2.py": "a59fa06524227361fb401baf4d177124a27aec146bc01ec931235a9abbab17cb",
+    "modeling_rope_utils.py": "55cc0c8cb76f592ab178b4662adcbdf4ad5012bb0b4249c0a96603141f18e9ac",
+    "masking_utils.py": "7a963feed8173b8265298dd24350c166222ce6b4719442fce48ab414d0478a6a"
+  },
+  "cpu_torch": "2.11.0+cpu",
+  "modes": [
+    {
+      "mode": "baseline_f16kv",
+      "output_sha256": "455285a2dcd4f6b4a1aab64da038623484c4b5d0d6e08514784165de8aa57e5c",
+      "native": {
+        "max_abs": 0.03612431883811951,
+        "relative_l2": 0.014511456501947977,
+        "cosine": 0.9998947077720957
+      },
+      "baseline_binding": "bit-exact retained full7B F16-KV upstream block0"
+    },
+    {
+      "mode": "mmq_ds4",
+      "output_sha256": "f4208c36d92fc5cb5eca0fddc792a2dc9faae8d7d3b093a61976c5d1d8cba137",
+      "native": {
+        "max_abs": 0.008982539176940918,
+        "relative_l2": 0.005960516553256207,
+        "cosine": 0.9999822371322967
+      }
+    },
+    {
+      "mode": "f16q_probability",
+      "output_sha256": "c9f8cddef4ce825629b731995a278fe7c7324cf1aff3f476dec82b552f770848",
+      "native": {
+        "max_abs": 0.03616628050804138,
+        "relative_l2": 0.014513506307889218,
+        "cosine": 0.9998946805499869
+      }
+    },
+    {
+      "mode": "mmq_ds4_f16q_probability",
+      "output_sha256": "d284d23a86586be553a9b5436f47c3de6ccbb24654aa08885ee2b7d9b08b0f5f",
+      "native": {
+        "max_abs": 0.00957179069519043,
+        "relative_l2": 0.005213103605082793,
+        "cosine": 0.9999864278724758
+      }
+    }
+  ],
+  "limitation": "CPU algebra and explicit F16 rounding; not actual CUDA instruction/reduction-order emulation or a quality cause",
+  "source_commit": "26424f01f88444d6df66f8410447ff930554a897",
+  "native_source": "dd362a822039911f892fe49295a427d16734432b",
+  "accepted_cpu_version": 4,
+  "cpu_worker_source_sha256": "93fbd01fc436f6231306bbb3ed1c9e3ee547a56a92f31f5d5aefc29d1ab2264c",
+  "verified_retained_operands": 123,
+  "original_wer": 0.42857142857142855,
+  "unchanged_wer_max": 0.25,
+  "quality_status": "FAIL",
+  "next": "source refinement: Turing half2 rounding of Q4_K learned subscales, not modeled by this first DS4 algebra control"
+}

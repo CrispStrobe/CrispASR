@@ -44,9 +44,16 @@
 - Prepared one bounded block-zero CPU control separating Q4_K MMQ DS4 activation
   conversion from Q/probability F16 rounding. Pinned CUDA source uses MMQ on T4
   and ignores the flash precision setter; no setter-only runtime patch applied.
-  Independent scalar roundf/reciprocal-F16-scale/original-partial-sum unit controls
-  pass. Actual modified arithmetic remains unrun; strict retained F16-KV block0
-  baseline SHA and tiny scalar/batched integer-dot controls must pass first.
+  CPU version 4 passed the strict retained F16-KV baseline SHA and independent
+  scalar/batched integer-dot controls. MMQ-only reduces native block0 relative
+  L2 from 0.0145115 to 0.00596052; MMQ + F16 Q/probability gives 0.00521310.
+  F16 Q/probability alone remains 0.0145135. Residual is not an audible cause.
+  [First control receipt](docs/vibevoice/block0-ds4-control-2026-11-15.json).
+- Source refinement: Turing MMQ rounds learned d/dmin times six-bit scales
+  inside half2 before dot-product scaling; the first control retained F32
+  products. Added separate Turing controls with adversarial subscale rounding
+  and scalar integer-dot/FMA checks, preserving the earlier algebra modes.
+  The added actual controls remain unrun; baseline/source/model guards stay.
   The >22 GiB cgroup guard and 1800-second bound remain unchanged. No GPU rerun.
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)

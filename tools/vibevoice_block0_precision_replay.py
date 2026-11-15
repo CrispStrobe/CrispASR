@@ -44,7 +44,7 @@ def q8_ds4(values):
     return q, scale, partial
 
 
-def mmq_q4k(tensor, values, torch):
+def mmq_q4k(tensor, values, torch, turing_subscales=False):
     """Integer dot products in exact-integer-range F32; CPU association afterward.
 
     Dots of 32 unsigned nibbles with signed Q8 values fit exactly in F32. The
@@ -69,6 +69,21 @@ def mmq_q4k(tensor, values, torch):
     codes = torch.from_numpy((codes & 15).astype(np.float32).reshape(rows, -1, 32))
     quantized = torch.from_numpy(qx.astype(np.float32))
     dots = torch.bmm(codes.permute(1, 0, 2), quantized.permute(1, 2, 0))
+    if turing_subscales:
+        # TURING_MMA loader first multiplies d/dmin by six-bit scales in
+        # half2 (mmq-load-tiles.cuh:780-784), then converts them back to F32.
+        da = (dw[..., None]*sc.numpy()).astype(np.float16).astype(np.float32).reshape(rows, -1)
+        db = (-dm[..., None]*minimum.numpy()).astype(np.float16).astype(np.float32).reshape(rows, -1)
+        dy32, sy32 = dy.astype(np.float32), sy.astype(np.float32)
+        result = torch.zeros(rows, x.shape[0], dtype=torch.float32)
+        for block in range(dots.shape[0]):
+            factor = torch.from_numpy(da[:, block, None]*dy32[None, :, block])
+            # The factor is the exact product of two F16 values. Its F32
+            # product with an integer dot fits in F64; round after addition
+            # to model the source's contracted FMA without claiming GPU order.
+            result = (result.double()+factor.double()*dots[block].double()).float()
+            result = result+torch.from_numpy(db[:, block, None]*sy32[None, :, block])
+        return result.T.reshape(*original_shape, rows)
     dots = dots.reshape(-1, 8, rows, x.shape[0]).permute(2, 3, 0, 1)
     # Native source applies the integer six-bit scale before the Q8 multiplier.
     positive = dots * sc[:, None] * torch.from_numpy(dy.astype(np.float32)).reshape(1, x.shape[0], -1, 8)
@@ -91,17 +106,19 @@ def scalar_mmq_control(torch):
     rng = np.random.default_rng(589)
     raw = rng.integers(0, 256, (4, 144), dtype=np.uint8)
     for row in raw:
-        row[:2] = np.frombuffer(struct.pack('<e', .03125), np.uint8)
-        row[2:4] = np.frombuffer(struct.pack('<e', .015625), np.uint8)
+        row[:2] = np.frombuffer(struct.pack('<e', .03173828125), np.uint8)
+        row[2:4] = np.frombuffer(struct.pack('<e', .01611328125), np.uint8)
     x = rng.standard_normal((3, 256)).astype(np.float32)
     q, d, partial = q8_ds4(x)
     fake = SimpleNamespace(data=raw, tensor_type=12, shape=(256, 4))
     actual = mmq_q4k(fake, torch.from_numpy(x), torch).numpy()
+    turing = mmq_q4k(fake, torch.from_numpy(x), torch, True).numpy()
     expected = np.empty_like(actual)
+    expected_turing = np.empty_like(actual)
     for token in range(3):
         for row in range(4):
             scales = raw[row, 4:16].tolist()
-            positive = negative = np.float32(0)
+            positive = negative = rounded = np.float32(0)
             for sub in range(8):
                 if sub < 4:
                     scale, minimum = scales[sub] & 63, scales[sub+4] & 63
@@ -112,13 +129,21 @@ def scalar_mmq_control(torch):
                 for k in range(32):
                     code = (int(raw[row, 16+(sub//2)*32+k]) >> (4*(sub%2))) & 15
                     dot += code * int(q[token, sub, k])
+                rounded_d = float(np.float16(.03173828125*scale))
+                rounded_m = float(np.float16(-.01611328125*minimum))
+                factor = np.float32(rounded_d*float(d[token, sub]))
+                rounded = np.float32(float(rounded)+float(factor)*dot)
+                rounded = np.float32(rounded+np.float32(rounded_m*float(partial[token, sub])))
                 positive = np.float32(positive + np.float32(float(d[token, sub])*int(scale*dot)))
                 negative = np.float32(negative + np.float32(float(partial[token, sub])*minimum))
-            expected[token, row] = np.float32(np.float32(.03125*positive) - np.float32(.015625*negative))
+            expected[token, row] = np.float32(np.float32(.03173828125*positive) - np.float32(.01611328125*negative))
+            expected_turing[token, row] = rounded
+    if not np.array_equal(turing, expected_turing) or np.array_equal(actual, turing):
+        raise ValueError('Turing half2 subscale scalar control or rounding counterexample failed')
     if not np.array_equal(actual, expected):
         raise ValueError('independent scalar MMQ control failed: '+str(np.max(np.abs(actual-expected))))
     return dict(scope='tiny CPU algebra only; no CUDA execution', rows=4, tokens=3, columns=256,
-                scalar_batched_bit_exact=True, negative_control='original partial sums differ from reconstructed Q8 sums')
+                scalar_batched_bit_exact=True, turing_half2_subscale_scalar_bit_exact=True, turing_rounding_changes_result=True, negative_control='original partial sums differ from reconstructed Q8 sums')
 
 
 def compare(a, b):
@@ -136,6 +161,7 @@ def main():
         p.add_argument('--' + name.replace('_', '-'), type=Path, required=True)
     p.add_argument('--expected-sha256', required=True)
     p.add_argument('--expected-baseline-sha256', required=True)
+    p.add_argument('--turing-only', action='store_true', help='baseline plus added Turing half2-subscale controls; prior DS4 controls remain reproducible by default')
     args = p.parse_args()
     import torch
     import gguf
@@ -192,11 +218,13 @@ def main():
                                     cache_position=positions[0], past_key_values=None, position_ids=positions)
     original_rope, original_attention = source.apply_rotary_pos_emb, source.eager_attention_forward
     original_softmax = torch.nn.functional.softmax
-    modes = [('baseline_f16kv', False, False), ('mmq_ds4', True, False),
-             ('f16q_probability', False, True), ('mmq_ds4_f16q_probability', True, True)]
+    modes = [('baseline_f16kv', False, False, False), ('mmq_ds4', True, False, False),
+             ('f16q_probability', False, True, False), ('mmq_ds4_f16q_probability', True, True, False)]
+    turing_modes = [('mmq_turing_half2', True, False, True), ('mmq_turing_half2_f16q_probability', True, True, True)]
+    modes = modes[:1]+turing_modes if args.turing_only else modes+turing_modes
     report = dict(scope=__doc__, scalar_mmq_control=scalar_control, weights_sha256=args.expected_sha256, upstream_source_hashes=source.source_hashes,
                   cpu_torch=torch.__version__, modes=[], limitation='CPU algebra and explicit F16 rounding; not actual CUDA instruction/reduction-order emulation or a quality cause')
-    for label, use_mmq, flash_half in modes:
+    for label, use_mmq, flash_half, turing_subscales in modes:
         outdir = args.output/label;outdir.mkdir()
         def save(name, value):
             data = value.detach().float().contiguous().numpy()
@@ -213,7 +241,7 @@ def main():
                 if name.endswith('q_proj'):
                     save('q_proj_input', value)
                 if use_mmq:
-                    result = mmq_q4k(tensor, value, torch)
+                    result = mmq_q4k(tensor, value, torch, turing_subscales)
                     if module.bias is not None:
                         result = result + module.bias
                 else:

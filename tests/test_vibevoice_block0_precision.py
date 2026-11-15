@@ -47,6 +47,13 @@ class DS4Control(unittest.TestCase):
         reconstructed=(q.astype(np.float32)*d.astype(np.float32)[...,None]).sum(-1).astype(np.float16)
         self.assertTrue(np.any(reconstructed!=s))
 
+    def test_turing_half2_subscale_counterexample(self):
+        d=np.float32(np.float16(.03173828125))
+        expanded=np.float32(d*63)
+        rounded=np.float32(np.float16(expanded))
+        self.assertNotEqual(expanded,rounded)
+        self.assertEqual(float(rounded),2.)
+
     def test_sum_tree_and_scope_refusals(self):
         x=np.ones((1,256),np.float32)
         x[0,:16]=[65504.,-65504.,1.,1.,1e-4,1e-4,1e-4,1e-4,2.,3.,4.,5.,-2.,-3.,-4.,-5.]
