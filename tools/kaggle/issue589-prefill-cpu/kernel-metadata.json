@@ -1,0 +1,14 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-vibevoice-589-cpu-prefill",
+  "title": "Crispasr Vibevoice 589 CPU Prefill",
+  "code_file": "kernel.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": ["${KAGGLE_ACCOUNT}/crispasr-vibevoice-589-q4-prefill"],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

@@ -3,7 +3,7 @@
 
 No full model construction: one decoder layer at a time, embeddings/head in row
 chunks. This is a prepared diagnostic; running a real 7B replay requires the
-corresponding native capture. Native per-block taps are currently absent.
+corresponding gated native capture. Raw per-block taps are opt-in.
 """
 import argparse
 import gc
