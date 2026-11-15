@@ -1,0 +1,155 @@
+{
+  "scope": "actual retained7B same-GGUF CPU reference measurements; no speech quality pass",
+  "source_commit": "9e282b91063961aac54d0bde1c663cf8e5456ef8",
+  "native_source": "dd362a822039911f892fe49295a427d16734432b",
+  "weights_sha256": "ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3",
+  "native_shared_library_sha256": null,
+  "cpu_worker_source_sha256": "cbd56afa5dbb5c73d99e918f2d264bc8d80f4937bb1a856bc70e69d1eb78655f",
+  "accepted_cpu_version": 3,
+  "package_versions": {
+    "torch": "2.11.0+cpu",
+    "numpy": "2.1.3"
+  },
+  "verified_native_operands": 123,
+  "embedding_gate": {
+    "max_abs": 0.0,
+    "relative_l2": 0.0
+  },
+  "first_measured_divergence": {
+    "stage": "tts_prefill_block_000",
+    "cosine": 0.9998947077720957,
+    "upstream_norm": 102.79219752066753,
+    "native_norm": 102.79112628055465,
+    "relative_l2": 0.014511456501947977,
+    "max_abs": 0.03612431883811951
+  },
+  "final_hidden": {
+    "stage": "tts_prefill_hidden",
+    "cosine": 0.9988619598446895,
+    "upstream_norm": 39.11501457667302,
+    "native_norm": 39.21761054300666,
+    "relative_l2": 0.047842764090330434,
+    "max_abs": 0.2168431282043457
+  },
+  "final_logits": {
+    "stage": "tts_prefill_logits",
+    "cosine": 0.9999711459885376,
+    "upstream_norm": 554.2542471403551,
+    "native_norm": 556.0797929377459,
+    "relative_l2": 0.008291353238112925,
+    "max_abs": 0.1748814582824707
+  },
+  "injected_condition_head_first": {
+    "stage": "tts_frame0_v_both_s000",
+    "cosine": 0.9999998419481733,
+    "norm_ref": 2.234627591678888,
+    "norm_native": 2.234563857595786,
+    "max_abs": 0.00030690431594848633
+  },
+  "injected_condition_head_final": {
+    "stage": "tts_latent_frame0",
+    "cosine": 0.9999999756487623,
+    "norm_ref": 8.119621504874878,
+    "norm_native": 8.11746766127274,
+    "max_abs": 0.0009641647338867188
+  },
+  "stages": [
+    {
+      "name": "prefill-f32",
+      "guard": {
+        "memory": {
+          "effective_available_bytes": 32146812928,
+          "effective_cap_bytes": 32212254720,
+          "cgroup": [
+            {
+              "path": "memory.max",
+              "limit_bytes": 32212254720,
+              "current_bytes": 4199374848,
+              "inactive_file_bytes": 4133933056,
+              "unlimited": false,
+              "available_after_inactive_reclaim_bytes": 32146812928
+            }
+          ]
+        },
+        "cpu": {
+          "effective_cpus": 4.0,
+          "load_max": 8.0
+        },
+        "load1": 0.970703125,
+        "free_bytes": 1038195826688
+      },
+      "exit_code": 0,
+      "child_peak_rss_kib_cumulative": 5233288,
+      "rss_scope": "maximum child peak across stages so far; not independent per-stage RSS",
+      "elapsed_seconds": 181.30810534800003
+    },
+    {
+      "name": "prefill-f16",
+      "guard": {
+        "memory": {
+          "effective_available_bytes": 24860692480,
+          "effective_cap_bytes": 32212254720,
+          "cgroup": [
+            {
+              "path": "memory.max",
+              "limit_bytes": 32212254720,
+              "current_bytes": 7534747648,
+              "inactive_file_bytes": 183185408,
+              "unlimited": false,
+              "available_after_inactive_reclaim_bytes": 24860692480
+            }
+          ]
+        },
+        "cpu": {
+          "effective_cpus": 4.0,
+          "load_max": 8.0
+        },
+        "load1": 1.005859375,
+        "free_bytes": 1038194966528
+      },
+      "exit_code": 0,
+      "child_peak_rss_kib_cumulative": 5236356,
+      "rss_scope": "maximum child peak across stages so far; not independent per-stage RSS",
+      "elapsed_seconds": 168.90928617199984
+    },
+    {
+      "name": "head-layerwise",
+      "guard": {
+        "memory": {
+          "effective_available_bytes": 24756609024,
+          "effective_cap_bytes": 32212254720,
+          "cgroup": [
+            {
+              "path": "memory.max",
+              "limit_bytes": 32212254720,
+              "current_bytes": 7571308544,
+              "inactive_file_bytes": 115662848,
+              "unlimited": false,
+              "available_after_inactive_reclaim_bytes": 24756609024
+            }
+          ]
+        },
+        "cpu": {
+          "effective_cpus": 4.0,
+          "load_max": 8.0
+        },
+        "load1": 1.0048828125,
+        "free_bytes": 1038194966528
+      },
+      "exit_code": 0,
+      "child_peak_rss_kib_cumulative": 5236356,
+      "rss_scope": "maximum child peak across stages so far; not independent per-stage RSS",
+      "elapsed_seconds": 119.04165475100012
+    }
+  ],
+  "original_wer": 0.42857142857142855,
+  "unchanged_wer_max": 0.25,
+  "quality_status": "FAIL",
+  "limits": [
+    "native shared-library binary hash unavailable",
+    "original conversion config provenance unproved",
+    "head comparison injects native LM conditions",
+    "no speech quality repair or physical Vulkan qualification"
+  ],
+  "next": "separate actualblock0 Q4_K MMQ activation rounding and flash/F16Q math on CPU; no new native/GPU baseline"
+}

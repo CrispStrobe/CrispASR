@@ -29,32 +29,25 @@
   The wrapper failed only during a shallow-clone metadata diff after capture;
   repaired provenance leaves the unrecorded shared-library hash explicitly null.
   [Receipt](docs/vibevoice/native-capture-2026-11-15.json).
-- CPU replay submission was rejected: kernel source must be less than 1 MB.
-  A bounded extraction of exact pinned Qwen2 math now avoids unrelated tokenizer
-  binaries. Four F32/F16-weight/KV controls match full upstream masks, RoPE,
-  raw blocks and output payloads exactly; unsupported scopes are refused.
-  Corrected source is 909,752 bytes and accepted as CPU replay version 1.
-  The prior capture job has an error status from its postcapture metadata failure;
-  Kaggle rejected that output attachment. The accepted CPU job passed initial
-  resource/model checks, then refused the missing retained capture before math.
-  Exact response/logs are retained privately. Numerical replay remains unrun;
-  direct signed output references will reuse the 123 captured operands without
-  another native/GPU run or a new dataset copy. The CPU guard proves 30 GiB
-  cgroup capacity with 29.98 GiB effective availability. Corrected input transport
-  is accepted as version 2 (998,636-byte source); all 123 operand hashes must
-  verify before the first numerical stage.
-  Version 2 verified every operand but refused before math because this CPU
-  image lacks `/usr/bin/time`; the corrected launch uses the same Python
-  command directly with explicitly cumulative stdlib child peak RSS. Version 3
-  is accepted (998,783-byte source); 1800-second stage caps and >22 GiB
-  effective-memory/cgroup guards remain unchanged.
-  [Facility receipt](docs/vibevoice/retained-cpu-facility-2026-11-15.json).
-- Bounded local lookup of only the 39 exact Q4_K embedding rows is bit-exact
-  against actual retained native effective input: 559,104 bytes, zero unequal
-  values, max absolute difference and relative L2 both zero. No full-model
-  construction/inference or new GPU call. This rules out the initial embedding
-  boundary for this capture; first divergent block/head remains unmeasured.
-  [Input receipt](docs/vibevoice/retained-embedding-control-2026-11-15.json).
+- CPU replay completed all three stages on the exact pack and all 123 retained
+  operands: F32 prefill 181.3 s, matched-F16-KV prefill 168.9 s, layerwise head
+  119.0 s. All 183 raw reference output hashes independently verify. The CPU
+  launch/input refusals and exact fixes remain in the private recovery history.
+- Effective prompt embeddings are bit-exact (39 Q4_K rows, 559,104 bytes).
+  First measured divergence is block 0: F16-KV relative L2 0.0145115 / max
+  absolute 0.0361243; final hidden relative L2 0.0478428. F32-KV controls show
+  similar differences. Injected-native-condition head final latent cosine is
+  0.99999997565 / max absolute 0.00096416. No audible cause or quality fix yet.
+  [Actual replay receipt](docs/vibevoice/retained-7b-replay-2026-11-15.json),
+  [input receipt](docs/vibevoice/retained-embedding-control-2026-11-15.json),
+  [CPU facility receipt](docs/vibevoice/retained-cpu-facility-2026-11-15.json).
+- Prepared one bounded block-zero CPU control separating Q4_K MMQ DS4 activation
+  conversion from Q/probability F16 rounding. Pinned CUDA source uses MMQ on T4
+  and ignores the flash precision setter; no setter-only runtime patch applied.
+  Independent scalar roundf/reciprocal-F16-scale/original-partial-sum unit controls
+  pass. Actual modified arithmetic remains unrun; strict retained F16-KV block0
+  baseline SHA and tiny scalar/batched integer-dot controls must pass first.
+  The >22 GiB cgroup guard and 1800-second bound remain unchanged. No GPU rerun.
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)
 
