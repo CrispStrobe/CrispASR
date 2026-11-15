@@ -1,3 +1,14 @@
+### Issue #589 disclosure quality — active dedicated Codex owner (2026-11-15)
+
+- Clean base `9ddae4590`; isolated `quality/issue589-disclosure-20261115`.
+  Supersedes the diagnostic park. Exact Q4_K pack SHA-256
+  `ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3`.
+- Reproduce retained settings first, isolate the earliest divergent model stage,
+  then repair the product and rerun real ASR/TTS roundtrips with raw transcripts
+  and speaker metrics. WER limit remains 0.25; observed failure is 0.428571.
+- PR #590 remains draft until real quality acceptance. No physical Vulkan claim,
+  merge, full CI dispatch, or work on the independent #592/#593 lanes.
+
 ### VibeVoice release task guard — locally checked Codex (2026-11-14)
 
 - Base `6ac6a1848`; isolated `fix/v0854-vibevoice-task-guard`. Split checkpoint
