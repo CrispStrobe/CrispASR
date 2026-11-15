@@ -1,0 +1,41 @@
+{
+  "scope": "CPU facility/input-transport diagnostic only; no model numerical replay or speech quality pass",
+  "source_commit": "9e282b910",
+  "cpu_worker": {
+    "source_bytes": 909752,
+    "source_sha256": "231ab74200339cb6cfefffa1e2f1494f29a7cef83244f06a9c8a83d702474d86",
+    "accepted_version": 1,
+    "save_status": 200
+  },
+  "initial_guard": {
+    "memory": {
+      "effective_available_bytes": 32187478016,
+      "effective_cap_bytes": 32212254720,
+      "cgroup": [
+        {
+          "path": "memory.max",
+          "limit_bytes": 32212254720,
+          "current_bytes": 39272448,
+          "inactive_file_bytes": 14495744,
+          "unlimited": false,
+          "available_after_inactive_reclaim_bytes": 32187478016
+        }
+      ]
+    },
+    "cpu": {
+      "effective_cpus": 4.0,
+      "load_max": 8.0
+    },
+    "load1": 0.02001953125,
+    "free_bytes": 1038218964992
+  },
+  "model_sha256": "ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3",
+  "verified_model_before_capture_lookup": true,
+  "stages_executed": [],
+  "error": "RuntimeError('require one retained first-frame capture source')",
+  "attachment_rejected": true,
+  "original_wer": 0.42857142857142855,
+  "unchanged_wer_max": 0.25,
+  "quality_status": "FAIL",
+  "next_transport": "reuse existing output URLs, hash all 123 operands before replay; no new dataset/native run"
+}

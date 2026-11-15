@@ -33,7 +33,17 @@
   A bounded extraction of exact pinned Qwen2 math now avoids unrelated tokenizer
   binaries. Four F32/F16-weight/KV controls match full upstream masks, RoPE,
   raw blocks and output payloads exactly; unsupported scopes are refused.
-  Real CPU replay is next, using the existing captured operands, with no GPU rerun.
+  Corrected source is 909,752 bytes and accepted as CPU replay version 1.
+  The prior capture job has an error status from its postcapture metadata failure;
+  Kaggle rejected that output attachment. The accepted CPU job passed initial
+  resource/model checks, then refused the missing retained capture before math.
+  Exact response/logs are retained privately. Numerical replay remains unrun;
+  direct signed output references will reuse the 123 captured operands without
+  another native/GPU run or a new dataset copy. The CPU guard proves 30 GiB
+  cgroup capacity with 29.98 GiB effective availability. Corrected input transport
+  is accepted as version 2 (998,636-byte source); all 123 operand hashes must
+  verify before the first numerical stage.
+  [Facility receipt](docs/vibevoice/retained-cpu-facility-2026-11-15.json).
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)
 
