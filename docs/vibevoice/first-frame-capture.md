@@ -7,12 +7,12 @@ records the binary hash, source revision, runtime patch hash and every payload
 hash. No model download is performed.
 
 The exact runtime patch SHA-256 against that base is
-`b27d8dcc6530b93abc986c7492c0c8c87b62e03adf44f4e01c4cef8ade5c0d77`.
+`207a45dc393738c48be5036bef06541fd478fe3c9ea80a2fe47ad518d7defecd`.
 Before building the diagnostic binary, check the runtime source pin:
 
 ```sh
 test "$(git diff a8151a2e8d7914571139dff1fd0a03620eaca051 -- src/vibevoice.cpp | sha256sum | cut -d' ' -f1)" = \
-  b27d8dcc6530b93abc986c7492c0c8c87b62e03adf44f4e01c4cef8ade5c0d77
+  207a45dc393738c48be5036bef06541fd478fe3c9ea80a2fe47ad518d7defecd
 ```
 
 On an idle GPU worker, with the exact neutral disclosure in
@@ -21,11 +21,17 @@ On an idle GPU worker, with the exact neutral disclosure in
 ```sh
 python tools/vibevoice_first_frame_capture.py \
   --binary "$CRISPASR_BINARY" --gguf "$CRISPASR_7B_Q4_K" \
-  --text-file neutral.txt --output "$CRISPASR_CAPTURE_ROOT/neutral-seed42"
+  --text-file neutral.txt --prefill-blocks --output "$CRISPASR_CAPTURE_ROOT/neutral-seed42"
 ```
 
 Expected pack SHA-256:
 `ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3`.
+Its tested size is 7,225,646,272 bytes at model revision
+`b4d938c37ca1b5cc91e2474acf8f8c8399aaceca`. The inspected local file is
+6,225,581,248 bytes, so it cannot stand in for that exact pack. No 7B capture or
+model download was started; the neutral disclosure text and its 39 IDs are
+retained. The command is prepared for the exact tested pack.
+
 The wrapper explicitly selects `--backend vibevoice-1.5b`, the base-family
 dispatch used by the 7B pack. Seed 42, semantic feedback, refreshed negative history and semantic F16 recovery
 are enabled; token constraint is explicitly disabled. CFG 1.3 and 20 solver steps
@@ -71,9 +77,10 @@ maximum absolute error at each branch/CFG/solver boundary. The receipt hashes
 the actual upstream head and scheduler files. A completed comparison report
 records measurements; it does not impose or assert a quality acceptance gate.
 
-This replay injects native LM conditions. Upstream 7B LM/prefill layer replay is
-**not implemented**, so no prefill parity, neutral prefix fix, Metal equivalence,
-Vulkan acceptance or speech quality is established. No new 7B job is launched by
+This head replay injects native LM conditions. A separate
+[layerwise Qwen2 prefill replay](prefill-replay.md) is prepared and tiny-qualified;
+real 7B prefill parity, a neutral prefix fix, Metal equivalence, Vulkan acceptance
+and speech quality remain unestablished. No new 7B job is launched by
 preparing these tools.
 
 Small control (actual upstream classes/scheduler, tiny generated GGUF, no model
@@ -104,3 +111,19 @@ embeddings, prefill logits and the selected-token trace. Its dry producer contro
 cover missing and truncated versions of all four essential prefill payloads,
 plus diagnostic nonzero exit, exclusive output, backend selection and latent
 truncation. These controls passed without model loading.
+
+`--prefill-blocks` explicitly enables
+`CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_BLOCKS=1` after the wrapper clears
+unrelated capture variables. It preserves and saves every raw post-FFN residual
+block output during the first 39-token prefill only. Native code refuses other
+prefill lengths, out-of-range dimensions or more than 64 MiB of raw preserved
+payload before graph construction. Readback uses one block at a time. This
+payload cap does not bound graph scratch/allocator overhead, weights or GPU
+memory. The wrapper requires the complete marker plus every block's exact
+count/size and retains its separate 64 MiB total-payload check.
+
+The [tap A/B receipt](prefill-taps-control-2026-11-15.json) records unchanged tiny
+CPU hidden/logits with taps off/on and two finite raw blocks. This is not a Metal
+or real7B equivalence claim. Historical qualification receipts retain the prior
+runtime patch SHA `b27d8dcc6530b93abc986c7492c0c8c87b62e03adf44f4e01c4cef8ade5c0d77`;
+they do not validate the later tap preservation on untested hardware.

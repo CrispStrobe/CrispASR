@@ -23,6 +23,24 @@ def sha(path):
     return h.hexdigest()
 
 
+def validate_prefill_blocks(dump, prompt_tokens, hidden):
+    import struct
+    marker = dump / 'tts_prefill_blocks_complete.bin'
+    if not marker.is_file() or marker.stat().st_size != 12:
+        raise RuntimeError('missing/truncated prefill block marker')
+    layers, tokens, width = struct.unpack('<iii', marker.read_bytes())
+    row_bytes = 39 * hidden * 4
+    if tokens != 39 or prompt_tokens != 39 or width != hidden or not 0 < layers <= 128 or row_bytes * layers > 64 << 20:
+        raise RuntimeError('invalid prefill block dimensions or payload limit')
+    required = {f'tts_prefill_block_{index:03}.bin' for index in range(layers)}
+    actual = {path.name for path in dump.glob('tts_prefill_block_*.bin')}
+    if actual != required:
+        raise RuntimeError('missing/extra prefill block files')
+    if any((dump / name).stat().st_size != row_bytes for name in required):
+        raise RuntimeError('truncated prefill block payload')
+    return layers
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--binary', type=Path, required=True)
@@ -30,6 +48,7 @@ def main():
     p.add_argument('--text-file', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--timeout', type=int, default=900)
+    p.add_argument('--prefill-blocks', action='store_true', help='capture every raw39-token prefill block')
     args = p.parse_args()
     if sha(args.gguf) != EXPECTED:
         p.error('expected original 7B Q4_K weight SHA-256')
@@ -45,6 +64,8 @@ def main():
                CRISPASR_VIBEVOICE_TTS_REFRESH_NEGATIVE='1',
                CRISPASR_VIBEVOICE_SEMANTIC_F16='1',
                CRISPASR_VIBEVOICE_TTS_TOKEN_CONSTRAINT='0')
+    if args.prefill_blocks:
+        env['CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_BLOCKS'] = '1'
     command = [str(args.binary.resolve()), '-m', str(args.gguf.resolve()), '--tts', text,
                '--backend', 'vibevoice-1.5b', '--seed', '42', '--tts-steps', '20', '--tts-cfg-scale', '1.3',
                '--tts-output', str(args.output.resolve() / 'unused.wav')]
@@ -85,6 +106,7 @@ def main():
         path = dump / (name + '.bin')
         if not path.is_file() or path.stat().st_size != count * 4:
             raise RuntimeError('missing/truncated capture stage: ' + name)
+    block_layers = validate_prefill_blocks(dump, prompt_tokens, hidden) if args.prefill_blocks else 0
     files = sorted(dump.glob('*.bin'))
     if sum(f.stat().st_size for f in files) > 64 << 20 or len(files) > 412:
         raise RuntimeError('capture exceeds bounded artifact contract')
@@ -96,7 +118,7 @@ def main():
                    instrumentation_diff_sha256=hashlib.sha256(git('diff', 'a8151a2e8d7914571139dff1fd0a03620eaca051', '--', 'src/vibevoice.cpp')).hexdigest(),
                    binary_sha256=sha(args.binary), weights_sha256=EXPECTED, seed=42,
                    text_sha256=hashlib.sha256(text.encode()).hexdigest(), cfg=1.3, steps=20,
-                   semantic_feedback=1, negative_history=1, semantic_f16=1, token_constraint=0,
+                   prefill_block_layers=block_layers, semantic_feedback=1, negative_history=1, semantic_f16=1, token_constraint=0,
                    cli_returncode=result.returncode, files={f.name: dict(bytes=f.stat().st_size, sha256=sha(f)) for f in files})
     (args.output / 'capture.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print('Complete first-frame capture:', args.output)

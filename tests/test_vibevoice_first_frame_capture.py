@@ -67,6 +67,30 @@ raise SystemExit(4)
             with patch.object(sys,'argv',args), self.assertRaisesRegex(RuntimeError,'truncated'):
                 module.main()
 
+    def test_prefill_block_marker_requires_all_exact_payloads(self):
+        import struct
+        spec = importlib.util.spec_from_file_location('capture_blocks', ROOT / 'tools/vibevoice_first_frame_capture.py')
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory(prefix='vv-block-contract-') as tmp:
+            dump = Path(tmp)
+            (dump/'tts_prefill_blocks_complete.bin').write_bytes(struct.pack('<iii',2,39,8))
+            for index in range(2):
+                (dump/f'tts_prefill_block_{index:03}.bin').write_bytes(b'\0'*(39*8*4))
+            self.assertEqual(module.validate_prefill_blocks(dump,39,8),2)
+            for failure in ('missing','truncated','extra','wrong_tokens','over_cap'):
+                with self.subTest(failure=failure):
+                    second = dump/'tts_prefill_block_001.bin'
+                    second.write_bytes(b'\0'*(39*8*4))
+                    (dump/'tts_prefill_blocks_complete.bin').write_bytes(struct.pack('<iii',2,39,8))
+                    if failure=='missing':second.unlink()
+                    if failure=='truncated':second.write_bytes(b'\0')
+                    if failure=='extra':(dump/'tts_prefill_block_002.bin').write_bytes(b'\0')
+                    if failure=='wrong_tokens':(dump/'tts_prefill_blocks_complete.bin').write_bytes(struct.pack('<iii',2,38,8))
+                    if failure=='over_cap':(dump/'tts_prefill_blocks_complete.bin').write_bytes(struct.pack('<iii',128,39,8192))
+                    with self.assertRaises(RuntimeError):module.validate_prefill_blocks(dump,39,8192 if failure=='over_cap' else 8)
+                    extra=dump/'tts_prefill_block_002.bin'
+                    if extra.exists():extra.unlink()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -3493,6 +3493,20 @@ static bool run_base_tts_decoder(vibevoice_context* ctx, const float* embeds, in
                                  ggml_tensor* kv_k, ggml_tensor* kv_v, std::vector<float>& logits_out,
                                  std::vector<float>& hidden_out) {
     auto& hp = ctx->model.hp;
+    const char* capture_dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_FIRST_FRAME");
+    const char* block_gate = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_BLOCKS");
+    const bool capture_blocks =
+        capture_dir && capture_dir[0] && block_gate && strcmp(block_gate, "1") == 0 && n_past == 0 && n_tokens > 1;
+    size_t capture_row_bytes = 0;
+    if (capture_blocks) {
+        // Bound only preserved raw payload/readback. Graph scratch, weights and
+        // allocator overhead are additional; this is not a GPU memory promise.
+        if (n_tokens != 39 || hp.d_lm <= 0 || hp.d_lm > 8192 || hp.n_lm_layers <= 0 || hp.n_lm_layers > 128)
+            return false;
+        capture_row_bytes = (size_t)n_tokens * hp.d_lm * sizeof(float);
+        if (capture_row_bytes * hp.n_lm_layers > (size_t)64 * 1024 * 1024)
+            return false;
+    }
     auto G = [&](const std::string& name) -> ggml_tensor* {
         auto it = ctx->model.tensors.find(name);
         return it != ctx->model.tensors.end() ? it->second : nullptr;
@@ -3569,6 +3583,12 @@ static bool run_base_tts_decoder(vibevoice_context* ctx, const float* embeds, in
             auto* ffn = core_ffn::swiglu(ctx0, cur, G(std::string(p) + ".ffn.gate.weight"),
                                          G(std::string(p) + ".ffn.up.weight"), G(std::string(p) + ".ffn.down.weight"));
             cur = ggml_add(ctx0, residual, ffn);
+            if (capture_blocks) {
+                char name[64];
+                snprintf(name, sizeof(name), "tts_prefill_block_%03d", il);
+                ggml_set_name(cur, name);
+                ggml_set_output(cur);
+            }
         }
         // Final norm
         cur = ggml_rms_norm(ctx0, cur, 1e-6f);
@@ -3624,6 +3644,20 @@ static bool run_base_tts_decoder(vibevoice_context* ctx, const float* embeds, in
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS)
         return false;
 
+    if (capture_blocks) {
+        std::vector<float> raw(capture_row_bytes / sizeof(float));
+        for (int il = 0; il < hp.n_lm_layers; ++il) {
+            char name[64];
+            snprintf(name, sizeof(name), "tts_prefill_block_%03d", il);
+            auto* tensor = ggml_graph_get_tensor(gf, name);
+            if (!tensor || ggml_nbytes(tensor) != capture_row_bytes)
+                return false;
+            ggml_backend_tensor_get(tensor, raw.data(), 0, capture_row_bytes);
+            vibevoice_dump_f32(capture_dir, name, raw.data(), raw.size());
+        }
+        int32_t dimensions[] = {hp.n_lm_layers, n_tokens, hp.d_lm};
+        vibevoice_dump_i32(capture_dir, "tts_prefill_blocks_complete", dimensions, 3);
+    }
     auto* lt = ggml_graph_get_tensor(gf, "logits");
     logits_out.resize((int)lt->ne[0]);
     ggml_backend_tensor_get(lt, logits_out.data(), 0, logits_out.size() * sizeof(float));

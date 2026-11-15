@@ -912,3 +912,16 @@ instructions remain in gitignored local Markdown.
 - No7B/GPU/Vulkan job or production-default change. Raw native block taps are
   still absent; exact insertion sites/layout and real7B limitations are in the
   [prefill replay note](docs/vibevoice/prefill-replay.md).
+
+### Issue #589 gated39-token native raw prefill taps — tiny A/B checked (2026-11-15)
+
+- Existing `diag/589-first-frame`: opt-in raw post-FFN residual taps, before final
+  norm, with39-token/shape/64MiB preserved-payload guards and one-block readback.
+  Wrapper `--prefill-blocks` validates every expected raw file, not just marker.
+- Tiny CPU tap-off/on outputs and retained native hidden/logits are bit-exact;
+  two finite raw blocks total9984bytes. Contract controls and internally locked
+  compile/A/B pass with per-stage resource, time and peak-RSS records.
+  [Receipt](docs/vibevoice/prefill-taps-control-2026-11-15.json).
+- Actual7B capture remains blocked: inspected local Q4 has6,225,581,248bytes;
+  exact tested SHAff68... pack has7,225,646,272bytes. No download/7B/GPU job or
+  production-default change. Earlier precision-control FAIL artifacts preserved.

@@ -38,29 +38,33 @@ error for available native blocks and final hidden/logits. Missing raw native
 blocks are explicitly reported; agreement or disagreement only at the final
 hidden state cannot identify the first divergent native block.
 
-## Native taps still required for a real first-block comparison
+## Gated native raw block taps
 
-The source-pinned diagnostic `src/vibevoice.cpp` is unchanged by this tool.
-`run_base_tts_decoder` currently returns only final normalized last-token hidden
-and logits. Existing captured prompt embeddings are host-owned inputs; preserve
-that capture rather than reading an unmarked `dec_input` after graph execution.
+`run_base_tts_decoder` now captures raw blocks only when both the first-frame
+directory and `CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_BLOCKS=1` are set. Use the
+capture wrapper's explicit `--prefill-blocks` option; setting only an inherited
+environment variable would be cleared by its environment isolation.
 
-The exact raw-block tap insertion point is the last
-`cur = ggml_add(ctx0, residual, ffn);` **inside run_base_tts_decoder's layer loop**,
-immediately before the loop closes and the `// Final norm` section begins.
-Each optional tap must name and mark `cur` with `ggml_set_output` under an
-explicit capture gate, restricted to `n_past == 0` and 39 tokens. After successful
-`ggml_backend_sched_graph_compute`, read each preserved tensor before scheduler
-reset/reuse into `tts_prefill_block_000.bin`, etc. Each file contains 39 rows
-of `d_lm` F32 values; ggml's `[d_lm,39]` layout already matches row-major
-`[39,d_lm]`. Match these against the replay's `prefill_block_000.bin`, etc.
-The output budget must be checked before graph construction.
+The tap is the last `cur = ggml_add(ctx0, residual, ffn);` inside the decoder
+layer loop, before final norm. Each `cur` is named and marked as an output only
+under the gate. After successful graph computation, tensors are read before
+scheduler reset as `tts_prefill_block_000.bin`, etc. Each has39 rows of `d_lm`
+F32 values; ggml's `[d_lm,39]` matches row-major `[39,d_lm]`. Host-owned effective
+prompt embeddings are captured separately, avoiding a post-compute read from an
+unpreserved input buffer.
 
-Those taps would change output preservation and allocator decisions; they need
-an independent A/B control. The tiny test here instead uses genuine truncated
-production graphs to avoid claiming that added snapshots prove an unchanged
-Metal execution. No raw native per-layer capture, Metal equivalence, Vulkan
-acceptance, speech quality or real 7B parity is established.
+The gate requires `n_past==0`, exactly39 prefill tokens, positive dimensions
+bounded by8192 hidden/128 layers, and raw output payload<=64MiB before graph
+construction. One block is read back at a time. Graph scratch/allocator overhead
+and weights are additional; no real7B/GPU memory bound is claimed. The wrapper
+checks the marker, exact file count and every expected size before success.
+
+The [tiny tap A/B receipt](prefill-taps-control-2026-11-15.json) records bit-exact
+tap-off/tap-on/retained hidden and logits and two valid raw blocks. Output
+preservation can perturb allocation on other backends, so this CPU result does
+not establish Metal, Vulkan, real7B parity or speech quality. The inspected local
+7B pack has a different size from the exact tested pack, blocking same-weight
+capture here; see the [capture command/identity note](first-frame-capture.md).
 
 ## Tiny control
 
