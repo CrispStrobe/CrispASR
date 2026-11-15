@@ -17,6 +17,11 @@
   the pinned GGUF repository contains no config JSON). Exposed decoder metadata
   matches the pinned blueprint dimensions and RoPE; original conversion-config
   provenance remains unproved. No new model-quality result or product fix yet.
+- The exact head is 2.493 GiB in F32, beyond the retained full-head prototype's
+  unchanged 2 GiB cap. Explicit layerwise replay now bounds each actual upstream
+  module group to 768 MiB. Tiny full/layerwise payloads and seven boundaries are
+  exact, with repeated-call, size/shape and partial-load cleanup controls. This
+  prepares reuse of the one hosted capture; real 7B replay remains unmeasured.
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)
 

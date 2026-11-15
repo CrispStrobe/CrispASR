@@ -33,6 +33,8 @@ class ReplayControl(unittest.TestCase):
         with torch.no_grad():
             head.final_layer.linear.weight.normal_(std=.1)
             head.final_layer.adaLN_modulation[1].weight.normal_(std=.1)
+            for layer in head.layers:
+                layer.adaLN_modulation[1].weight.normal_(std=.1)
         with tempfile.TemporaryDirectory(prefix='vv-frame-control-') as tmp:
             path = Path(tmp)
             model = path / 'tiny.gguf'
@@ -84,6 +86,45 @@ class ReplayControl(unittest.TestCase):
             self.assertTrue(all(row['max_abs'] == 0 for row in result['stages']))
             self.assertFalse(np.array_equal(both[0].numpy(), both[1].numpy()))
             self.assertIn('no prefill parity', result['scope'])
+            try:
+                sys.argv = ['replay', '--gguf',str(model),'--capture',str(capture),'--source',str(source),
+                            '--output',str(path/'layerwise'),'--expected-sha256',hashlib.sha256(model.read_bytes()).hexdigest(),
+                            '--layerwise']
+                replay.main()
+            finally:
+                sys.argv = old
+            streamed = json.loads((path/'layerwise/comparison.json').read_text())
+            self.assertTrue(streamed['layerwise'])
+            self.assertTrue(all(row['max_abs'] == 0 for row in streamed['stages']))
+            for payload in (path/'out').glob('*.bin'):
+                self.assertEqual(payload.read_bytes(), (path/'layerwise'/payload.name).read_bytes())
+            reader = gguf.GGUFReader(str(model))
+            tensors = {tensor.name: tensor for tensor in reader.tensors}
+            convert = lambda name: short(name.removeprefix('model.prediction_head.'))
+            with torch.device('meta'):
+                empty = cls(cfg)
+            with self.assertRaisesRegex(ValueError, 'exceeds layerwise bound'):
+                replay.LayerwiseHead(empty, tensors, convert, torch, max_group_bytes=1)
+            layerwise = replay.LayerwiseHead(empty, tensors, convert, torch)
+            with torch.no_grad():
+                for _ in range(2):
+                    actual = layerwise(noise.repeat(2, 1), torch.tensor([999., 999.]), condition)
+                    expected = head(noise.repeat(2, 1), torch.tensor([999., 999.]), condition)
+                    self.assertTrue(torch.equal(actual, expected))
+                    self.assertTrue(all(parameter.is_meta for parameter in empty.parameters()))
+            broken = dict(tensors)
+            key = 'pred.noisy_proj.weight'
+            broken[key] = SimpleNamespace(shape=(1, 1))
+            with self.assertRaisesRegex(ValueError, 'shape mismatch'):
+                replay.LayerwiseHead(empty, broken, convert, torch)
+            # An exception during a group load must release already loaded weights.
+            valid = layerwise.tensors
+            layerwise.tensors = dict(valid)
+            del layerwise.tensors['pred.t_emb.2.weight']
+            with self.assertRaises(KeyError):
+                layerwise.apply('t_embedder', torch.tensor([999., 999.]))
+            self.assertTrue(all(parameter.is_meta for parameter in empty.parameters()))
+            layerwise.tensors = valid
             # A changed boundary must appear in the report, even when the
             # remaining stages continue to match the original upstream run.
             boundary = capture / 'tts_frame0_v_both_s000.bin'

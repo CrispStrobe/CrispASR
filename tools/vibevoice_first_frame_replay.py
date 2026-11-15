@@ -38,6 +38,63 @@ def upstream_head(path, torch):
     return ns['VibeVoiceDiffusionHead']
 
 
+class LayerwiseHead:
+    """Run the actual upstream modules with one weight group resident at a time."""
+
+    def __init__(self, head, tensors, shorten, torch, max_group_bytes=768 << 20):
+        self.head, self.tensors, self.shorten, self.torch = head, tensors, shorten, torch
+        self.max_group_bytes = max_group_bytes
+        self.largest_group_bytes = 0
+        self.groups = {}
+        # Check all groups before reading or dequantizing their weights.
+        names = ['noisy_images_proj', 't_embedder', 'cond_proj']
+        names += [f'layers.{i}' for i in range(len(head.layers))] + ['final_layer']
+        for name in names:
+            module = head.get_submodule(name)
+            group_bytes = 0
+            for key, parameter in module.state_dict().items():
+                if parameter.device.type != 'meta':
+                    raise ValueError('layerwise replay requires meta-only initial weights')
+                tensor = tensors[shorten('model.prediction_head.' + name + '.' + key)]
+                if tuple(reversed(tensor.shape)) != tuple(parameter.shape):
+                    raise ValueError('prediction weight shape mismatch: ' + name + '.' + key)
+                group_bytes += int(np.prod(tensor.shape)) * 4
+            if not group_bytes or group_bytes > max_group_bytes:
+                raise ValueError('prediction weight group exceeds layerwise bound: ' + name)
+            self.groups[name] = group_bytes
+            self.largest_group_bytes = max(self.largest_group_bytes, group_bytes)
+
+    def apply(self, name, *args):
+        from gguf.quants import dequantize
+        torch = self.torch
+        module = self.head.get_submodule(name)
+        try:
+            for key in list(module.state_dict()):
+                tensor = self.tensors[self.shorten('model.prediction_head.' + name + '.' + key)]
+                raw = dequantize(tensor.data, tensor.tensor_type).reshape(tuple(reversed(tensor.shape)))
+                value = torch.from_numpy(np.array(raw, dtype=np.float32, copy=True))
+                parent, _, leaf = key.rpartition('.')
+                target = module.get_submodule(parent) if parent else module
+                target._parameters[leaf] = torch.nn.Parameter(value, requires_grad=False)
+                del raw, value
+            return module(*args)
+        finally:
+            # Retain meta shapes only, including after a partial-load failure.
+            for key, parameter in list(module.named_parameters()):
+                parent, _, leaf = key.rpartition('.')
+                target = module.get_submodule(parent) if parent else module
+                target._parameters[leaf] = torch.nn.Parameter(
+                    torch.empty(tuple(parameter.shape), dtype=torch.float32, device='meta'), requires_grad=False)
+
+    def __call__(self, noisy, timesteps, condition):
+        x = self.apply('noisy_images_proj', noisy)
+        t = self.apply('t_embedder', timesteps)
+        c = self.apply('cond_proj', condition) + t
+        for index in range(len(self.head.layers)):
+            x = self.apply(f'layers.{index}', x, c)
+        return self.apply('final_layer', x, c)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--gguf', type=Path, required=True)
@@ -46,6 +103,8 @@ def main():
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--expected-sha256', required=True)
     p.add_argument('--cfg', type=float, default=1.3)
+    p.add_argument('--layerwise', action='store_true',
+                   help='one upstream weight group at a time, each at most 768 MiB F32; full-head cap unchanged')
     args = p.parse_args()
     if sha(args.gguf) != args.expected_sha256:
         p.error('GGUF SHA-256 mismatch')
@@ -65,7 +124,7 @@ def main():
     reader = gguf.GGUFReader(str(args.gguf))
     tensors = {t.name: t for t in reader.tensors if t.name.startswith('pred.')}
     size = sum(int(np.prod(t.shape)) * 4 for t in tensors.values())
-    if not size or size > 2 << 30:
+    if not size or (not args.layerwise and size > 2 << 30):
         p.error('prediction head exceeds 2 GiB dequantized-weight prototype bound')
     layers = len({n.split('.')[2] for n in tensors if n.startswith('pred.layers.')})
     ffn = int(tensors['pred.layers.0.ffn.gate_proj.weight'].shape[1])
@@ -78,13 +137,16 @@ def main():
     shorten_node = next(n for n in main_node.body if isinstance(n, ast.FunctionDef) and n.name == 'shorten')
     ns = {}
     exec(compile(ast.Module(body=[shorten_node], type_ignores=[]), str(converter), 'exec'), ns)
-    state = {}
-    for name in head.state_dict():
-        tensor = tensors[ns['shorten']('model.prediction_head.' + name)]
-        array = dequantize(tensor.data, tensor.tensor_type).reshape(tuple(reversed(tensor.shape)))
-        state[name] = torch.from_numpy(np.array(array, dtype=np.float32, copy=True))
-    head.load_state_dict(state, assign=True)
     head.eval()
+    if args.layerwise:
+        head = LayerwiseHead(head, tensors, ns['shorten'], torch)
+    else:
+        state = {}
+        for name in head.state_dict():
+            tensor = tensors[ns['shorten']('model.prediction_head.' + name)]
+            array = dequantize(tensor.data, tensor.tensor_type).reshape(tuple(reversed(tensor.shape)))
+            state[name] = torch.from_numpy(np.array(array, dtype=np.float32, copy=True))
+        head.load_state_dict(state, assign=True)
     spec = importlib.util.spec_from_file_location('first_frame_upstream_scheduler', scheduler_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -121,7 +183,10 @@ def main():
         compare('tts_latent_frame0', z[0])
     receipt = dict(scope='upstream prediction head and scheduler; native injected LM conditions; no prefill parity',
                    weights_sha256=args.expected_sha256, source_sha256={str(f.relative_to(args.source)): sha(f) for f in (head_path, scheduler_path)},
-                   dequantized_weight_bytes=size, stages=rows)
+                   dequantized_weight_bytes=size, layerwise=args.layerwise, stages=rows)
+    if args.layerwise:
+        receipt.update(weight_group_limit_bytes=head.max_group_bytes,
+                       largest_weight_group_bytes=head.largest_group_bytes, weight_groups=head.groups)
     (args.output / 'comparison.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print(json.dumps(receipt, indent=2))
 

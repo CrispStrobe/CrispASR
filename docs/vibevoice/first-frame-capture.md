@@ -86,6 +86,24 @@ maximum absolute error at each branch/CFG/solver boundary. The receipt hashes
 the actual upstream head and scheduler files. A completed comparison report
 records measurements; it does not impose or assert a quality acceptance gate.
 
+The exact 7B pack's prediction tensors require 2,677,334,016 bytes in F32,
+exceeding the unchanged 2 GiB full-head replay cap. An explicit `--layerwise`
+mode instead loads one actual upstream module group at a time, checks each
+group against a 768 MiB F32 limit before loading, and restores its parameters to
+meta storage after execution or a load failure. The timestep module, projections,
+each residual layer and final layer retain their upstream implementations.
+This bounds resident parameter groups; mapped GGUF pages, dequantization
+temporaries, Torch and activations require additional memory. The provisioned
+worker's greater-than-22-GiB effective-memory guard still applies to real 7B
+replay. This mode does not authorize a real-model replay on a smaller host.
+
+The [tiny layerwise control](head-layerwise-control-2026-11-15.json) reports seven
+exact prediction/CFG/solver boundaries and byte-identical emitted payloads
+against full-head execution with the same generated GGUF values. Repeated-call,
+group-size, shape and partial-load cleanup controls pass. This is preparation
+for reusing retained operands; no real 7B head replay or speech-quality result
+is established by the tiny control.
+
 This head replay injects native LM conditions. A separate
 [layerwise Qwen2 prefill replay](prefill-replay.md) is prepared and tiny-qualified;
 real 7B prefill parity, a neutral prefix fix, Metal equivalence, Vulkan acceptance
