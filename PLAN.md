@@ -16,7 +16,7 @@
 - Original upstream model config is unavailable (model repository returns 404;
   the pinned GGUF repository contains no config JSON). Exposed decoder metadata
   matches the pinned blueprint dimensions and RoPE; original conversion-config
-  provenance remains unproved. No new model-quality result or product fix yet.
+  provenance remains unproved. No candidate speech-quality gain is established.
 - The exact head is 2.493 GiB in F32, beyond the retained full-head prototype's
   unchanged 2 GiB cap. Explicit layerwise replay now bounds each actual upstream
   module group to 768 MiB. Tiny full/layerwise payloads and seven boundaries are
@@ -53,8 +53,23 @@
   inside half2 before dot-product scaling; the first control retained F32
   products. Added separate Turing controls with adversarial subscale rounding
   and scalar integer-dot/FMA checks, preserving the earlier algebra modes.
-  The added actual controls remain unrun; baseline/source/model guards stay.
+  CPU version5 passes the strict baseline and adversarial scalar controls.
+  Turing subscale controls give relativeL2 0.00480130, adding F16Q/probability
+  0.00480109. Algebra expansion ends at this approximately0.48% residual
+  CPU/CUDA reference gap, with no audible-cause attribution.
+  [Turing receipt](docs/vibevoice/block0-turing-control-2026-11-15.json).
   The >22 GiB cgroup guard and 1800-second bound remain unchanged. No GPU rerun.
+- Product candidate: base-TTS consumes both CFG noise rows before retaining
+  the positive row, matching upstream and advancing the persistent generator
+  correctly from speech frame1. ASR and streaming paths remain unchanged.
+  Production-C++ regression fails before the fix (frame1 maxAbs3.65448), then
+  all3 controls pass; frame0 is byte-identical. Fresh actual retained upstream
+  method/Torch2.11 CPU noise-boundary differential agrees through3frames within
+  2.3842e-7. This establishes sampling fidelity, not disclosure quality.
+  [Noise receipt](docs/vibevoice/base-cfg-noise-control-2026-11-15.json).
+  Next is one candidate full original ASR/TTS/speaker roundtrip on exactff68
+  weights/settings with unchanged0.25 WER/0.02 speaker-delta gates. PR590 stays
+  draft; no old-source baseline or GPU inference has been repeated.
 
 ### PR #590 release reconciliation — locally checked Codex (2026-11-14)
 

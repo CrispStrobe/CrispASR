@@ -1,0 +1,54 @@
+{
+  "scope": "actual retained upstream sample_speech_tokens at noise boundary, with empty scheduler timesteps to omit model/head work; no7B model or audio inference",
+  "upstream_source_sha256": "fd6c6d5113470254e4d24db9a9f66e37e9b0627047aa8dcb85c456a279aeb5ae",
+  "native_cpp_sha256": "709ccb87d41d65987ecbc446831d78613cdbd8a0201e5c9b9c5099cfb33d6cc4",
+  "torch": "2.11.0+cu130",
+  "seed": 42,
+  "shape": [
+    3,
+    2,
+    64
+  ],
+  "rows": [
+    {
+      "frame": 0,
+      "legacy_max_abs": 1.1920928955078125e-07,
+      "candidate_max_abs": 1.1920928955078125e-07
+    },
+    {
+      "frame": 1,
+      "legacy_max_abs": 3.6544822454452515,
+      "candidate_max_abs": 2.384185791015625e-07
+    },
+    {
+      "frame": 2,
+      "legacy_max_abs": 4.204150676727295,
+      "candidate_max_abs": 2.384185791015625e-07
+    }
+  ],
+  "raw_positive_noise_sha256": "b30106e6c85092aa6c3de9f5396d1ca3da1ebefd52c1b3835ad86d87f1893835",
+  "resources": {
+    "mem_available_kib": 4714512,
+    "load1": 4.6240234375,
+    "free_bytes": 15013675008
+  },
+  "quality_status": "FAIL",
+  "original_wer": 0.42857142857142855,
+  "unchanged_wer_max": 0.25,
+  "candidate_source_base": "e735b31499b1c54e22fa284dbcfa6dfadd26aa7d",
+  "patch_sha256": "4561629ff1cd0c5560178d8dfbc96d6298bd1224052ccc00bff26b44648dc23f",
+  "regression": {
+    "before": {
+      "tests": 3,
+      "failures": 1,
+      "first_failure_frame": 1,
+      "max_abs": 3.6544822454452515
+    },
+    "after": {
+      "tests": 3,
+      "failures": 0,
+      "first_frame_preserved_bit_exact": true
+    },
+    "fixture_origin": "paired production oracle independently qualified against Torch2.9.1; fresh actual-upstream/Torch2.11 differential recorded separately"
+  }
+}

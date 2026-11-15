@@ -2403,6 +2403,17 @@ static void fill_gaussian_noise(float* data, int n, uint32_t seed) {
     fill_gaussian_noise(data, n, rng);
 }
 
+// Base VibeVoice samples both CFG rows before keeping the positive row:
+// torch.randn(2, acoustic_vae_dim) in sample_speech_tokens. The unused
+// negative row still advances the generator for the next speech frame.
+static void fill_base_cfg_gaussian_noise(float* data, int n, mt19937_state& rng) {
+    if (n <= 0)
+        return;
+    std::vector<float> paired((size_t)n * 2);
+    fill_gaussian_noise(paired.data(), (int)paired.size(), rng);
+    memcpy(data, paired.data(), (size_t)n * sizeof(float));
+}
+
 // Upstream's ASR path does NOT hand the acoustic encoder's mean to the
 // connector — it SAMPLES the sigma-VAE posterior first
 // (modeling_vibevoice_asr.py:
@@ -4147,7 +4158,7 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 // Run diffusion: hidden_v is the LM hidden state at this position
                 std::vector<float> z(vae_dim);
                 std::vector<float> prev_x0(vae_dim, 0.0f);
-                fill_gaussian_noise(z.data(), vae_dim, rng);
+                fill_base_cfg_gaussian_noise(z.data(), vae_dim, rng);
                 const char* first_dir = speech_frames == 0 ? capture_dir : nullptr;
                 vibevoice_dump_f32(first_dir, "tts_noise_frame0", z.data(), z.size());
                 vibevoice_dump_f32(first_dir, "tts_pos_condition_frame0", hidden_v.data(), hidden_v.size());
