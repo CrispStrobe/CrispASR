@@ -48,21 +48,44 @@ def unpack(payload,destination):
 
 def memory_status(cgroup_root=Path('/sys/fs/cgroup')):
     host=dict(line.split(':',1) for line in Path('/proc/meminfo').read_text().splitlines())
-    limits=[]
+    limits=[];observed=[]
     for maximum,current in [('memory.max','memory.current'),('memory/memory.limit_in_bytes','memory/memory.usage_in_bytes'),
                             ('memory.limit_in_bytes','memory.usage_in_bytes')]:
         cap,used=cgroup_root/maximum,cgroup_root/current
         if not cap.is_file() or not used.is_file():continue
-        value=cap.read_text().strip()
-        if value=='max':continue
-        ceiling=int(value);usage=int(used.read_text())
-        if ceiling>=1<<60:continue
-        if ceiling<=0 or usage<0:raise RuntimeError('invalid cgroup memory accounting')
-        limits.append(dict(path=maximum,limit_bytes=ceiling,current_bytes=usage,remaining_bytes=ceiling-usage))
-    if not limits:raise RuntimeError('finite cgroup memory cap unavailable; refusing model inference')
-    available=min(int(host['MemAvailable'].split()[0])*1024,*[item['remaining_bytes'] for item in limits])
-    cap=min(int(host['MemTotal'].split()[0])*1024,*[item['limit_bytes'] for item in limits])
-    return dict(effective_available_bytes=available,effective_cap_bytes=cap,cgroup=limits)
+        value=cap.read_text().strip();usage=int(used.read_text())
+        if usage<0:raise RuntimeError('invalid cgroup memory accounting')
+        stats=cap.parent/'memory.stat';cache=0
+        if stats.is_file():
+            counters=dict(line.split() for line in stats.read_text().splitlines())
+            cache=min(usage,max(0,int(counters.get('total_inactive_file',counters.get('inactive_file','0')))))
+        unlimited=value=='max' or int(value)>=1<<60
+        row=dict(path=maximum,limit_bytes=None if unlimited else int(value),current_bytes=usage,inactive_file_bytes=cache,unlimited=unlimited)
+        observed.append(row)
+        if unlimited:continue
+        if row['limit_bytes']<=0:raise RuntimeError('invalid cgroup memory limit')
+        row['available_after_inactive_reclaim_bytes']=min(row['limit_bytes'],row['limit_bytes']-usage+cache)
+        limits.append(row)
+    if not observed:raise RuntimeError('cgroup memory accounting unavailable; refusing model inference')
+    available=min([int(host['MemAvailable'].split()[0])*1024]+[item['available_after_inactive_reclaim_bytes'] for item in limits])
+    cap=min([int(host['MemTotal'].split()[0])*1024]+[item['limit_bytes'] for item in limits])
+    return dict(effective_available_bytes=available,effective_cap_bytes=cap,cgroup=observed)
+
+
+def cpu_capacity(cgroup_root=Path('/sys/fs/cgroup')):
+    capacities=[float(os.cpu_count() or 1)]
+    if hasattr(os,'sched_getaffinity'):capacities.append(float(len(os.sched_getaffinity(0))))
+    maximum=cgroup_root/'cpu.max'
+    if maximum.is_file():
+        quota,period=maximum.read_text().split()
+        if quota!='max':capacities.append(int(quota)/int(period))
+    for prefix in ('cpu/',''):
+        quota,period=cgroup_root/(prefix+'cpu.cfs_quota_us'),cgroup_root/(prefix+'cpu.cfs_period_us')
+        if quota.is_file() and period.is_file() and int(quota.read_text())>0:
+            capacities.append(int(quota.read_text())/int(period.read_text()))
+    effective=min(capacities)
+    if effective<=0:raise RuntimeError('invalid effective CPU capacity')
+    return dict(effective_cpus=effective,load_max=min(8.,max(2.,2*effective)))
 
 
 def main():
@@ -109,7 +132,7 @@ def main():
     def guard():
         memory=memory_status()
         state=dict(free_bytes=shutil.disk_usage(work).free,available_kib=memory['effective_available_bytes']//1024,memory=memory,
-            load1=os.getloadavg()[0],load_max=max(8.,2*os.cpu_count()))
+            load1=os.getloadavg()[0],cpu=cpu_capacity(),load_max=cpu_capacity()['load_max'])
         if state['free_bytes']<=12*2**30 or state['available_kib']<=22*2**20 or state['load1']>state['load_max']:
             raise RuntimeError('resource guard failed: '+json.dumps(state))
         if sum(p.stat().st_size for p in output.rglob('*') if p.is_file())>256<<20:
