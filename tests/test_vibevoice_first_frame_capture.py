@@ -91,6 +91,31 @@ raise SystemExit(4)
                     extra=dump/'tts_prefill_block_002.bin'
                     if extra.exists():extra.unlink()
 
+    def test_prefill_only_contract_and_wrong_marker_rejection(self):
+        import struct
+        spec = importlib.util.spec_from_file_location('prefill_capture', ROOT / 'tools/vibevoice_first_frame_capture.py')
+        module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory(prefix='vv-prefill-only-') as tmp:
+            for failure in (None,'missing_marker','bad_marker','first_frame_marker','missing_input','truncated_block','diffusion_payload'):
+                with self.subTest(failure=failure):
+                    dump=Path(tmp)/str(failure);dump.mkdir()
+                    (dump/'prefill_capture_complete.bin').write_bytes(struct.pack('<iiii',2,39,8,16))
+                    (dump/'tts_prefill_blocks_complete.bin').write_bytes(struct.pack('<iii',2,39,8))
+                    (dump/'tts_prefill_dimensions.bin').write_bytes(struct.pack('<ii',39,16))
+                    for name,count in [('tts_prompt_ids',39),('tts_prompt_embeds',39*8),('tts_prefill_hidden',8),('tts_prefill_logits',16),('tts_prefill_block_000',39*8),('tts_prefill_block_001',39*8)]:
+                        (dump/(name+'.bin')).write_bytes(b'\0'*(count*4))
+                    if failure=='missing_marker':(dump/'prefill_capture_complete.bin').unlink()
+                    if failure=='bad_marker':(dump/'prefill_capture_complete.bin').write_bytes(b'bad')
+                    if failure=='first_frame_marker':
+                        (dump/'prefill_capture_complete.bin').unlink()
+                        (dump/'capture_complete.bin').write_bytes(struct.pack('<iii',4,8,20))
+                    if failure=='missing_input':(dump/'tts_prompt_ids.bin').unlink()
+                    if failure=='truncated_block':(dump/'tts_prefill_block_001.bin').write_bytes(b'bad')
+                    if failure=='diffusion_payload':(dump/'tts_noise_frame0.bin').write_bytes(b'\0'*16)
+                    if failure is None:self.assertEqual(module.validate_prefill_only(dump),2)
+                    else:
+                        with self.assertRaises(RuntimeError):module.validate_prefill_only(dump)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -925,3 +925,16 @@ instructions remain in gitignored local Markdown.
 - Actual7B capture remains blocked: inspected local Q4 has6,225,581,248bytes;
   exact tested SHAff68... pack has7,225,646,272bytes. No download/7B/GPU job or
   production-default change. Earlier precision-control FAIL artifacts preserved.
+
+### Issue #589 explicit prefill-only capture — source/contracts checked (2026-11-15)
+
+- Existing `diag/589-first-frame`: `--prefill-only` implies raw39-token blocks
+  and returns after positive prefill, before negative-history/AR/RNG/diffusion.
+  Separate completion marker plus exact prompt/embedding/hidden/logit/block sizes
+  are required; frame payloads and first-frame-only markers are rejected.
+- Guarded fresh native compile and tiny rawtap-off/on A/B pass;3 capture-contract
+  tests include malformed/missing-marker and unexpected-diffusion controls.
+  Full7B synthesis exit remains unrun because the exact pack is absent.
+  [Receipt](docs/vibevoice/prefill-only-control-2026-11-15.json).
+- First-frame mode remains available. Real prefill replay explicitly warns that
+  its upstream K/V is F32; no matchedF16 real-replay mode or quality claim added.

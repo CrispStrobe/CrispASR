@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run explicit diagnostic capture; first latent exits before audio decode.
+"""Run explicit prefill-only or first-frame diagnostic capture; no audio decode.
 
 Use a binary built from this diagnostic worktree. Nonzero CLI exit is expected;
 only a validated completion marker makes the capture successful. No quality test.
@@ -41,6 +41,35 @@ def validate_prefill_blocks(dump, prompt_tokens, hidden):
     return layers
 
 
+def validate_prefill_only(dump):
+    import struct
+    marker = dump / 'prefill_capture_complete.bin'
+    if not marker.is_file() or marker.stat().st_size != 16:
+        raise RuntimeError('missing/truncated prefill-only completion marker')
+    layers, tokens, hidden, vocab = struct.unpack('<iiii', marker.read_bytes())
+    if tokens != 39 or not 0 < hidden <= 8192 or not 0 < vocab <= 262144:
+        raise RuntimeError('invalid prefill-only dimensions')
+    expected = {'tts_prompt_ids':39*4, 'tts_prompt_embeds':39*hidden*4,
+                'tts_prefill_hidden':hidden*4, 'tts_prefill_logits':vocab*4,
+                'tts_prefill_dimensions':8}
+    for name, size in expected.items():
+        path = dump / (name + '.bin')
+        if not path.is_file() or path.stat().st_size != size:
+            raise RuntimeError('missing/truncated prefill-only stage: ' + name)
+    if struct.unpack('<ii', (dump/'tts_prefill_dimensions.bin').read_bytes()) != (39,vocab):
+        raise RuntimeError('inconsistent prefill-only dimensions')
+    if validate_prefill_blocks(dump,tokens,hidden) != layers:
+        raise RuntimeError('inconsistent prefill-only block count')
+    allowed = {name+'.bin' for name in expected} | {'prefill_capture_complete.bin','tts_prefill_blocks_complete.bin'}
+    allowed |= {f'tts_prefill_block_{index:03}.bin' for index in range(layers)}
+    files = list(dump.glob('*.bin'))
+    if {path.name for path in files} != allowed:
+        raise RuntimeError('unexpected prefill-only payload; diffusion/frame data forbidden')
+    if sum(path.stat().st_size for path in files) > 64 << 20:
+        raise RuntimeError('prefill-only payload exceeds64MiB')
+    return layers
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--binary', type=Path, required=True)
@@ -49,6 +78,7 @@ def main():
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--timeout', type=int, default=900)
     p.add_argument('--prefill-blocks', action='store_true', help='capture every raw39-token prefill block')
+    p.add_argument('--prefill-only', action='store_true', help='stop after39-token prefill; implies --prefill-blocks')
     args = p.parse_args()
     if sha(args.gguf) != EXPECTED:
         p.error('expected original 7B Q4_K weight SHA-256')
@@ -64,8 +94,10 @@ def main():
                CRISPASR_VIBEVOICE_TTS_REFRESH_NEGATIVE='1',
                CRISPASR_VIBEVOICE_SEMANTIC_F16='1',
                CRISPASR_VIBEVOICE_TTS_TOKEN_CONSTRAINT='0')
-    if args.prefill_blocks:
+    if args.prefill_blocks or args.prefill_only:
         env['CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_BLOCKS'] = '1'
+    if args.prefill_only:
+        env['CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_ONLY'] = '1'
     command = [str(args.binary.resolve()), '-m', str(args.gguf.resolve()), '--tts', text,
                '--backend', 'vibevoice-1.5b', '--seed', '42', '--tts-steps', '20', '--tts-cfg-scale', '1.3',
                '--tts-output', str(args.output.resolve() / 'unused.wav')]
@@ -74,6 +106,21 @@ def main():
     with (args.output / 'native.log').open('wb') as log:
         result = subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT,
                                 timeout=args.timeout, preexec_fn=limits, check=False)
+    if args.prefill_only:
+        layers = validate_prefill_only(dump)
+        root = Path(__file__).resolve().parents[1]
+        git = lambda *a: subprocess.check_output(['git', '-C', str(root), *a])
+        files = sorted(dump.glob('*.bin'))
+        receipt = dict(scope='prefill-only diagnostic; no diffusion/audio or quality claim',
+                       source_revision=git('rev-parse','HEAD').decode().strip(),
+                       base_source='a8151a2e8d7914571139dff1fd0a03620eaca051',
+                       instrumentation_diff_sha256=hashlib.sha256(git('diff','a8151a2e8d7914571139dff1fd0a03620eaca051','--','src/vibevoice.cpp')).hexdigest(),
+                       binary_sha256=sha(args.binary),weights_sha256=EXPECTED,seed=42,prefill_block_layers=layers,
+                       text_sha256=hashlib.sha256(text.encode()).hexdigest(),diffusion_executed=False,
+                       cli_returncode=result.returncode,files={f.name:dict(bytes=f.stat().st_size,sha256=sha(f)) for f in files})
+        (args.output/'capture.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        print('Complete prefill-only capture:',args.output)
+        return
     marker = dump / 'capture_complete.bin'
     if not marker.exists() or marker.stat().st_size != 12:
         raise RuntimeError('no complete first-frame marker; inspect native.log')

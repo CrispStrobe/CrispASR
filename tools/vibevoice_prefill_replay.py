@@ -10,6 +10,7 @@ import gc
 import hashlib
 import inspect
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -141,6 +142,7 @@ def replay(model_path, config, inputs, output, prompt_ids=None):
             del chunk
         np.concatenate(logits).astype('<f4').tofile(output / 'tts_prefill_logits.bin')
     receipt = dict(scope='actual upstream layer-at-a-time 39-token prefill; no real-model/native parity claim',
+        kv_precision='F32 upstream; native base F16-KV matching mode not implemented',
         weights_sha256=sha(model_path), upstream_qwen2_sha256=sha(inspect.getfile(upstream)),
         config=config.to_dict(), largest_dequantized_layer_bytes=max(layer_sizes),
         head_row_chunk=256, raw_per_block_bytes=inputs.nbytes, blocks=rows, embedding_gate=embedding_gate,
@@ -157,6 +159,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--expected-sha256', required=True)
     args = parser.parse_args()
+    print('Prefill replay uses upstream F32 KV; a matching native F16-KV mode is not implemented. Interpret precision differences separately.', file=sys.stderr)
     if sha(args.gguf) != args.expected_sha256:
         parser.error('GGUF weight identity mismatch')
     from transformers import Qwen2Config

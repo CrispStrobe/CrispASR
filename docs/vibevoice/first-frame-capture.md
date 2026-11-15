@@ -1,4 +1,4 @@
-# Issue #589 bounded first-frame diagnostic
+# Issue #589 bounded prefill / first-frame diagnostic
 
 The diagnostic patch is based on `a8151a2e8d7914571139dff1fd0a03620eaca051`.
 Build this worktree using the established backend configuration. Do not reuse an
@@ -7,12 +7,12 @@ records the binary hash, source revision, runtime patch hash and every payload
 hash. No model download is performed.
 
 The exact runtime patch SHA-256 against that base is
-`207a45dc393738c48be5036bef06541fd478fe3c9ea80a2fe47ad518d7defecd`.
+`7409f91f2463e52c21a0df45b4daec28306f8634b30b5a3cef222635c1bf2844`.
 Before building the diagnostic binary, check the runtime source pin:
 
 ```sh
 test "$(git diff a8151a2e8d7914571139dff1fd0a03620eaca051 -- src/vibevoice.cpp | sha256sum | cut -d' ' -f1)" = \
-  207a45dc393738c48be5036bef06541fd478fe3c9ea80a2fe47ad518d7defecd
+  7409f91f2463e52c21a0df45b4daec28306f8634b30b5a3cef222635c1bf2844
 ```
 
 On an idle GPU worker, with the exact neutral disclosure in
@@ -21,8 +21,16 @@ On an idle GPU worker, with the exact neutral disclosure in
 ```sh
 python tools/vibevoice_first_frame_capture.py \
   --binary "$CRISPASR_BINARY" --gguf "$CRISPASR_7B_Q4_K" \
-  --text-file neutral.txt --prefill-blocks --output "$CRISPASR_CAPTURE_ROOT/neutral-seed42"
+  --text-file neutral.txt --prefill-only --output "$CRISPASR_CAPTURE_ROOT/neutral-seed42"
 ```
+
+`--prefill-only` implies raw block capture and exits immediately after positive
+prefill hidden/logits, before negative-history setup, AR token selection, RNG or
+diffusion. It requires a separate 16-byte `prefill_capture_complete.bin` marker,
+exact39-token prompt/embedding/hidden/logit sizes and every raw block; frame or
+noise payloads are forbidden. A first-frame marker cannot satisfy this mode.
+For the existing first-diffusion-frame mode, omit `--prefill-only` and pass
+`--prefill-blocks`; it still stops after the first latent as before.
 
 Expected pack SHA-256:
 `ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3`.
@@ -36,8 +44,9 @@ The wrapper explicitly selects `--backend vibevoice-1.5b`, the base-family
 dispatch used by the 7B pack. Seed 42, semantic feedback, refreshed negative history and semantic F16 recovery
 are enabled; token constraint is explicitly disabled. CFG 1.3 and 20 solver steps
 retain the prior configuration. The wrapper clears unrelated dump/capture gates.
-The native diagnostic returns null immediately after the first completed latent,
-before feedback, vocoder or audio output. CLI failure status is expected and is
+Both modes return null as a diagnostic exit. The default first-frame mode
+returns after its first completed latent, before feedback, vocoder or audio.
+The explicit prefill-only mode returns earlier, immediately after prefill. CLI failure status is expected and is
 recorded; only a complete, size-checked payload is success for this diagnostic.
 This is never a speech quality test.
 
@@ -127,3 +136,10 @@ CPU hidden/logits with taps off/on and two finite raw blocks. This is not a Meta
 or real7B equivalence claim. Historical qualification receipts retain the prior
 runtime patch SHA `b27d8dcc6530b93abc986c7492c0c8c87b62e03adf44f4e01c4cef8ade5c0d77`;
 they do not validate the later tap preservation on untested hardware.
+
+The [prefill-only control receipt](prefill-only-control-2026-11-15.json) records
+valid and malformed/missing-marker/diffusion-payload contract controls, a fresh
+native compile and unchanged tiny raw-tap A/B. The tiny production-graph probe
+does not execute the full synthesis orchestration; the exact7B prefill-only
+synthesis exit remains unrun because that pack is unavailable locally. Earlier
+control receipts retain their original runtime/source hashes.

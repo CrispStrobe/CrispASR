@@ -19,6 +19,12 @@ outputs. A temporary dequantization copy of the current tensor, Torch runtime
 and intermediate activations are additional memory. These are checked logical
 bounds; a real 7B replay has not been executed or given an RSS qualification.
 
+The real replay currently uses upstream **F32 K/V**. It does not yet implement
+the tiny control's qualified F16-K/V rounding mode. The CLI prints that limitation
+and the result receipt records it, so raw native F16-cache differences must not
+be called a port defect or matched-precision comparison. The tiny matched-control
+results below do not qualify this optional mode in the real replay tool.
+
 Prepared command, after obtaining a matching native capture and original model
 configuration (this preparation does not launch it):
 
@@ -42,7 +48,8 @@ hidden state cannot identify the first divergent native block.
 
 `run_base_tts_decoder` now captures raw blocks only when both the first-frame
 directory and `CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_BLOCKS=1` are set. Use the
-capture wrapper's explicit `--prefill-blocks` option; setting only an inherited
+capture wrapper's explicit `--prefill-only` option for a prefill trace,
+or `--prefill-blocks` for the existing first-diffusion-frame trace; setting only an inherited
 environment variable would be cleared by its environment isolation.
 
 The tap is the last `cur = ggml_add(ctx0, residual, ffn);` inside the decoder

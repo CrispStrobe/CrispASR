@@ -3495,8 +3495,11 @@ static bool run_base_tts_decoder(vibevoice_context* ctx, const float* embeds, in
     auto& hp = ctx->model.hp;
     const char* capture_dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_FIRST_FRAME");
     const char* block_gate = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_BLOCKS");
+    const char* only_gate = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_ONLY");
     const bool capture_blocks =
-        capture_dir && capture_dir[0] && block_gate && strcmp(block_gate, "1") == 0 && n_past == 0 && n_tokens > 1;
+        capture_dir && capture_dir[0] &&
+        ((block_gate && strcmp(block_gate, "1") == 0) || (only_gate && strcmp(only_gate, "1") == 0)) && n_past == 0 &&
+        n_tokens > 1;
     size_t capture_row_bytes = 0;
     if (capture_blocks) {
         // Bound only preserved raw payload/readback. Graph scratch, weights and
@@ -3705,6 +3708,8 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     int d_lm = hp.d_lm;
     const char* dump_dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_DUMP");
     const char* capture_dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_FIRST_FRAME");
+    const char* prefill_only_gate = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_CAPTURE_PREFILL_ONLY");
+    const bool prefill_only = capture_dir && capture_dir[0] && prefill_only_gate && strcmp(prefill_only_gate, "1") == 0;
     const auto tts_t0 = std::chrono::high_resolution_clock::now();
 
     // VibeVoice TTS hits Apple's GPU watchdog
@@ -4016,6 +4021,12 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
         vibevoice_dump_i32(capture_dir, "tts_prefill_dimensions", capture_prefill_dimensions, 2);
         vibevoice_dump_f32(capture_dir, "tts_prefill_hidden", hidden_v.data(), hidden_v.size());
         vibevoice_dump_f32(capture_dir, "tts_prefill_logits", logits_v.data(), logits_v.size());
+        if (prefill_only) {
+            int32_t complete[] = {hp.n_lm_layers, prefix_len, hp.d_lm, (int32_t)logits_v.size()};
+            vibevoice_dump_i32(capture_dir, "prefill_capture_complete", complete, 4);
+            fprintf(stderr, "vibevoice prefill-only capture complete (diagnostic exit; no diffusion/audio)\n");
+            return nullptr;
+        }
         int n_past = prefix_len;
         const auto t_pure_infer_start = std::chrono::high_resolution_clock::now();
 
