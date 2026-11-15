@@ -99,7 +99,7 @@ replay. This mode does not authorize a real-model replay on a smaller host.
 
 The [tiny layerwise control](head-layerwise-control-2026-11-15.json) reports seven
 exact prediction/CFG/solver boundaries and byte-identical emitted payloads
-against full-head execution with the same generated GGUF values. Repeated-call,
+against full-head execution with both generated F32 and F16 GGUF values. Repeated-call,
 group-size, shape and partial-load cleanup controls pass. This is preparation
 for reusing retained operands; no real 7B head replay or speech-quality result
 is established by the tiny control.

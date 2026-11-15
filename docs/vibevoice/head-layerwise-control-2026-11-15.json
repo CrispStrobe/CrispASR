@@ -5,7 +5,11 @@
     "hidden": 8,
     "latent": 4,
     "layers": 1,
-    "steps": 2
+    "steps": 2,
+    "weight_precisions": [
+      "F32",
+      "F16"
+    ]
   },
   "matching": {
     "scope": "upstream prediction head and scheduler; native injected LM conditions; no prefill parity",
@@ -85,7 +89,7 @@
     "max_abs": 0.25
   },
   "controls": [
-    "all seven boundaries exactly equal to full head",
+    "both F32 and F16 GGUF fixtures match full head at all seven boundaries",
     "all emitted binary payloads byte-identical",
     "two repeated forwards exactly equal and leave every parameter on meta",
     "per-group bound rejects before weight loading",
@@ -94,6 +98,76 @@
   ],
   "full_head_limit_bytes": 2147483648,
   "layerwise_group_limit_bytes": 805306368,
-  "test_sha256": "cbe5290144c87ea085d538410e2c96bc6138b2bdbc904873f66683e69a10fd95",
-  "implementation_sha256": "fa2c30090c8c8b17f02c9541003d13cde9241d6eb32109967f7056c5d3b6d7b2"
+  "test_sha256": "a781193636c1cd0ee574e4817c7991ae5bff4b93274c30cca46f1a6de121f9db",
+  "implementation_sha256": "fa2c30090c8c8b17f02c9541003d13cde9241d6eb32109967f7056c5d3b6d7b2",
+  "matching_f16_weights": {
+    "scope": "upstream prediction head and scheduler; native injected LM conditions; no prefill parity",
+    "weights_sha256": "5e1f3f04460d2727b3a83ba3fa7cda918da371d6867e194713159a34553f7375",
+    "source_sha256": {
+      "vibevoice/modular/modular_vibevoice_diffusion_head.py": "8a90ac685b9e32793749e2c58b48906758486d8b0bc0d92c8dfd141aa053852e",
+      "vibevoice/schedule/dpm_solver.py": "be10eae978afda40a6bc082806fa1e8f0f4b4e451fd1d21cec97347116ffba73"
+    },
+    "dequantized_weight_bytes": 11808,
+    "layerwise": true,
+    "stages": [
+      {
+        "stage": "tts_frame0_v_both_s000",
+        "cosine": 1.0,
+        "norm_ref": 1.25979931198143,
+        "norm_native": 1.25979931198143,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_cfg_s000",
+        "cosine": 1.0,
+        "norm_ref": 0.8748204230631391,
+        "norm_native": 0.8748204230631391,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_z_s000",
+        "cosine": 1.0000000000000002,
+        "norm_ref": 0.40532500956303014,
+        "norm_native": 0.40532500956303014,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_both_s001",
+        "cosine": 0.9999999999999999,
+        "norm_ref": 0.8399309716812361,
+        "norm_native": 0.8399309716812361,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_v_cfg_s001",
+        "cosine": 0.9999999999999999,
+        "norm_ref": 0.6089344066462319,
+        "norm_native": 0.6089344066462319,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_frame0_z_s001",
+        "cosine": 1.0,
+        "norm_ref": 0.6595989659979866,
+        "norm_native": 0.6595989659979866,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "tts_latent_frame0",
+        "cosine": 1.0,
+        "norm_ref": 0.6595989659979866,
+        "norm_native": 0.6595989659979866,
+        "max_abs": 0.0
+      }
+    ],
+    "weight_group_limit_bytes": 805306368,
+    "largest_weight_group_bytes": 8448,
+    "weight_groups": {
+      "noisy_images_proj": 128,
+      "t_embedder": 8448,
+      "cond_proj": 256,
+      "layers.0": 2336,
+      "final_layer": 640
+    }
+  }
 }

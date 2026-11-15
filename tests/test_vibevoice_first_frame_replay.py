@@ -15,6 +15,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class ReplayControl(unittest.TestCase):
     def test_tiny_same_weight_upstream_replay(self):
+        self.same_weight_upstream_replay('f32')
+
+    def test_tiny_f16_same_weight_upstream_replay(self):
+        self.same_weight_upstream_replay('f16')
+
+    def same_weight_upstream_replay(self, precision):
         source = os.environ.get('CRISPASR_VIBEVOICE_SRC')
         if not source:
             self.skipTest('set CRISPASR_VIBEVOICE_SRC to audited upstream checkout')
@@ -35,6 +41,8 @@ class ReplayControl(unittest.TestCase):
             head.final_layer.adaLN_modulation[1].weight.normal_(std=.1)
             for layer in head.layers:
                 layer.adaLN_modulation[1].weight.normal_(std=.1)
+            if precision == 'f16':
+                head.half().float()
         with tempfile.TemporaryDirectory(prefix='vv-frame-control-') as tmp:
             path = Path(tmp)
             model = path / 'tiny.gguf'
@@ -42,7 +50,7 @@ class ReplayControl(unittest.TestCase):
             def short(n):
                 return ('pred.' + n).replace('noisy_images_proj.', 'noisy_proj.').replace('cond_proj.', 'cond.').replace('t_embedder.mlp.', 't_emb.').replace('adaLN_modulation.1.', 'adaln.').replace('final_layer.', 'final.')
             for name, tensor in head.state_dict().items():
-                writer.add_tensor(short(name), tensor.detach().numpy())
+                writer.add_tensor(short(name), tensor.detach().numpy().astype(np.float16 if precision == 'f16' else np.float32))
             writer.write_header_to_file(); writer.write_kv_data_to_file(); writer.write_tensors_to_file(); writer.close()
             capture = path / 'capture'
             capture.mkdir()
