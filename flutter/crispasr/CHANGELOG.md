@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.8.54
+
+* **VibeVoice:** Reject ASR/TTS checkpoint task mismatches with a clear diagnostic; converters record the source model's task capability.
+
 ## 0.8.53
 
 * **Packaging:** new `crispasr-linux-x86_64-hip7.tar.gz` for AMD GPUs on ROCm 7.x (hipBLAS `libhipblas.so.3`); the ROCm 6 HIP tarball cannot load its GPU module there (#586).
