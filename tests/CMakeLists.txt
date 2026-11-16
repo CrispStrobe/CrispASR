@@ -3411,6 +3411,13 @@ catch_discover_tests(test-canary-layout
     PROPERTIES LABELS "unit;canary"
 )
 
+# General F16 flash-mask precision and masking controls (hermetic tiny graph).
+add_executable(test-fastconformer-mask test-fastconformer-mask.cpp)
+target_include_directories(test-fastconformer-mask PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-fastconformer-mask PRIVATE ggml ggml-base crispasr_link_ggml_cpu)
+add_test(NAME fastconformer-mask COMMAND test-fastconformer-mask)
+set_tests_properties(fastconformer-mask PROPERTIES LABELS "unit;fastconformer" TIMEOUT 30)
+
 # ─── test-fastconformer-snap-layout — diff-harness conv snapshot layout vs the reference dumpers (hermetic, unit)
 add_executable(test-fastconformer-snap-layout test-fastconformer-snap-layout.cpp)
 target_include_directories(test-fastconformer-snap-layout PRIVATE ${PROJECT_SOURCE_DIR}/src)

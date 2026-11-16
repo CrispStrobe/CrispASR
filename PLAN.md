@@ -1,5 +1,15 @@
 ### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
+- Active acceptance follow-up: the ordinary Canary encoder gate fails on both
+  matched base and head. Retained operands isolate loss from casting large
+  relative-position masks to F16. Prepare a general softmax-invariant row-max
+  centering fix and focused controls. The production helper preserves masking
+  and passes the retained layer-18 attention control (worst cosine improves
+  from 0.95692576 to 0.99999976). Full corrected-encoder acceptance and the later
+  layer-30 reference gap remain unmeasured. PR #590 stays draft. Shared
+  FastConformer also changes Parakeet, so the scoped VibeVoice result below
+  remains evidence for its measured source, not a changed-runtime acceptance.
+
 - Clean base `9ddae4590`; isolated `quality/issue589-disclosure-20261115`.
   Supersedes the diagnostic park. Exact Q4_K pack SHA-256
   `ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3`.
