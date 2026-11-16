@@ -317,7 +317,6 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-format-18
-          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100
 
       - name: Check formatting
         # --dry-run: report diffs without touching files.
@@ -326,7 +325,7 @@ jobs:
         # On failure, print the offending file:line locations so contributors
         # don't have to guess from a bare count.
         run: |
-          clang-format --version
+          clang-format-18 --version
           OUT=$(find src examples/cli crisp_audio \
                \( -name '*.cpp' -o -name '*.h' -o -name '*.c' \) \
                ! -name 'httplib.h' \
@@ -336,7 +335,7 @@ jobs:
                ! -path '*/coreml/*' \
                ! -path '*/rnnoise/*' \
                -print0 \
-          | xargs -0 clang-format --dry-run --Werror 2>&1 || true)
+          | xargs -0 clang-format-18 --dry-run --Werror 2>&1 || true)
           ERRORS=$(echo "$OUT" | grep -c 'error:.*clang-format' || true)
           echo "Format violations: $ERRORS"
           if [ "$ERRORS" -ne 0 ]; then
