@@ -9143,7 +9143,7 @@ double-count.
 
 ## VibeVoice 1.5B TTS voice cloning: acoustic + semantic dual encoder (May 2026)
 
-### Root cause: TTS clone used acoustic-only, not acoustic+semantic
+### Historical diagnosis — superseded by the issue #589 serving-path audit
 
 Microsoft's VibeVoice architecture uses two parallel σ-VAE encoders for
 speech representation:
@@ -9151,12 +9151,12 @@ speech representation:
 - **Acoustic encoder** (`at_enc`): vae_dim=64, captures spectral/timbre info
 - **Semantic encoder** (`st_enc`): vae_dim=128, captures linguistic/prosodic info
 
-Both go through separate connectors (`at_conn` → d_lm, `se_conn` → d_lm) and
-are **element-wise summed** before being injected as voice conditioning tokens.
+The training forward uses separate connectors (`at_conn` / `se_conn`) and
+**element-wise sums** their outputs. This is not the serving reference path.
 
-The TTS voice clone code only used the acoustic encoder (comment said "uses
-ONLY the acoustic encoder"). The ASR path correctly used both. The assumption
-was wrong — Microsoft's `modeling_vibevoice.py` forward() at line 372-375:
+The original diagnosis incorrectly treated the training forward as the TTS
+serving recipe, then commit `370a2358e` added a semantic reference sum. The
+training source `modeling_vibevoice.py` forward() at line 372-375 does say:
 
 ```python
 x[acoustic_input_mask] = (
@@ -9172,10 +9172,10 @@ with no scaling. In the Python reference, scaling is inside
 path is a separate `self.model.semantic_connector(speech_semantic_tensors)`
 call with raw encoder output.
 
-**RMS ratio**: acoustic connector RMS ≈ 0.245, semantic connector RMS ≈ 0.034
-(ratio ~14%). The semantic contribution is small but structurally important for
-speaker identity transfer — without it the model produces generic-sounding
-speech.
+**Serving distinction (#589)**: `_process_speech_inputs` connects only acoustic
+reference latents. It samples their posterior before scaling; native historically
+uses the mean. Generated audio does use semantic feedback, which is a different
+path. Training-forward parity cannot validate the served clone prompt.
 
 ### WAV sample rate: parser must check, not assume 24 kHz
 

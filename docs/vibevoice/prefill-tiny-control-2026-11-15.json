@@ -1,0 +1,401 @@
+{
+  "scope": "tiny39-token F32 GGUF upstream/full/streamed/native precision and flash controls; no7B validation",
+  "result": "original F32/default-flash control FAIL preserved; matched F16-KV/nonflash control PASS",
+  "base_runtime_source": "a8151a2e8d7914571139dff1fd0a03620eaca051",
+  "runtime_patch_sha256": "b27d8dcc6530b93abc986c7492c0c8c87b62e03adf44f4e01c4cef8ade5c0d77",
+  "ggml_revision": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+  "original_control": {
+    "exit_status": 1,
+    "upstream_full_vs_streamed_raw_blocks_bit_exact": true,
+    "first_threshold_failure": {
+      "depth": 2,
+      "stage": "hidden",
+      "cosine": 0.9999993123427634,
+      "relative_l2": 0.0011727380403312693,
+      "max_abs": 0.0022537708282470703
+    },
+    "raw_log_sha256": "1608b3d1bc7e1935dc10b2290cc292ce35adec200d6b905b89f658370f89c1d4",
+    "native_output_sha256": "f53f9f5cfe940f8e1961c3268bc85e2b39c1919cf632842633312b19d60aa6cd"
+  },
+  "initial_rounded_kv_default_flash_control": {
+    "exit_status": 1,
+    "raw_log_sha256": "d712ab994272e97a05d4fd3ec55f9e1eef272ff30aa3fbf2414dc7ae00cb2f19",
+    "result": "depth2logits relativeL2.0010402998636993648 still fails .001"
+  },
+  "final_matched_control": {
+    "exit_status": 0,
+    "raw_log_sha256": "f382169b0e34569cc692f1bd0d73689f3c7ce8ce49d1c9a67984a5444a6240ea",
+    "native_nonflash_output_sha256": "5c20bae5e7bcec2479fd3623d1105419925553ee560955778888e6f2f374b3de",
+    "precision": {
+      "scope": "tiny39-token precision control only; unchanged native outputs; no7B parity",
+      "thresholds": {
+        "cosine_min": 0.999999,
+        "relative_l2_max": 0.001
+      },
+      "weights_sha256": "ded38cdcceb8b359c62da804a009d988d4083bf7a69d7461afca5270e57d550e",
+      "original_f32_failed": [
+        {
+          "native_mode": "flash_default",
+          "precision": "original_F32_KV",
+          "depth": 2,
+          "stage": "hidden",
+          "cosine": 0.9999993123427634,
+          "relative_l2": 0.0011727380403312693,
+          "upstream_norm": 5.656606020981041,
+          "native_norm": 5.656606175550892,
+          "max_abs": 0.0022537708282470703,
+          "passed": false
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "original_F32_KV",
+          "depth": 2,
+          "stage": "logits",
+          "cosine": 0.9999989985456355,
+          "relative_l2": 0.0014271802489068432,
+          "upstream_norm": 1.9331067028817575,
+          "native_norm": 1.933460877207785,
+          "max_abs": 0.001639038324356079,
+          "passed": false
+        }
+      ],
+      "rounded_f16_failed": [],
+      "boundaries": [
+        {
+          "native_mode": "flash_default",
+          "precision": "original_F32_KV",
+          "depth": 1,
+          "stage": "hidden",
+          "cosine": 0.9999998106741151,
+          "relative_l2": 0.0006153468798339226,
+          "upstream_norm": 5.656375240060611,
+          "native_norm": 5.656375423540162,
+          "max_abs": 0.0014165937900543213,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "original_F32_KV",
+          "depth": 1,
+          "stage": "logits",
+          "cosine": 0.9999998112341777,
+          "relative_l2": 0.000614437584202626,
+          "upstream_norm": 2.3842615218881797,
+          "native_norm": 2.384257754392113,
+          "max_abs": 0.0009720027446746826,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "rounded_F16_KV",
+          "depth": 1,
+          "stage": "hidden",
+          "cosine": 0.999999800855885,
+          "relative_l2": 0.0006311008069415379,
+          "upstream_norm": 5.656375437973045,
+          "native_norm": 5.656375423540162,
+          "max_abs": 0.001506805419921875,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "rounded_F16_KV",
+          "depth": 1,
+          "stage": "logits",
+          "cosine": 0.9999998185608392,
+          "relative_l2": 0.0006073398883160587,
+          "upstream_norm": 2.3844426302662525,
+          "native_norm": 2.384257754392113,
+          "max_abs": 0.0008990168571472168,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "original_F32_KV",
+          "depth": 1,
+          "stage": "hidden",
+          "cosine": 0.9999999737551097,
+          "relative_l2": 0.00022910649402262812,
+          "upstream_norm": 5.656375240060611,
+          "native_norm": 5.656375523315228,
+          "max_abs": 0.0006378889083862305,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "original_F32_KV",
+          "depth": 1,
+          "stage": "logits",
+          "cosine": 0.9999999839976744,
+          "relative_l2": 0.00019437196238771624,
+          "upstream_norm": 2.3842615218881797,
+          "native_norm": 2.384442684616613,
+          "max_abs": 0.0002491474151611328,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "rounded_F16_KV",
+          "depth": 1,
+          "stage": "hidden",
+          "cosine": 0.9999999999999817,
+          "relative_l2": 1.925201450001405e-07,
+          "upstream_norm": 5.656375437973045,
+          "native_norm": 5.656375523315228,
+          "max_abs": 4.172325134277344e-07,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "rounded_F16_KV",
+          "depth": 1,
+          "stage": "logits",
+          "cosine": 0.9999999999999829,
+          "relative_l2": 1.8578613705298383e-07,
+          "upstream_norm": 2.3844426302662525,
+          "native_norm": 2.384442684616613,
+          "max_abs": 1.7881393432617188e-07,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "original_F32_KV",
+          "depth": 2,
+          "stage": "hidden",
+          "cosine": 0.9999993123427634,
+          "relative_l2": 0.0011727380403312693,
+          "upstream_norm": 5.656606020981041,
+          "native_norm": 5.656606175550892,
+          "max_abs": 0.0022537708282470703,
+          "passed": false
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "original_F32_KV",
+          "depth": 2,
+          "stage": "logits",
+          "cosine": 0.9999989985456355,
+          "relative_l2": 0.0014271802489068432,
+          "upstream_norm": 1.9331067028817575,
+          "native_norm": 1.933460877207785,
+          "max_abs": 0.001639038324356079,
+          "passed": false
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "rounded_F16_KV",
+          "depth": 2,
+          "stage": "hidden",
+          "cosine": 0.9999995654939723,
+          "relative_l2": 0.0009322081698821721,
+          "upstream_norm": 5.656606070193244,
+          "native_norm": 5.656606175550892,
+          "max_abs": 0.0018758773803710938,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_default",
+          "precision": "rounded_F16_KV",
+          "depth": 2,
+          "stage": "logits",
+          "cosine": 0.9999994639101906,
+          "relative_l2": 0.0010402998636993648,
+          "upstream_norm": 1.933268157362143,
+          "native_norm": 1.933460877207785,
+          "max_abs": 0.0010385215282440186,
+          "passed": false
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "original_F32_KV",
+          "depth": 2,
+          "stage": "hidden",
+          "cosine": 0.9999998969736275,
+          "relative_l2": 0.0004539303493510044,
+          "upstream_norm": 5.656606020981041,
+          "native_norm": 5.656606378826311,
+          "max_abs": 0.0014622360467910767,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "original_F32_KV",
+          "depth": 2,
+          "stage": "logits",
+          "cosine": 0.9999998397052068,
+          "relative_l2": 0.0005723608802524788,
+          "upstream_norm": 1.9331067028817575,
+          "native_norm": 1.9332682139831185,
+          "max_abs": 0.0006003379821777344,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "rounded_F16_KV",
+          "depth": 2,
+          "stage": "hidden",
+          "cosine": 0.999999999999947,
+          "relative_l2": 3.3010363534989573e-07,
+          "upstream_norm": 5.656606070193244,
+          "native_norm": 5.656606378826311,
+          "max_abs": 7.748603820800781e-07,
+          "passed": true
+        },
+        {
+          "native_mode": "flash_off",
+          "precision": "rounded_F16_KV",
+          "depth": 2,
+          "stage": "logits",
+          "cosine": 0.9999999999999423,
+          "relative_l2": 3.409974770838526e-07,
+          "upstream_norm": 1.933268157362143,
+          "native_norm": 1.9332682139831185,
+          "max_abs": 4.172325134277344e-07,
+          "passed": true
+        }
+      ],
+      "negative_control": {
+        "cosine": 0.9985975110034772,
+        "upstream_norm": 4.695645898361197,
+        "native_norm": 4.715445087717187,
+        "relative_l2": 0.05324081189496235,
+        "max_abs": 0.25
+      }
+    }
+  },
+  "resources": {
+    "original_build": "nonblocking heavy-local lock held through ggml-only build, standalone probe compile and tiny control; disk free17GiB and memory available>2GiB guards passed; no load or peak-memory gate recorded",
+    "final_matched_control": {
+      "disk_free_bytes": 17183596544,
+      "disk_required_strictly_greater_than_bytes": 12884901888,
+      "load1": 6.91845703125,
+      "load1_max": 8.0,
+      "mem_available_kib": 4673888,
+      "mem_required_strictly_greater_than_kib": 2097152,
+      "lock": "nonblocking heavy-local.lock held through child"
+    }
+  },
+  "upstream_replay": {
+    "scope": "actual upstream layer-at-a-time 39-token prefill; no real-model/native parity claim",
+    "weights_sha256": "ded38cdcceb8b359c62da804a009d988d4083bf7a69d7461afca5270e57d550e",
+    "upstream_qwen2_sha256": "a59fa06524227361fb401baf4d177124a27aec146bc01ec931235a9abbab17cb",
+    "config": {
+      "vocab_size": 16,
+      "max_position_embeddings": 64,
+      "hidden_size": 32,
+      "intermediate_size": 64,
+      "num_hidden_layers": 2,
+      "num_attention_heads": 4,
+      "use_sliding_window": false,
+      "sliding_window": null,
+      "max_window_layers": 28,
+      "num_key_value_heads": 2,
+      "hidden_act": "silu",
+      "initializer_range": 0.02,
+      "rms_norm_eps": 1e-06,
+      "use_cache": true,
+      "rope_theta": 1000000.0,
+      "rope_scaling": null,
+      "attention_dropout": 0.0,
+      "layer_types": [
+        "full_attention",
+        "full_attention"
+      ],
+      "return_dict": true,
+      "output_hidden_states": false,
+      "torchscript": false,
+      "dtype": null,
+      "pruned_heads": {},
+      "tie_word_embeddings": false,
+      "chunk_size_feed_forward": 0,
+      "is_encoder_decoder": false,
+      "is_decoder": false,
+      "cross_attention_hidden_size": null,
+      "add_cross_attention": false,
+      "tie_encoder_decoder": false,
+      "architectures": null,
+      "finetuning_task": null,
+      "id2label": {
+        "0": "LABEL_0",
+        "1": "LABEL_1"
+      },
+      "label2id": {
+        "LABEL_0": 0,
+        "LABEL_1": 1
+      },
+      "task_specific_params": null,
+      "problem_type": null,
+      "tokenizer_class": null,
+      "prefix": null,
+      "bos_token_id": null,
+      "pad_token_id": null,
+      "eos_token_id": null,
+      "sep_token_id": null,
+      "decoder_start_token_id": null,
+      "max_length": 20,
+      "min_length": 0,
+      "do_sample": false,
+      "early_stopping": false,
+      "num_beams": 1,
+      "temperature": 1.0,
+      "top_k": 50,
+      "top_p": 1.0,
+      "typical_p": 1.0,
+      "repetition_penalty": 1.0,
+      "length_penalty": 1.0,
+      "no_repeat_ngram_size": 0,
+      "encoder_no_repeat_ngram_size": 0,
+      "bad_words_ids": null,
+      "num_return_sequences": 1,
+      "output_scores": false,
+      "return_dict_in_generate": false,
+      "forced_bos_token_id": null,
+      "forced_eos_token_id": null,
+      "remove_invalid_values": false,
+      "exponential_decay_length_penalty": null,
+      "suppress_tokens": null,
+      "begin_suppress_tokens": null,
+      "num_beam_groups": 1,
+      "diversity_penalty": 0.0,
+      "_name_or_path": "",
+      "transformers_version": "4.57.6",
+      "tf_legacy_loss": false,
+      "use_bfloat16": false,
+      "model_type": "qwen2",
+      "output_attentions": false
+    },
+    "largest_dequantized_layer_bytes": 37376,
+    "head_row_chunk": 256,
+    "raw_per_block_bytes": 4992,
+    "blocks": [
+      {
+        "block": 0,
+        "raw_norm": 4.695645898361197,
+        "last_normalized_norm": 5.656375240060611
+      },
+      {
+        "block": 1,
+        "raw_norm": 6.159710870323994,
+        "last_normalized_norm": 5.656606020981041
+      }
+    ],
+    "embedding_gate": {
+      "max_abs": 0.0,
+      "relative_l2": 0.0
+    },
+    "native_taps": "missing: capture effective input and post-residual raw block outputs to localize native divergence"
+  },
+  "exact_source_files": {
+    "tools/vibevoice_prefill_replay.py": "96a9da30c05e5b47762a11c4cc157076060a0106686b94d2a9e303303b5f31ef",
+    "tests/test_vibevoice_prefill_replay.py": "7c6102a2af3f314455627370f3d0abc19f73f8aa86889626d9d892c31ed00668",
+    "tests/test_vibevoice_prefill_precision.py": "8d5f3d202d305b7946afdb95138b535d3a460b684f1f66defe215772a9318ca0",
+    "tests/vibevoice-prefill-probe.cpp": "9da9b721760b585a9130ad77fb0044c7619248b486d5bf63aa052d5ffcd70794"
+  },
+  "mechanism": "Pinned F16 key dot type is F32 (queries are not F16-rounded). Native flash path with F16 V uses F16 attention accumulation. Matched nonflash direct control isolates the tiny residual flash arithmetic; no real7B inference was run.",
+  "blockers": [
+    "Actual39-token7B native capture not produced here",
+    "Raw native per-block prefill taps are absent; locations and output preservation requirement documented",
+    "Real7B replay resource/RSS feasibility untested"
+  ],
+  "gpu_or_real_model_runs": 0
+}

@@ -221,3 +221,9 @@ export CRISPASR_MODEL_QWEN3_TTS="${CRISPASR_MODEL_QWEN3_TTS:-$CRISPASR_MODELS_DI
 # voice cache for later F16 runs).
 export CRISPASR_TEST_OMNIVOICE_MODEL="${CRISPASR_TEST_OMNIVOICE_MODEL:-$CRISPASR_MODELS_DIR/omnivoice-q4_k.gguf}"
 export CRISPASR_TEST_OMNIVOICE_TOKENIZER="${CRISPASR_TEST_OMNIVOICE_TOKENIZER:-$CRISPASR_MODELS_DIR/omnivoice-tokenizer-f16.gguf}"
+
+# VibeVoice base clone quality stays opt-in: set these explicitly before CTest.
+# CRISPASR_VIBEVOICE_CLONE_15B_MODEL / CRISPASR_VIBEVOICE_CLONE_7B_MODEL
+# CRISPASR_VIBEVOICE_CLONE_REFERENCE (owned/synthetic PCM16 WAV, preferably 5-10s)
+# CRISPASR_VIBEVOICE_CLONE_ASR_MODEL (local Parakeet; ASR_BACKEND overrides it)
+# See tests/regression/README.md for quality thresholds and both live test names.

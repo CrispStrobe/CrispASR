@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <vector>
 #include "core/ggml_cpu_backend.h"
+#include "core/attention_mask.h"
 
 namespace core_conformer {
 
@@ -929,8 +930,7 @@ static inline ggml_tensor* build_block(ggml_context* ctx0, ggml_tensor* cur, ggm
             attn_out = ggml_mul_mat(ctx0, V_t, scores);                               // (head_dim, T, n_heads)
             attn_out = ggml_reshape_2d(ctx0, ggml_cont(ctx0, ggml_permute(ctx0, attn_out, 0, 2, 1, 3)), d, T);
         } else {
-            // flash_attn_ext mask must be F16
-            ggml_tensor* BD_mask = ggml_cast(ctx0, BD_scaled, GGML_TYPE_F16);
+            ggml_tensor* BD_mask = core_attention::centered_flash_mask(ctx0, BD_scaled);
 
             // V needs [head_dim, T, n_heads] layout for flash_attn_ext (same as K).
             // The kernel reads strided views (nb0 == type size) directly — the

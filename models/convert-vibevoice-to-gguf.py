@@ -147,6 +147,7 @@ def main():
     writer.add_uint32("vibevoice.d_ffn", d_ffn)
     writer.add_uint32("vibevoice.vocab_size", vocab_size)
     writer.add_uint32("vibevoice.head_dim", head_dim)
+    writer.add_uint32("vibevoice.context_length", max_position_embeddings)
     writer.add_float32("vibevoice.rope_theta", rope_theta)
     writer.add_uint32("vibevoice.vae_dim_acoustic", vae_dim_acoustic)
     writer.add_uint32("vibevoice.vae_dim_semantic", vae_dim_semantic)

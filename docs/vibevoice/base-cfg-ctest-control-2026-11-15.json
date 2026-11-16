@@ -1,0 +1,37 @@
+{
+  "scope": "isolated fresh CMake configure of the exact new CTest registration, using actual production-C++ regression; no full repository build or quality rerun",
+  "runtime_source": "4fdea66e37bdcc885255e3e9e40524747d798963",
+  "native_cpp_sha256": "709ccb87d41d65987ecbc446831d78613cdbd8a0201e5c9b9c5099cfb33d6cc4",
+  "unit_file_sha256": "d6c7016af15523835d102528ba22ff2ebf802d525c5d86ab2cbf1daa1324fb32",
+  "runtime_and_unit_bytes_unchanged_since_candidate_submission": true,
+  "compiler": "GNU13.3.0",
+  "python": "3.13.11",
+  "ctest_name": "vibevoice-base-cfg-rng",
+  "ctest_passed": true,
+  "inner_tests": 3,
+  "inner_failures": 0,
+  "ctest_seconds": 1.5,
+  "labels": [
+    "unit",
+    "vibevoice",
+    "tts"
+  ],
+  "timeout_seconds": 60,
+  "resources": {
+    "mem_available_kib": 4703336,
+    "load1": 5.8466796875,
+    "free_bytes": 14994780160
+  },
+  "quality_candidate": {
+    "source": "4fdea66e37bdcc885255e3e9e40524747d798963",
+    "accepted_version": 2,
+    "worker_sha256": "79c3d71c40f6c9967b7d3e39566b7171220a058f220771128f964c57ac3efb5b",
+    "last_observed_state": "QUEUED",
+    "last_observed_utc": "2026-11-15 11:09",
+    "actual_gpu_assignment": null
+  },
+  "original_wer": 0.42857142857142855,
+  "unchanged_wer_max": 0.25,
+  "unchanged_speaker_delta": 0.02,
+  "quality_status": "FAIL until real candidate gates pass"
+}
