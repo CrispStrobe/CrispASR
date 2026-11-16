@@ -107,6 +107,8 @@ jobs:
               - 'src/core/gguf_loader.cpp'
               - 'src/core/gguf_loader.h'
               - 'src/core/gguf_file.h'
+              - 'src/core/attention_mask.h'
+              - 'src/core/fastconformer.h'
               - 'tests/test_windows_unicode_inference.py'
         run: python3 .github/scripts/ci_changes.py >> "$GITHUB_OUTPUT"
 
