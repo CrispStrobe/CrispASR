@@ -1,14 +1,19 @@
 ### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
-- Active acceptance follow-up: the ordinary Canary encoder gate fails on both
-  matched base and head. Retained operands isolate loss from casting large
-  relative-position masks to F16. Prepare a general softmax-invariant row-max
-  centering fix and focused controls. The production helper preserves masking
-  and passes the retained layer-18 attention control (worst cosine improves
-  from 0.95692576 to 0.99999976). Full corrected-encoder acceptance and the later
-  layer-30 reference gap remain unmeasured. PR #590 stays draft. Shared
-  FastConformer also changes Parakeet, so the scoped VibeVoice result below
-  remains evidence for its measured source, not a changed-runtime acceptance.
+- Acceptance follow-up measured on `85f026d31`: general row-max centering before
+  the F16 relative-position mask cast fixes the matched CPU Canary encoder gate
+  (0.99860537 to 0.99997950 against unchanged 0.999); all 41 stage gates pass.
+  Both ordinary/staged encoders match exactly. The existing front-end reference
+  comparisons use prefixes where lengths differ; this does not claim full
+  shape equivalence or reproduce the original GitHub GCC15 runner.
+- Shared FastConformer changes Parakeet too. A newly built runtime genuinely
+  revalidates the exact Q4_K CUDA roundtrip: six fresh arms, all eleven raw WERs
+  0.0 against unchanged 0.25, both speaker deltas 0.3631222248 against 0.02.
+  All 103 retained files, 17 runtime members, source/scorer/pack bindings,
+  commands and 27 resource admissions pass independent saved-output checks.
+  [Changed-runtime receipt](docs/vibevoice/centered-mask-quality-roundtrip-2026-11-16.json).
+  PR #590 stays draft pending ordinary CI/review on the publication head.
+  The earlier measured-source result below is preserved separately.
 
 - Clean base `9ddae4590`; isolated `quality/issue589-disclosure-20261115`.
   Supersedes the diagnostic park. Exact Q4_K pack SHA-256
