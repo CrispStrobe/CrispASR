@@ -267,6 +267,24 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - This repairs a demonstrated forced cutoff (nine target text tokens stopped
   exactly at 27 frames). It does not establish a fix for near-silence beginning
   earlier in the long 7B synthetic reference; decoded speech remains unqualified.
+### Windows UTF-8 GGUF model paths (#592) — locally checked Codex (2026-11-14)
+
+- Base `1c7f6f79e`; isolated `fix/592-windows-utf8-path`. Read the full issue
+  and its comments (none). Windows mmap now uses `CreateFileW`; all three fread
+  fallback sites use `_wfopen`, with strict UTF-8 to UTF-16 conversion per open
+  and both conversion results checked. Linux file access remains unchanged.
+- Extracted existing mmap/COW ownership into an internal ggml-independent
+  header for focused production-helper tests. Release and ASan/UBSan pass 61
+  checks: ASCII, Chinese, accented and supplementary-character paths, binary
+  contents, COW preserving disk bytes, missing and empty files. The exact
+  production CMake test registration passes isolated CTest (1/1).
+- The full loader translation unit compiles for Linux and MinGW x86-64; the
+  helper test cross-compiles and links as a Windows executable with warnings
+  treated as errors. Windows-only tests cover exact UTF-16 conversion and
+  malformed UTF-8 rejection. Windows file I/O and production Session inference
+  subsequently passed on ASCII and Unicode paths in [job 133751974059](https://github.com/CrispStrobe/CrispASR/actions/runs/43995971355/job/133751974059);
+  #596 merged as `bae18989`. The inference establishes path equivalence, not
+  Japanese-language quality.
 
 ### Ultra local-head Dart binding — complete Codex (2026-11-13)
 
