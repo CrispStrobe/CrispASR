@@ -30,6 +30,24 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Windows UTF-8 GGUF model paths (#592) — locally checked Codex (2026-11-14)
+
+- Base `1c7f6f79e`; isolated `fix/592-windows-utf8-path`. Read the full issue
+  and its comments (none). Windows mmap now uses `CreateFileW`; all three fread
+  fallback sites use `_wfopen`, with strict UTF-8 to UTF-16 conversion per open
+  and both conversion results checked. Linux file access remains unchanged.
+- Extracted existing mmap/COW ownership into an internal ggml-independent
+  header for focused production-helper tests. Release and ASan/UBSan pass 61
+  checks: ASCII, Chinese, accented and supplementary-character paths, binary
+  contents, COW preserving disk bytes, missing and empty files. The exact
+  production CMake test registration passes isolated CTest (1/1).
+- The full loader translation unit compiles for Linux and MinGW x86-64; the
+  helper test cross-compiles and links as a Windows executable with warnings
+  treated as errors. Windows-only tests cover exact UTF-16 conversion and
+  malformed UTF-8 rejection, but have not run on Windows. No Windows runtime,
+  session/model inference, full-library build or hosted CI acceptance is claimed.
+- clang-format 18 and whitespace checks pass. No push, PR or release action.
+
 ### Ultra local-head Dart binding — complete Codex (2026-11-13)
 
 - Base `8b7d95403`; isolated `feat/ultra-dart-20261113`. Added the missing

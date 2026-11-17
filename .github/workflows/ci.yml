@@ -53,6 +53,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       native: ${{ steps.filter.outputs.native }}
+      windows_unicode: ${{ steps.filter.outputs.windows_unicode }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -101,6 +102,12 @@ jobs:
               - 'tools/test_vulkan_sdk_download.py'
               - '.github/workflows/ci.yml'
               - '.github/scripts/ci_changes.py'
+              - 'tests/test_windows_unicode_inference.py'
+            windows_unicode:
+              - 'src/core/gguf_loader.cpp'
+              - 'src/core/gguf_loader.h'
+              - 'src/core/gguf_file.h'
+              - 'tests/test_windows_unicode_inference.py'
         run: python3 .github/scripts/ci_changes.py >> "$GITHUB_OUTPUT"
 
   # The configuration the shipped CUDA packages are built in — and, until
@@ -680,10 +687,10 @@ jobs:
       # path (CreateDirectoryA branch in src/speaker_db.cpp) and the
       # tests/test-speaker-db.cpp _WIN32 make_temp_dir() path.
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=ON -DBUILD_SHARED_LIBS=ON
 
       - name: Build
-        run: cmake --build build --config Release --target crispasr-cli -j $env:NUMBER_OF_PROCESSORS
+        run: cmake --build build --config Release --target crispasr-cli --target crispasr-lib -j $env:NUMBER_OF_PROCESSORS
 
       - name: Smoke test
         run: .\build\bin\Release\crispasr.exe --list-backends
@@ -702,6 +709,46 @@ jobs:
 
       - name: Run speaker-db unit tests
         run: ctest --test-dir build -C Release -R "speaker|cluster|centroid|whisper_params" -E "live|NOT_BUILT" --output-on-failure --timeout 120
+
+      - name: Build GGUF file path test
+        run: cmake --build build --config Release --target test-gguf-file -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Test GGUF file paths on Windows
+        run: ctest --test-dir build -C Release -R "^test-gguf-file$" --no-tests=error --output-on-failure --timeout 120
+
+      # Exercise the production Session C ABI too; helper-only file I/O cannot
+      # establish that a UTF-8 model path opens and transcribes through bindings.
+      - uses: actions/setup-python@v6
+        if: needs.changes.outputs.windows_unicode != 'false'
+        with:
+          python-version: '3.12'
+
+      - name: Install path inference test dependency
+        if: needs.changes.outputs.windows_unicode != 'false'
+        run: python -m pip install numpy==2.2.6
+
+      - name: Compare ASCII and Unicode model paths through the session C ABI
+        if: needs.changes.outputs.windows_unicode != 'false'
+        timeout-minutes: 15
+        env:
+          PYTHONPATH: ${{ github.workspace }}/python
+          PYTHONUTF8: '1'
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKOUT_SHA: ${{ github.sha }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: >-
+          python tests/test_windows_unicode_inference.py
+          --dll build/bin/Release/crispasr.dll
+          --wav samples/jfk.wav
+          --output windows-unicode-inference.json
+
+      - name: Upload Unicode session inference result
+        if: always() && needs.changes.outputs.windows_unicode != 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unicode-inference
+          path: windows-unicode-inference.json
+          if-no-files-found: warn
 
   # ====================================================================
   # iOS (cross-compile gate — no runtime test)
