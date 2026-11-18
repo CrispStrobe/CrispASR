@@ -1,3 +1,15 @@
+### ASR final checkpoint / handoff (2026-11-18)
+
+- Final user instruction authorizes the normal checkpoint push. See
+  [PR #599 ASR handoff](docs/validation/pr599-asr-handoff.md) for the complete
+  source/commit list, all19 failed jobs, actual retained checks, SDK byte gap,
+  runtime limits and remaining steps. Earlier local-only notes below are dated
+  historical constraints superseded for this checkpoint publication.
+- Code snapshot `1a3d7f63dc187496774c44cdff4069d74b33b418`; keep PR #599
+  draft and #598 open. Required current-head CI remains unrun; checkpoint uses
+  `[skip ci]` to preserve the instruction to stop new execution. No merge or
+  runtime-success claim. Stop after publishing and reporting the checkpoint.
+
 ### PR #599 Python ASan launch ordering — local only, cycle 181 (2026-11-18)
 
 - Retained ASan logs fail before ctypes C ABI assertions because the runtime
