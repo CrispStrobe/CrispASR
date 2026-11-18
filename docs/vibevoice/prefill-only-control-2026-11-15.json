@@ -1,0 +1,98 @@
+{
+  "scope": "prefill-only mode source/contract qualification; tiny native raw-tap preservation A/B; no7B/GPU validation",
+  "runtime_patch_sha256": "7409f91f2463e52c21a0df45b4daec28306f8634b30b5a3cef222635c1bf2844",
+  "base_runtime_source": "a8151a2e8d7914571139dff1fd0a03620eaca051",
+  "completion_marker": "prefill_capture_complete.bin:4 little-endian int32 values layers,tokens,hidden,vocab",
+  "native_exit_location": "immediately after positive prefill host dumps; before negative history,AR/RNG/diffusion",
+  "contract": {
+    "exit_code": 0,
+    "tests": 3,
+    "prefill_only_negative_cases": [
+      "missing marker",
+      "malformed marker",
+      "first-frame marker instead",
+      "missing prompt IDs",
+      "truncated raw block",
+      "unexpected diffusion/noise payload"
+    ]
+  },
+  "raw_tap_ab": {
+    "scope": "tiny CPU gate-off/gate-on A/B only; not7B/GPU parity",
+    "gate_off_on_bit_exact": true,
+    "gate_off_retained_bit_exact": true,
+    "raw_blocks": [
+      {
+        "stage": "tts_prefill_block_000.bin",
+        "bytes": 4992,
+        "norm": 4.695725371877642,
+        "sha256": "ea288119ed9b1733dac9202f83ae1c50412bc05e99bac0ad849bf93aa66b51a2"
+      },
+      {
+        "stage": "tts_prefill_block_001.bin",
+        "bytes": 4992,
+        "norm": 6.159933961274401,
+        "sha256": "68fe358db193f0300a92e880aed7caab410e649904216ce1a9b515833c5e66c9"
+      }
+    ],
+    "raw_payload_bytes": 9984,
+    "native_output_sha256": "f53f9f5cfe940f8e1961c3268bc85e2b39c1919cf632842633312b19d60aa6cd"
+  },
+  "resources": {
+    "free_bytes": 17103691776,
+    "available_kib": 4487036,
+    "load1": 0.7822265625,
+    "load_limit": 8.0,
+    "lock": "exclusive nonblocking, held by wrapper",
+    "stages": [
+      {
+        "name": "capture-contract",
+        "timeout_seconds": 60,
+        "free_bytes": 17103683584,
+        "available_kib": 4487036,
+        "load1": 0.7822265625,
+        "exit_code": 0,
+        "elapsed_seconds": 1.169398867059499,
+        "peak_rss_kib": "25660"
+      },
+      {
+        "name": "probe-compile",
+        "timeout_seconds": 120,
+        "free_bytes": 17103675392,
+        "available_kib": 4462312,
+        "load1": 0.7822265625,
+        "exit_code": 0,
+        "elapsed_seconds": 6.8473922200500965,
+        "peak_rss_kib": "263468"
+      },
+      {
+        "name": "tap-ab",
+        "timeout_seconds": 60,
+        "free_bytes": 17101078528,
+        "available_kib": 4425824,
+        "load1": 0.8798828125,
+        "exit_code": 0,
+        "elapsed_seconds": 0.41789436317048967,
+        "peak_rss_kib": "32840"
+      }
+    ]
+  },
+  "source_sha256": {
+    "src/vibevoice.cpp": "3fadfa26ecf27928badae043cca7730dd8a22a3a975d0a2b6c7d91acc213c9a5",
+    "tools/vibevoice_first_frame_capture.py": "b2105b01e4d2bc79e660c902a2fc7e487fa0a84c49633a076114e5f6e8119182",
+    "tests/test_vibevoice_first_frame_capture.py": "4fb645abaaeef483b12b9dc9c35292ade97a10e8afa15f1bee9cc889b9e52100"
+  },
+  "raw_artifact_sha256": {
+    "probe": "cd1770dc7f0f2f500b80e1e0da7b9d757a1c7d961457fdd34d945cef68c32f8f",
+    "capture-contract.log": "5c963ecddfa0de2e90ee71503bab03452efad426392bff0afe03b9d7224faf7b",
+    "probe-compile.log": "d6fee21c7933cceb389b25fd44bf4d343025ba5daacc9a5f6225bf015f980f1c",
+    "tap-ab.log": "547925bbbfa1a14e3ea5939cc2c2ab1d1adab1cf86325646efcf419c0c4ce386"
+  },
+  "native_full_synthesis_prefill_only_exit_exercised": false,
+  "limitations": [
+    "Tiny probe exercises production cached graph and raw taps, not full synthesis orchestration",
+    "Exact tested7B pack is unavailable locally; size mismatch blocks same-weight capture",
+    "Real prefill replay remains F32-KV only,explicitly warned; matchedF16 mode not implemented"
+  ],
+  "gpu_or_real_model_runs": 0,
+  "production_defaults_changed": false
+}

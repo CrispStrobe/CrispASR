@@ -1,0 +1,51 @@
+{
+  "scope": "tiny full Transformers4.57.6 versus bounded extraction; no actual7B reference result or quality pass",
+  "status": "PASS",
+  "source_hashes": {
+    "modeling_qwen2.py": "a59fa06524227361fb401baf4d177124a27aec146bc01ec931235a9abbab17cb",
+    "modeling_rope_utils.py": "55cc0c8cb76f592ab178b4662adcbdf4ad5012bb0b4249c0a96603141f18e9ac",
+    "masking_utils.py": "7a963feed8173b8265298dd24350c166222ce6b4719442fce48ab414d0478a6a"
+  },
+  "cases": [
+    {
+      "weights": "f32",
+      "kv": "f32",
+      "raw_blocks_bit_exact": 2,
+      "all_streamed_payloads_byte_identical": true
+    },
+    {
+      "weights": "f32",
+      "kv": "f16",
+      "raw_blocks_bit_exact": 2,
+      "all_streamed_payloads_byte_identical": true
+    },
+    {
+      "weights": "f16",
+      "kv": "f32",
+      "raw_blocks_bit_exact": 2,
+      "all_streamed_payloads_byte_identical": true
+    },
+    {
+      "weights": "f16",
+      "kv": "f16",
+      "raw_blocks_bit_exact": 2,
+      "all_streamed_payloads_byte_identical": true
+    }
+  ],
+  "controls": [
+    "actual upstream causal mask bit-exact",
+    "actual upstream RoPE cos/sin bit-exact",
+    "both raw layers match full model forward hooks exactly",
+    "normalized hidden and logit payloads byte-identical",
+    "configuration outside bounded scope refused",
+    "unknown upstream source hash refused",
+    "non39-token mask refused",
+    "second cache update refused"
+  ],
+  "f16_fixture": "round learned weights only; original F32 RoPE frequencies retained",
+  "files_sha256": {
+    "tools/vibevoice_qwen2_bounded_upstream.py": "ae3e3314b9d8481d6f1c8047d484518dde9bb5a1fba6f4ce94eb05c43d7b1aca",
+    "tools/vibevoice_prefill_replay.py": "cc7f42d7a20e9943bbacf7becee70d94e197eaf0b52c119a5e1b63e7c564607a",
+    "tests/test_vibevoice_bounded_qwen2.py": "fd11bd0643b9183a2ff8faa7098321d4b01b7089f26a9ecab331042ebb867b59"
+  }
+}

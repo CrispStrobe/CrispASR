@@ -10138,12 +10138,8 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
 #ifdef CA_HAVE_VIBEVOICE
     if (s->vibevoice_ctx) {
         if (ends_with_wav(path)) {
-            // 1.5B/7B base model: WAV reference → env var for vibevoice_synthesize
-#if defined(_WIN32)
-            _putenv_s("CRISPASR_VIBEVOICE_VOICE_AUDIO", path);
-#else
-            setenv("CRISPASR_VIBEVOICE_VOICE_AUDIO", path, 1);
-#endif
+            // Keep references on the session context; never leak them to another session.
+            vibevoice_set_reference_wav(s->vibevoice_ctx, path);
             return 0;
         }
         return vibevoice_load_voice(s->vibevoice_ctx, path);

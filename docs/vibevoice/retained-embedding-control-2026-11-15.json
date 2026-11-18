@@ -1,0 +1,26 @@
+{
+  "scope": "bounded39-row cold GGUF lookup only; no model construction or full7B inference",
+  "weight_sha256": "ff68a234c5a1069e379e4d3fdbf29bb07ec4981d0ad8841bb19bc442991413f3",
+  "weight_identity": "reuse independently streamed same retained cold pack hash; byte size rechecked",
+  "tensor_type": "Q4_K (12)",
+  "shape": [
+    39,
+    3584
+  ],
+  "bytes": 559104,
+  "max_abs": 0.0,
+  "relative_l2": 0.0,
+  "unequal_values": 0,
+  "native_nonfinite": 0,
+  "reference_implementation": "tools/vibevoice_prefill_replay.py same-GGUF embedding lookup/effective-input gate",
+  "source_commit": "9e282b91063961aac54d0bde1c663cf8e5456ef8",
+  "native_source": "dd362a822039911f892fe49295a427d16734432b",
+  "gguf_version": "0.18.0",
+  "quality_status": "FAIL",
+  "original_wer": 0.42857142857142855,
+  "unchanged_wer_max": 0.25,
+  "limits": [
+    "embedding lookup only, no layer/head/decoder parity yet",
+    "retains earlier missing native shared-library binary hash limitation"
+  ]
+}
