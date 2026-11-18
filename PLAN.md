@@ -1,3 +1,16 @@
+### PR #599 remaining failures — local only, cycle 180 (2026-11-18)
+
+- Exact terminal GCC Debug and Clang Debug amd64 logs each show 20 unit
+  failures from absent NumPy; the local prerequisite repair remains untested
+  on hosted runners. All 19 published failures remain failures.
+- ASan reports 832 bytes in eight backend allocations leaked by ArkTTS's
+  null/empty-path initialization test. Initialization's default context deleter
+  bypassed backend cleanup on early return. Use `arktts_free` as the pending
+  context's deleter; successful initialization still releases ownership.
+- Single-translation-unit syntax checking passes after this ownership fix;
+  no rebuilt ASan test or runtime leak-resolution proof is claimed. Preserve
+  the VAD, Conformer and sanitizer-loader gaps, SDK pin/checksum, and draft PR.
+
 ### PR #599 CI failure propagation — local only, cycle 179 (2026-11-18)
 
 - Preserve published `82d9daa14823`: terminal checks are 63 pass, 19 fail,

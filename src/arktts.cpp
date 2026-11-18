@@ -165,7 +165,7 @@ int arktts_load_tokenizer(struct arktts_context* /*ctx*/, const char* /*tokenize
 }
 
 struct arktts_context* arktts_init_from_file(const char* path_model, struct arktts_context_params params) {
-    auto c = std::make_unique<arktts_context>();
+    std::unique_ptr<arktts_context, decltype(&arktts_free)> c(new arktts_context(), arktts_free);
     c->params = params;
     c->rng.seed(params.seed ? params.seed : 42);
 
