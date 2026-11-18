@@ -14,6 +14,10 @@
   supports-op branch and kernel dispatch widths. Optional CUDA operator and
   xASR Q8_0 session/JFK tests are registered only in CUDA builds and skip without
   hardware/model. CUDA execution and the Windows reporter setup remain unrun.
+- PR #599 initial head `ac960b57faf8` exposed a pre-existing CI concurrency
+  collision: both CI workflows used the same display name/key, canceling the
+  required application CI. Use the distinct literal prefixes documented in
+  those workflows so the ordinary ggml-bump and application checks both run.
 
 ### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
