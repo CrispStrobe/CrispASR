@@ -7074,6 +7074,9 @@ if(Python3_EXECUTABLE AND CRISPASR_BUILD_EXAMPLES)
     endforeach()
 endif()
 if(Python3_EXECUTABLE)
+    add_test(NAME sanitized-python-launch-controls
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_sanitized_python_launch.py -v)
+    set_tests_properties(sanitized-python-launch-controls PROPERTIES LABELS "unit;ci" TIMEOUT 90)
     add_test(NAME ci-run-status-controls
         COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_ci_run_status.py -v)
     set_tests_properties(ci-run-status-controls PROPERTIES LABELS "unit;ci" TIMEOUT 30)
@@ -7106,3 +7109,7 @@ endif()
 add_executable(vibevoice-negative-history-probe EXCLUDE_FROM_ALL vibevoice-negative-history-probe.cpp)
 target_include_directories(vibevoice-negative-history-probe PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(vibevoice-negative-history-probe PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu Threads::Threads)
+
+include(${PROJECT_SOURCE_DIR}/cmake/SanitizedPythonTests.cmake)
+crispasr_preload_asan_for_python_tests(
+    gguf-detector-metadata haas-dispatch-entrypoints test-quantizer-io)

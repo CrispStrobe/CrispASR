@@ -1,3 +1,20 @@
+### PR #599 Python ASan launch ordering — local only, cycle 181 (2026-11-18)
+
+- Retained ASan logs fail before ctypes C ABI assertions because the runtime
+  is not first in the loader list. For the three affected tests on Linux/GCC
+  ASan only, preload the runtime located by the actual C++ compiler. Missing
+  runtime is a configuration failure; native test launch settings and other
+  sanitizer configurations are unchanged. Preserve the runtime before adding
+  the quantizer's fault injector instead of overwriting `LD_PRELOAD`.
+- Pure controls pass five mock CMake configurations and three mocked
+  quantizer environment cases; the old quantizer environment loses the
+  runtime in both nonempty-preload controls. No sanitizer/native backend,
+  model or performance execution is claimed. Runtime validation is unrun.
+- TSan fails at ctypes dlopen with static TLS allocation failure. That fact
+  narrows the startup stage but does not prove a safe remedy. The VAD log
+  ends after model loading with a segfault and no fault-site/backtrace.
+  Leave both gaps, Conformer parity and the external exact-SDK-byte gap open.
+
 ### PR #599 remaining failures — local only, cycle 180 (2026-11-18)
 
 - Exact terminal GCC Debug and Clang Debug amd64 logs each show 20 unit
