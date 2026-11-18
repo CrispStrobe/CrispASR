@@ -242,10 +242,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake libsdl2-dev git
+          python3 -m pip install numpy==2.2.6
 
       - name: Build
         run: |
-          cmake . -DCRISPASR_SDL2=ON -DCMAKE_BUILD_TYPE=${{ matrix.build }}
+          cmake . -DCRISPASR_SDL2=ON -DPython3_EXECUTABLE="$(command -v python3)" -DCMAKE_BUILD_TYPE=${{ matrix.build }}
           make
           # -L "gh|unit": this job already BUILDS all 192 test targets, so running the
           # unit tier costs seconds. CI used to execute 1 of 162 unit tests (found
@@ -272,10 +273,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake libsdl2-dev git
+          python3 -m pip install numpy==2.2.6
 
       - name: Build
         run: |
-          cmake . -DCRISPASR_SDL2=ON -DCMAKE_BUILD_TYPE=${{ matrix.build }} -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8-a
+          cmake . -DCRISPASR_SDL2=ON -DPython3_EXECUTABLE="$(command -v python3)" -DCMAKE_BUILD_TYPE=${{ matrix.build }} -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8-a
           make
           # -L "gh|unit": this job already BUILDS all 192 test targets, so running the
           # unit tier costs seconds. CI used to execute 1 of 162 unit tests (found
@@ -317,10 +319,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang build-essential cmake libsdl2-dev git
+          python3 -m pip install numpy==2.2.6
 
       - name: Build
         run: |
-          cmake . -DCRISPASR_SDL2=ON -DCMAKE_BUILD_TYPE=${{ matrix.build }} -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+          cmake . -DCRISPASR_SDL2=ON -DPython3_EXECUTABLE="$(command -v python3)" -DCMAKE_BUILD_TYPE=${{ matrix.build }} -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
           make
           # -L "gh|unit": this job already BUILDS all 192 test targets, so running the
           # unit tier costs seconds. CI used to execute 1 of 162 unit tests (found
@@ -361,7 +364,8 @@ jobs:
             # (unlike the runner) had none, so it failed with "/usr/bin/env:
             # 'python3': No such file or directory" the moment the unit tier
             # started running here.
-            apt install -y build-essential cmake git curl python3
+            apt install -y build-essential cmake git curl python3 python3-pip
+            python3 -m pip install numpy==2.2.6
             cmake . -DCMAKE_BUILD_TYPE=Debug \
               -DCRISPASR_SANITIZE_${{ matrix.sanitizer }}=ON \
               -DGGML_OPENMP=OFF
