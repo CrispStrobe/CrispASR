@@ -4,6 +4,7 @@
 // See crispasr_tts_chunking.h for the design rationale (issue #66).
 
 #include "crispasr_tts_chunking.h"
+#include "crispasr_sentence_end.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -101,7 +102,9 @@ std::vector<std::string> crispasr_tts_split_sentences(const std::string& text, s
             // Terminator must be followed by whitespace or end-of-input
             // for it to count as a sentence break — otherwise it's a
             // decimal point ("1.5") or in-word punctuation.
-            if (is_space_or_end(text, i + term_len)) {
+            // A '.' after an ordinal, initial or abbreviation ("am 3. Oktober",
+            // "Dr.", "z. B.") does not end the sentence; see crispasr_sentence_end.h.
+            if (is_space_or_end(text, i + term_len) && (text[i] != '.' || crispasr_period_ends_sentence(text, i))) {
                 std::string chunk = trim(text.substr(chunk_start, i + term_len - chunk_start));
                 if (!chunk.empty())
                     whitespace_split(chunk, max_chars, result);

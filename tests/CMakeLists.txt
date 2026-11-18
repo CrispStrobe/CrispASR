@@ -4622,6 +4622,25 @@ target_link_libraries(test_audioseal_cosine PRIVATE
     audioseal
 )
 
+# ─── test-sentence-end-abbrev — --split-on-punct keeps German ordinals /
+# abbreviations inside the subtitle line (shared '.' rule with TTS chunking and
+# live translation). Compiles crispasr_output.cpp directly; no model load.
+add_executable(test-sentence-end-abbrev
+    test-sentence-end-abbrev.cpp
+    ${PROJECT_SOURCE_DIR}/examples/cli/crispasr_output.cpp
+)
+target_include_directories(test-sentence-end-abbrev PRIVATE
+    ${PROJECT_SOURCE_DIR}/examples/cli
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-sentence-end-abbrev PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-sentence-end-abbrev
+    TEST_SPEC "[sentence-end]"
+    PROPERTIES LABELS "unit;output"
+)
+
 # ─── test_server_chunking — Catch2 unit tests for the sentence splitter
 #used by / v1 / audio / speech long - form input(PLAN §75d / issue #66).
 #Pure functions, no backend dependency.
@@ -4631,6 +4650,7 @@ add_executable(test_server_chunking
 )
 target_include_directories(test_server_chunking PRIVATE
     ${PROJECT_SOURCE_DIR}/examples/cli
+    ${PROJECT_SOURCE_DIR}/src
 )
 target_link_libraries(test_server_chunking PRIVATE
     Catch2::Catch2WithMain

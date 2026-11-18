@@ -1,3 +1,10 @@
+## 2026-11-18 — Shared sentence-end rule for TTS chunking and subtitles
+
+- **Problem:** `crispasr_tts_split_sentences` and `--split-on-punct` ended a sentence at every ". ", so German ordinals and abbreviations split mid-phrase ("am 24. | November", "Dr. | Sieben", "z. | B.") — an audible pause in TTS, a broken subtitle cue.
+- **Fix:** `examples/cli/crispasr_sentence_end.h` reuses live translation's unit-tested `lt_ends_sentence` for the word ending in `.`; ellipses and a closing bracket/quote before the dot still end the piece. `CRISPASR_SENTENCE_ABBREV=0` restores the old rule.
+- **Measured** on 1,776 human-segmented UD German GSD r2.14 dev+test sentences joined into 356 five-sentence paragraphs (1,420 internal boundaries), both splitters: false splits 72 → 8, missed boundaries 147 → 148 ("der FR."), F1 0.921 → 0.942. Live translation (unchanged) 7 / 129. spaCy `de_core_news_sm` senter for comparison: 57 false / 63 missed — not adopted.
+- **Tests:** `test_server_chunking` (abbreviation case now keeps "Mr. Smith"; new year/ellipsis/bracket and opt-out cases) and new `test-sentence-end-abbrev` (text-only and word-timed display segments).
+
 ## 2026-11-07 — Forced aligners join the nightly regression; Ultra GGUF published
 
 - **Aligner regression kind:** `tests/regression/manifest.json` gains `align_backends`, with `align_for()` and `compare_alignment()` in `run_one.py`. The nightly runs three entries:

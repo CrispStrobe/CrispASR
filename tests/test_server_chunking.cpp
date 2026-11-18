@@ -2,13 +2,15 @@
 //
 // Pins the splitter behaviour the /v1/audio/speech long-form path
 // depends on (PLAN §75d / issue #66): boundary detection, abbreviation
-// over-split (acceptable), Unicode terminator support, max_chars
+// and ordinal handling (shared with live translation via
+// crispasr_sentence_end.h), Unicode terminator support, max_chars
 // fallback, concat with silence pad.
 
 #include "crispasr_tts_chunking.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -54,14 +56,42 @@ TEST_CASE("splitter does NOT split decimal numbers", "[unit][chunking]") {
     REQUIRE(out[0] == "The value is 1.5 today.");
 }
 
-TEST_CASE("splitter over-splits English abbreviations (documented)", "[unit][chunking]") {
-    // "Mr. Smith" gets split — the period is followed by whitespace.
-    // Documented limitation; produces an extra ~200 ms pause but
-    // doesn't break audio. Real fix is ICU BreakIterator.
+TEST_CASE("splitter keeps abbreviations, initials and ordinals inside the sentence", "[unit][chunking]") {
+    // Formerly a documented over-split ("Mr." | "Smith said hi."). The '.'
+    // rule is now shared with live translation (lt_ends_sentence).
+    auto en = crispasr_tts_split_sentences("Mr. Smith said hi.");
+    REQUIRE(en.size() == 1);
+    REQUIRE(en[0] == "Mr. Smith said hi.");
+    auto de = crispasr_tts_split_sentences("Am 3. Oktober kam Dr. Müller z. B. nach Berlin. Er blieb! Was nun?");
+    REQUIRE(de.size() == 3);
+    REQUIRE(de[0] == "Am 3. Oktober kam Dr. Müller z. B. nach Berlin.");
+    REQUIRE(de[1] == "Er blieb!");
+    REQUIRE(de[2] == "Was nun?");
+}
+
+TEST_CASE("splitter still ends sentences at years, ellipses and closing brackets", "[unit][chunking]") {
+    auto out = crispasr_tts_split_sentences("Das war 1990. Das hatte ich gehofft... Die Akte (Nr. 216/94). Ende.");
+    REQUIRE(out.size() == 4);
+    REQUIRE(out[0] == "Das war 1990.");
+    REQUIRE(out[1] == "Das hatte ich gehofft...");
+    REQUIRE(out[2] == "Die Akte (Nr. 216/94).");
+    REQUIRE(out[3] == "Ende.");
+}
+
+TEST_CASE("CRISPASR_SENTENCE_ABBREV=0 restores the bare '. ' rule", "[unit][chunking]") {
+#if defined(_WIN32)
+    _putenv_s("CRISPASR_SENTENCE_ABBREV", "0");
+#else
+    setenv("CRISPASR_SENTENCE_ABBREV", "0", 1);
+#endif
     auto out = crispasr_tts_split_sentences("Mr. Smith said hi.");
+#if defined(_WIN32)
+    _putenv_s("CRISPASR_SENTENCE_ABBREV", "");
+#else
+    unsetenv("CRISPASR_SENTENCE_ABBREV");
+#endif
     REQUIRE(out.size() == 2);
     REQUIRE(out[0] == "Mr.");
-    REQUIRE(out[1] == "Smith said hi.");
 }
 
 TEST_CASE("splitter handles CJK ideographic full stop U+3002", "[unit][chunking]") {

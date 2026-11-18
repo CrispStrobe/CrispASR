@@ -31,10 +31,13 @@
 // Each returned chunk is trimmed of surrounding whitespace; empty
 // pieces are dropped. Empty / whitespace-only input → empty vector.
 //
+// A '.' after an ordinal ("am 3. Oktober"), initial ("z. B.") or known
+// abbreviation ("Mr.", "Dr.", "bzw.") does not end a sentence; the rule is
+// shared with live translation (crispasr_sentence_end.h).
+// CRISPASR_SENTENCE_ABBREV=0 restores the bare ". " rule.
+//
 // Known limitations (acceptable for v1):
-//   - Over-splits English abbreviations like "Mr. Smith" (the period
-//     is followed by whitespace). Adds an extra ~200 ms pause; doesn't
-//     break audio. ICU BreakIterator would fix this — out of scope.
+//   - Abbreviations missing from the shared list still over-split.
 //   - Decimal numbers like "1.5" stay intact (the period is followed
 //     by a digit, not whitespace).
 //   - Quotation marks aren't pulled into the leading chunk: `"Hi."` then
