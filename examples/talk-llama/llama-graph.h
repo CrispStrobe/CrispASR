@@ -6,6 +6,7 @@
 #include "llama-adapter.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 #include <memory>
 #include <set>
@@ -81,8 +82,8 @@ struct llm_graph_params;
 class llm_graph_input_i {
 public:
     llm_graph_input_i() {
-        const char* LLAMA_GRAPH_INPUT_DEBUG = getenv("LLAMA_GRAPH_INPUT_DEBUG");
-        debug = LLAMA_GRAPH_INPUT_DEBUG ? atoi(LLAMA_GRAPH_INPUT_DEBUG) : 0;
+        const char* LLAMA_GRAPH_INPUT_DEBUG = std::getenv("LLAMA_GRAPH_INPUT_DEBUG");
+        debug = LLAMA_GRAPH_INPUT_DEBUG ? std::atoi(LLAMA_GRAPH_INPUT_DEBUG) : 0;
     }
 
     virtual ~llm_graph_input_i() = default;

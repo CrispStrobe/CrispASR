@@ -18,6 +18,10 @@
   collision: both CI workflows used the same display name/key, canceling the
   required application CI. Use the distinct literal prefixes documented in
   those workflows so the ordinary ggml-bump and application checks both run.
+- Wider CI also exposed missing standard declarations for `getenv`/`atoi` in
+  the legacy llama graph header on MinGW/Clang. Include `<cstdlib>` and qualify
+  those calls. The unit job separately failed before compilation on HTTP 404
+  fetching the unchanged pinned ONNX SDK; preserve checksum and coverage gates.
 
 ### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
