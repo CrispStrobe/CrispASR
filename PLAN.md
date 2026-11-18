@@ -1,3 +1,26 @@
+### PR #599 independent CI repairs — prepared locally, cycle 177 (2026-11-18)
+
+- Preserve published `82d9daa14823` and its passing checks. Existing failed jobs
+  have distinct causes: SDK HTTP 404; CLI `getenv`/`atoi` declarations; x86
+  AVX-512 build/host mismatch; missing NumPy; ARM Rust signed/unsigned C-char
+  buffers. The missing benchmark binary follows failed Debug tests preventing
+  the Release build; no benchmark or test gate is waived.
+- Local repairs add `<cstdlib>`/qualified CLI calls, use `c_char` for five Rust
+  output buffers, supply NumPy to the five legacy CI jobs and bind CMake to that
+  Python, and apply the existing AVX2/FMA baseline to x86 low-perf CI too.
+- Installed unsigned-char ARM target metadata check reproduces all 11 Rust
+  type errors before the buffer fix and passes after. CLI adapter syntax passes.
+  Neither is Windows/ARM Linux runtime or CUDA proof. Remaining x86 faulting
+  controls require hosted verification before claiming resolution.
+- The x86 ISA candidate is confined to the low-perf CI invocation: its actual
+  job reports compiled AVX512F and host missing AVX512F, alongside SIGILL.
+  Product ISA defaults, benchmark code/baselines, test gates and crash failures
+  remain unchanged. This candidate is unqualified until actual supported-host
+  verification; a flag edit is not a test/performance pass.
+- Keep this repair local: publishing would automatically rerun model/perf CI,
+  which is outside this cycle's authorization. SDK pin/checksum stay unchanged;
+  PR #599 remains draft and #598 stays open.
+
 ### Issue #598 CUDA SSM convolution fallback — ASR owner (2026-11-18)
 
 - Claimed in `fix/598-ssm-cuda-fallback`, based on PR #590 merge
