@@ -22,6 +22,14 @@
   the legacy llama graph header on MinGW/Clang. Include `<cstdlib>` and qualify
   those calls. The unit job separately failed before compilation on HTTP 404
   fetching the unchanged pinned ONNX SDK; preserve checksum and coverage gates.
+- Final-head MinGW/Clang progressed past that header and found a separate
+  missing `strtol` declaration in `llama-vocab.cpp`; include `<cstdlib>` and
+  qualify `std::strtol`. No tokenizer behavior changes.
+- SDK route diagnosis: the exact v1.30.0 Linux x64 asset, release API, tag ref
+  and raw tag source return HTTP 404, including HTTP/1.1 and direct resolved API
+  routing. No redirect or local proxy explains it; a public ggml API control
+  succeeds. No verified alternate SDK bytes were obtained. Keep the existing
+  downloader/version/checksum and unit coverage unchanged; PR #599 stays draft.
 
 ### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
