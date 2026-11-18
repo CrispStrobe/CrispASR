@@ -1,3 +1,20 @@
+### Issue #598 CUDA SSM convolution fallback — ASR owner (2026-11-18)
+
+- Claimed in `fix/598-ssm-cuda-fallback`, based on PR #590 merge
+  `3b3dae4817b4ef0dded9dde8f4713178833de8d1`. PR #590 head `534e4703c3a5`
+  completed 56 passing / 4 skipped exact-head checks; #589 is closed.
+- Reject unsupported convolution widths in CUDA capability detection so the
+  scheduler sends K=8/16/31 to CPU. Add model-free scheduling and numerical
+  fallback coverage, plus optional real-CUDA coverage where hardware exists.
+- Shared-host memory limit is 5 GiB; preserve 1 GiB headroom and use hosted CI
+  for heavy builds. No CUDA runtime result is claimed before an actual run.
+- Local standalone test linked to retained CPU ggml libraries: all 132 real
+  scheduler/scalar-oracle cases pass; the legacy capability control fails.
+  Two source-contract checks bind the tested predicate to the actual CUDA
+  supports-op branch and kernel dispatch widths. Optional CUDA operator and
+  xASR Q8_0 session/JFK tests are registered only in CUDA builds and skip without
+  hardware/model. CUDA execution and the Windows reporter setup remain unrun.
+
 ### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
 - Acceptance follow-up measured on `85f026d31`: general row-max centering before

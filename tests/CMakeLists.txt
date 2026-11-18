@@ -5379,6 +5379,33 @@ if(APPLE AND TARGET ggml-metal)
     endforeach()
 endif()
 
+# ─── CUDA SSM convolution capability and CPU fallback (#598) ──────────────
+# CUDA SSM capability is also exercised on CPU-only CI through an emulated
+# device and the real scheduler. A CUDA build additionally tests the real device.
+if(NOT GGML_BACKEND_DL)
+    add_executable(test-ssm-conv-fallback test-ssm-conv-fallback.cpp)
+    target_include_directories(test-ssm-conv-fallback PRIVATE ${PROJECT_SOURCE_DIR}/ggml/src)
+    target_link_libraries(test-ssm-conv-fallback PRIVATE ggml ggml-base crispasr_link_ggml_cpu)
+    add_test(NAME ssm-conv-fallback COMMAND test-ssm-conv-fallback)
+    add_test(NAME ssm-conv-legacy-rejected COMMAND test-ssm-conv-fallback --legacy-support)
+    set_tests_properties(ssm-conv-fallback ssm-conv-legacy-rejected PROPERTIES LABELS "unit;ggml;backend" TIMEOUT 45)
+    set_tests_properties(ssm-conv-legacy-rejected PROPERTIES WILL_FAIL TRUE)
+    if(TARGET ggml-cuda)
+        add_executable(test-ssm-conv-cuda test-ssm-conv-fallback.cpp)
+        target_include_directories(test-ssm-conv-cuda PRIVATE ${PROJECT_SOURCE_DIR}/ggml/src)
+        target_compile_definitions(test-ssm-conv-cuda PRIVATE CRISPASR_TEST_REAL_CUDA)
+        target_link_libraries(test-ssm-conv-cuda PRIVATE ggml ggml-base crispasr_link_ggml_cpu ggml-cuda)
+        add_test(NAME ssm-conv-cuda COMMAND test-ssm-conv-cuda)
+        set_tests_properties(ssm-conv-cuda PROPERTIES LABELS "unit;ggml;backend;cuda" TIMEOUT 60 SKIP_RETURN_CODE 4)
+        add_executable(test-xasr-cuda-live test-xasr-cuda-live.cpp)
+        target_include_directories(test-xasr-cuda-live PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/include)
+        target_link_libraries(test-xasr-cuda-live PRIVATE crispasr-lib ggml-cuda)
+        add_test(NAME xasr-cuda-live COMMAND test-xasr-cuda-live)
+        set_tests_properties(xasr-cuda-live PROPERTIES LABELS "live;cuda;xasr" TIMEOUT 300 SKIP_RETURN_CODE 4
+            WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+    endif()
+endif()
+
 # ─── test_ggml_audio_ops_backend — carried ggml audio-op backend patches ─────
 #
 # These run conv_transpose_1d and col2im_1d directly on a single GPU backend
@@ -7047,6 +7074,9 @@ if(Python3_EXECUTABLE AND CRISPASR_BUILD_EXAMPLES)
     endforeach()
 endif()
 if(Python3_EXECUTABLE)
+    add_test(NAME ssm-conv-cuda-contract
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_ssm_conv_cuda_contract.py -v)
+    set_tests_properties(ssm-conv-cuda-contract PROPERTIES LABELS "unit;ggml;backend")
     add_test(NAME vibevoice-clone-live-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_vibevoice_clone_live_controls.py)
     set_tests_properties(vibevoice-clone-live-controls PROPERTIES LABELS "unit;vibevoice;voice-cloning")
