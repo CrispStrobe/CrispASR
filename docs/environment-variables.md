@@ -141,6 +141,12 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | `CRISPASR_SEG_MERGE_GAP_CS` | Never merge across a gap wider than this many centiseconds (default 200). Two identical lines a minute apart are two real utterances. |
 | `CRISPASR_SEG_MERGE_MIN_RUN` | Minimum consecutive similar segments before merging (default 3), so an ordinary repeated "yes." pair survives. |
 
+### Sentence splitting (TTS chunking, subtitles)
+
+| Variable | Purpose |
+|----------|---------|
+| `CRISPASR_SENTENCE_ABBREV` | Default ON. TTS long-form chunking and `--split-on-punct` subtitles use live translation's sentence-end rule for `.`, so ordinals, initials and known abbreviations (`am 3. Oktober`, `z. B.`, `Dr.`, `Mr.`) stay inside the sentence. On 1,776 UD German GSD sentences this cut false splits from 72 to 8. `0` restores the bare `. ` rule. |
+
 ### Alignment and VAD sanity checks
 
 | Variable | Purpose |

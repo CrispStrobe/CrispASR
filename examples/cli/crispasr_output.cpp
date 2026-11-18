@@ -3,6 +3,7 @@
 // Extracted / generalized from parakeet-main/main.cpp and cohere-main.cpp.
 
 #include "crispasr_output.h"
+#include "crispasr_sentence_end.h"
 
 #include "core/asr_time_order.h"
 
@@ -152,7 +153,8 @@ static std::vector<std::pair<std::string, float>> split_text_at_punct(const std:
         int plen = is_sentence_end_at(text, i);
         // Sentence end: punctuation followed by space, next char, or end of text.
         // For CJK, no space is needed — the punctuation mark itself is the boundary.
-        if (plen > 0 && (i + plen >= len || text[i + plen] == ' ' || plen == 3)) {
+        if (plen > 0 && (i + plen >= len || text[i + plen] == ' ' || plen == 3) &&
+            (text[i] != '.' || crispasr_period_ends_sentence(text, i))) {
             i += plen - 1; // advance past the punctuation bytes
             size_t end = i + 1;
             std::string sentence = text.substr(start, end - start);
@@ -528,7 +530,8 @@ std::vector<crispasr_disp_segment> crispasr_make_disp_segments(const std::vector
             // not the next word's end time.
             const bool at_sentence_end =
                 split_on_punct && !cur.text.empty() && !w.text.empty() &&
-                (cur.text.size() >= 1 && is_sentence_end_at(cur.text, cur.text.size() - 1) == 1 ||
+                (cur.text.size() >= 1 && is_sentence_end_at(cur.text, cur.text.size() - 1) == 1 &&
+                     (cur.text.back() != '.' || crispasr_period_ends_sentence(cur.text, cur.text.size() - 1)) ||
                  cur.text.size() >= 3 && is_sentence_end_at(cur.text, cur.text.size() - 3) == 3);
 
             if (would_overflow || at_sentence_end) {
