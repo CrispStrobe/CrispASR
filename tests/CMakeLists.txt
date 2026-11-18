@@ -7074,6 +7074,9 @@ if(Python3_EXECUTABLE AND CRISPASR_BUILD_EXAMPLES)
     endforeach()
 endif()
 if(Python3_EXECUTABLE)
+    add_test(NAME ci-run-status-controls
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_ci_run_status.py -v)
+    set_tests_properties(ci-run-status-controls PROPERTIES LABELS "unit;ci" TIMEOUT 30)
     add_test(NAME ssm-conv-cuda-contract
         COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test_ssm_conv_cuda_contract.py -v)
     set_tests_properties(ssm-conv-cuda-contract PROPERTIES LABELS "unit;ggml;backend")

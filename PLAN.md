@@ -1,3 +1,21 @@
+### PR #599 CI failure propagation — local only, cycle 179 (2026-11-18)
+
+- Preserve published `82d9daa14823`: terminal checks are 63 pass, 19 fail,
+  7 skip. Keep the PR draft and issue #598 open; do not publish these repairs
+  while automatic model/performance CI runs remain outside authorization.
+- Capture producer and logging statuses before shell assignments overwrite
+  them; stop after failed downloads, configure/build/tests or benchmarks.
+  Debug failure now prevents both Release and benchmark execution. Successful
+  performance commands and baselines remain intact; crashes remain failures.
+- Register 14 pure mock shell controls. The frozen script and test passed all
+  14 controls after directory guards, with Bash syntax and whitespace checks
+  passing. Preserve the failed baseline (10 failures, 2 errors); no controls
+  were rerun in cycle 179 and no real build/model/performance run is claimed.
+- Compiler jobs also need the NumPy prerequisite demonstrated by their failed
+  logs; supply the pinned NumPy and bind CMake to that Python interpreter.
+  Hosted validation remains unrun. VAD, Conformer exact-bit parity, sanitizer
+  leak/loader failures and the external SDK exact-byte gap remain unresolved.
+
 ### PR #599 independent CI repairs — prepared locally, cycle 177 (2026-11-18)
 
 - Preserve published `82d9daa14823` and its passing checks. Existing failed jobs
