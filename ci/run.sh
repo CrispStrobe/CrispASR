@@ -233,7 +233,7 @@ function gg_run_ctest {
 
     gg_check_build_requirements
 
-    (time cmake -DCMAKE_BUILD_TYPE=${mode} ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
+    (time cmake -DCMAKE_BUILD_TYPE=${mode} -DPython3_EXECUTABLE="$(command -v python3)" ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
     (time make -j$(nproc)                                    ) 2>&1 | tee -a $OUT/${ci}-make.log
 
     # `-L main` was upstream whisper.cpp's label convention; NOTHING in this

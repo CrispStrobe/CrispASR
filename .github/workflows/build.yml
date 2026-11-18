@@ -1265,6 +1265,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install build-essential libcurl4-openssl-dev
+          python3 -m pip install numpy==2.2.6
 
       - name: Test
         id: ggml-ci
@@ -1297,6 +1298,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install build-essential libcurl4-openssl-dev
+          python3 -m pip install numpy==2.2.6
 
       - name: Test
         id: ggml-ci
@@ -1336,6 +1338,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install build-essential libcurl4-openssl-dev
+          python3 -m pip install numpy==2.2.6
 
       - name: Test
         id: ggml-ci
@@ -1368,6 +1371,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install build-essential libcurl4-openssl-dev
+          python3 -m pip install numpy==2.2.6
 
       - name: Test
         id: ggml-ci
@@ -1400,6 +1404,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install build-essential libcurl4-openssl-dev
+          python3 -m pip install numpy==2.2.6
 
       - name: Test
         id: ggml-ci
