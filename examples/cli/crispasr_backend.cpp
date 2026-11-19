@@ -83,6 +83,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_paraformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sensevoice_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sidon_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_miotts_backend();
+std::unique_ptr<CrispasrBackend> crispasr_create_zonos3_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_arktts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_bt2_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_piano_transcription_backend();
@@ -374,6 +375,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_confucius4_tts_backend();
     if (name == "parler-tts" || name == "parler_tts" || name == "parler" || name == "parlertts")
         return crispasr_make_parler_tts_backend();
+    if (name == "zonos3" || name == "zonos3-mini" || name == "zonos3_mini")
+        return crispasr_create_zonos3_backend();
     if (name == "zonos" || name == "zonos-tts" || name == "zonos_tts")
         return crispasr_make_zonos_backend();
     if (name == "csm" || name == "csm-tts" || name == "csm_tts" || name == "sesame" || name == "sesame-csm")
@@ -520,6 +523,8 @@ std::vector<std::string> crispasr_list_backends() {
         "parler-tts",
         "zonos",
         "zonos-tts",
+        "zonos3",
+        "zonos3-mini",
         "csm",
         "csm-tts",
         "sesame",
@@ -918,6 +923,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "csm";
     if (contains_ci("parler") && contains_ci("tts"))
         return "parler-tts";
+    if (contains_ci("zonos3"))
+        return "zonos3";
     if (contains_ci("zonos"))
         return "zonos";
     if (contains_ci("hojo"))

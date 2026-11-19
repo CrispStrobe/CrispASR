@@ -211,6 +211,10 @@
 #include "miotts.h"
 #define CA_HAVE_MIOTTS 1
 #endif
+#if __has_include("zonos3_tts.h")
+#include "zonos3_tts.h"
+#define CA_HAVE_ZONOS3 1
+#endif
 #if __has_include("arktts.h")
 #include "arktts.h"
 #define CA_HAVE_ARKTTS 1
@@ -2287,6 +2291,9 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_MIOTTS
     miotts_context* miotts_ctx = nullptr;
+#ifdef CA_HAVE_ZONOS3
+    zonos3_tts_context* zonos3_ctx = nullptr;
+#endif
 #endif
 #ifdef CA_HAVE_ARKTTS
     arktts_context* arktts_ctx = nullptr;
@@ -3371,6 +3378,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         p.temperature = 0.8f;
         s->miotts_ctx = miotts_init_from_file(model_path, p);
         if (!s->miotts_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_ZONOS3
+    if (s->backend == "zonos3" || s->backend == "zonos3-mini") {
+        zonos3_tts_context_params p = zonos3_tts_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = s->use_gpu;
+        s->zonos3_ctx = zonos3_tts_init_from_file(model_path, p);
+        if (!s->zonos3_ctx) {
             delete s;
             return nullptr;
         }
@@ -5099,6 +5120,10 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->miotts_ctx)
         return miotts_get_sample_rate(s->miotts_ctx);
 #endif
+#ifdef CA_HAVE_ZONOS3
+    if (s->zonos3_ctx)
+        return zonos3_tts_get_sample_rate(s->zonos3_ctx);
+#endif
 #ifdef CA_HAVE_ARKTTS
     if (s->arktts_ctx)
         return arktts_get_sample_rate(s->arktts_ctx);
@@ -5285,6 +5310,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MIOTTS
     list += ",miotts";
+#endif
+#ifdef CA_HAVE_ZONOS3
+    list += ",zonos3";
 #endif
 #ifdef CA_HAVE_ARKTTS
     list += ",arktts";
@@ -10000,6 +10028,10 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
     if (s->miotts_ctx)
         return miotts_load_preset_embedding(s->miotts_ctx, path);
 #endif
+#ifdef CA_HAVE_ZONOS3
+    if (s->zonos3_ctx)
+        return zonos3_tts_load_speaker_embedding(s->zonos3_ctx, path);
+#endif
 #ifdef CA_HAVE_VOXTRAL_TTS
     if (s->voxtral_tts_ctx) {
         // `path` is a preset voice name (e.g. "fr_female"); applied at synthesize.
@@ -10872,6 +10904,15 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
     if (s->miotts_ctx) {
         int n = 0;
         float* pcm = miotts_synthesize(s->miotts_ctx, text, &n);
+        if (out_n_samples)
+            *out_n_samples = n;
+        return pcm;
+    }
+#endif
+#ifdef CA_HAVE_ZONOS3
+    if (s->zonos3_ctx) {
+        int n = 0;
+        float* pcm = zonos3_tts_synthesize(s->zonos3_ctx, text, &n);
         if (out_n_samples)
             *out_n_samples = n;
         return pcm;
@@ -13056,6 +13097,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (s->miotts_ctx)
         miotts_free(s->miotts_ctx);
 #endif
+#ifdef CA_HAVE_ZONOS3
+    if (s->zonos3_ctx)
+        zonos3_tts_free(s->zonos3_ctx);
+#endif
 #ifdef CA_HAVE_ARKTTS
     if (s->arktts_ctx)
         arktts_free(s->arktts_ctx);
@@ -13792,6 +13837,13 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
         touched++;
     }
 #endif
+#ifdef CA_HAVE_ZONOS3
+    if (s->zonos3_ctx) {
+        zonos3_tts_set_temperature(s->zonos3_ctx, temperature);
+        zonos3_tts_set_seed(s->zonos3_ctx, (uint32_t)seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_ARKTTS
     if (s->arktts_ctx) {
         arktts_set_temperature(s->arktts_ctx, temperature);
@@ -13934,6 +13986,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_MIOTTS
     if (s->miotts_ctx) {
         miotts_set_seed(s->miotts_ctx, seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_ZONOS3
+    if (s->zonos3_ctx) {
+        zonos3_tts_set_seed(s->zonos3_ctx, (uint32_t)seed);
         touched++;
     }
 #endif
