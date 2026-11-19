@@ -938,6 +938,24 @@ char* fireredpunc_process(fireredpunc_context* ctx, const char* text) {
                     return true;
             return false;
         };
+        // Original word spacing. Upstream rebuilds its text from tokens and
+        // spaces only adjacent ASCII-alphanumeric units with a "no
+        // punctuation" predecessor; since this arm emits the user's words,
+        // that rule alone deleted every space between Cyrillic/Greek/Arabic
+        // words ("Онсказал,чтосоздал...") and the space after any comma or
+        // period ("so,my"). Keep a space wherever the INPUT had one, except
+        // where either neighbour is CJK (upstream's CJK output has none).
+        std::vector<uint8_t> space_before;
+        core_bert::pretokenize(input, &space_before);
+        const bool have_spacing = space_before.size() == words_orig.size();
+        auto is_cjk_unit = [](const std::string& s) {
+            for (size_t k = 0; k < s.size();) {
+                const uint32_t cp = core_unicode::utf8_next(s.data(), s.size(), k);
+                if (cp >= 0x2E80)
+                    return true;
+            }
+            return false;
+        };
         int tok_i = 0, prev_pred = 0;
         for (size_t w = 0; w < words_orig.size() && w < word_ntok.size(); w++) {
             const int n_sub = word_ntok[w];
@@ -948,7 +966,11 @@ char* fireredpunc_process(fireredpunc_context* ctx, const char* text) {
             // Blueprint spacing: a space only between two adjacent
             // alphanumeric units whose predecessor predicted "no punctuation".
             // CJK gets none, which is correct.
-            if (w > 0 && is_alnumish(words_orig[w]) && is_alnumish(words_orig[w - 1]) && prev_pred == 0) {
+            const bool blueprint_space =
+                w > 0 && is_alnumish(words_orig[w]) && is_alnumish(words_orig[w - 1]) && prev_pred == 0;
+            const bool input_space = w > 0 && have_spacing && space_before[w] && !is_cjk_unit(words_orig[w]) &&
+                                     !is_cjk_unit(words_orig[w - 1]);
+            if (blueprint_space || input_space) {
                 result += ' ';
             }
             result += words_orig[w];
@@ -1063,7 +1085,10 @@ char* fireredpunc_process(fireredpunc_context* ctx, const char* text) {
         int latin = 0, cjk = 0;
         for (size_t i = 0; i < result.size(); i++) {
             unsigned char c = (unsigned char)result[i];
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+            // 2-byte UTF-8 leads (U+0080..U+07FF: accented Latin, Greek,
+            // Cyrillic, Hebrew, Arabic) are alphabetic, non-CJK script too —
+            // without them Russian text kept full-width "，".
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= 0xC2 && c <= 0xDF))
                 latin++;
             else if (c >= 0xE0)
                 cjk++; // rough: 3-byte+ UTF-8 = CJK/fullwidth

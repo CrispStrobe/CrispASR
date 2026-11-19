@@ -182,9 +182,11 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_higgs_stt_backend();
     if (name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" || name == "qwen3_17b" || name == "mega-asr" ||
         name == "mega_asr" || name == "megaasr" || name == "raon-speech" || name == "raon-speech-9b" ||
-        name == "raon_speech" || name == "rumble-2-flash" || name == "rumble2" || name == "rumble")
+        name == "raon_speech" || name == "rumble-2-flash" || name == "rumble2" || name == "rumble" ||
+        name == "confucius4-r2t2" || name == "confucius4_r2t2" || name == "r2t2")
         return crispasr_make_qwen3_backend(name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" ||
-                                           name == "qwen3_17b");
+                                           name == "qwen3_17b" || name == "confucius4-r2t2" ||
+                                           name == "confucius4_r2t2" || name == "r2t2");
     if (name == "fastconformer-ctc" || name == "fastconformer_ctc" || name == "canary-ctc" || name == "canary_ctc")
         return crispasr_make_fastconformer_ctc_backend();
     if (name == "wav2vec2" || name == "hubert" || name == "data2vec")
@@ -913,6 +915,11 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "dia";
     if (contains_ci("dia-tts") || contains_ci("dia_tts"))
         return "dia";
+    // Confucius4-R2T2 (#445) is a Qwen3-ASR-1.7B fine-tune that shares the
+    // "confucius4" family prefix with the TTS model; it must not fall into
+    // the TTS rule below (CI run 43170649072: exit 13, missing transformer.ln_f).
+    if (contains_ci("r2t2"))
+        return "qwen3";
     if (contains_ci("confucius4") || contains_ci("confucius4-tts") || contains_ci("confucius4_tts"))
         return "confucius4-tts";
     if (contains_ci("dots-tts") || contains_ci("dots_tts") || contains_ci("dots.tts"))
