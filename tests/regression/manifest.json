@@ -2706,6 +2706,17 @@
       "_check_note": "Mixture = samples/jfk.wav + a synthetic piano/drum bed at 0 dB SNR, built by run_one.py, so the clean sources are known exactly. Gate: SI-SDR of the vocals stem against the clean speech, its gain over the unseparated mixture, and an RMS ratio in 0.5..2 (SI-SDR is scale-invariant)."
     },
     {
+      "name": "voice-isolator-q8_0",
+      "backend_id": "voice-isolator",
+      "task": "separate",
+      "gguf": {"repo": "cstr/inworld-voice-isolator-GGUF", "revision": "c39fed591701e6b2ed4bbf4973b308d66c15d382", "file": "voice-isolator-q8_0.gguf"},
+      "synth": {"kind": "speech_music", "sr": 48000, "speech_sample": "samples/jfk.wav", "chords": [["C", "maj"], ["G", "maj"], ["A", "min"], ["F", "maj"]], "bpm": 100, "snr_db": 0},
+      "speech_stem": "voice",
+      "si_sdr_min_db": 3.0,
+      "si_sdr_gain_min_db": 3.0,
+      "_check_note": "Inworld Voice Isolator v1 offline (#602), mono 48 kHz stems voice/background. Mixture = samples/jfk.wav + a synthetic piano/drum bed at 0 dB SNR built by run_one.py. Gate: SI-SDR of the voice stem vs the clean speech, its gain over the mixture, RMS ratio 0.5..2. Measured locally 2026-11-19: 4.48 dB (mixture -0.01 dB, gain +4.48), RMS ratio 0.970; the model keeps part of the tonal bed at 0 dB SNR, so the gates are set below that, well above a passthrough (gain 0). Stage parity vs upstream is separate: crispasr-diff voice-isolator against cstr/crispasr-regression-fixtures voice-isolator/jfk-noisy-3s/offline-ref.gguf."
+    },
+    {
       "name": "opus-mt-de-en-q8_0",
       "backend_id": "marian",
       "task": "translate",
