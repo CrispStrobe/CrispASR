@@ -259,6 +259,13 @@ constexpr Entry k_registry[] = {
      nullptr, nullptr,
      "CC-BY-NC-4.0 — NON-COMMERCIAL use only (KRAFTON/Raon-Speech-9B, "
      "https://huggingface.co/KRAFTON/Raon-Speech-9B)"},
+    // rumble-2-flash (#602) — Reson8/Rumble-2-Flash, a 0.5B Qwen3-ASR fine-tune
+    // (audio 18L d=896, LLM 14L d=1024, re-indexed 99 630-token vocab, Reson8
+    // control tokens <digits><nofiller><verbatim> in the system turn via
+    // qwen3asr.system_prefix). 45 languages. Apache-2.0.
+    {"rumble-2-flash", "rumble-2-flash-q4_k.gguf",
+     "https://huggingface.co/cstr/rumble-2-flash-GGUF/resolve/main/rumble-2-flash-q4_k.gguf", "~400 MB", nullptr,
+     nullptr},
     // Qwen3-ASR-1.7B fine-tuned for Japanese anime/galgame speech (Apache-2.0).
     // Same architecture as qwen3-1.7b; uses the standard qwen3 backend.
     {"qwen3-ja-anime", "qwen3-asr-1.7b-ja-anime-q4_k.gguf",

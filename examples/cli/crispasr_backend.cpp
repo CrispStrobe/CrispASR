@@ -181,7 +181,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_higgs_stt_backend();
     if (name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" || name == "qwen3_17b" || name == "mega-asr" ||
         name == "mega_asr" || name == "megaasr" || name == "raon-speech" || name == "raon-speech-9b" ||
-        name == "raon_speech")
+        name == "raon_speech" || name == "rumble-2-flash" || name == "rumble2" || name == "rumble")
         return crispasr_make_qwen3_backend(name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" ||
                                            name == "qwen3_17b");
     if (name == "fastconformer-ctc" || name == "fastconformer_ctc" || name == "canary-ctc" || name == "canary_ctc")
@@ -415,6 +415,7 @@ std::vector<std::string> crispasr_list_backends() {
         "qwen3-1.7b",
         "mega-asr",
         "raon-speech",
+        "rumble-2-flash",
         "higgs-stt",
         "fastconformer-ctc",
         "wav2vec2",
@@ -833,6 +834,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "indextts";
     if (contains_ci("raon-speech") || contains_ci("raon_speech"))
         return "qwen3"; // #455 speech-to-text, not Raon-OpenTTS
+    if (contains_ci("rumble-2") || contains_ci("rumble2") || contains_ci("rumble_2"))
+        return "qwen3"; // #602 Reson8 Rumble-2-Flash (Qwen3-ASR fine-tune)
     if (contains_ci("f5-tts") || contains_ci("f5tts") || contains_ci("F5TTS") || contains_ci("raon"))
         return "f5-tts"; // #387 Raon-OpenTTS rides the f5-tts runtime
     if (contains_ci("pocket-tts") || contains_ci("pocket_tts") || contains_ci("pockettts"))

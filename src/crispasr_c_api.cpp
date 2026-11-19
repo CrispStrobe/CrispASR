@@ -7362,9 +7362,10 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // Like VibeVoice, opt in to using session hotwords as free-form context.
         const char* context_env = getenv("CRISPASR_QWEN3_HOTWORDS_AS_CONTEXT");
         const bool hotwords_as_context = qwen3_system_hotwords && context_env && atoi(context_env) != 0;
-        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, s->ask, assistant_prefill,
-                                                    qwen3_system_hotwords && !hotwords_as_context ? s->hotwords : "",
-                                                    hotwords_as_context ? s->hotwords : "");
+        std::string text = core_qwen3_prompt::build(
+            N_enc, core_qwen3_prompt::with_system_prefix(qwen3_asr_system_prefix(s->qwen3_ctx), sys_instruction),
+            s->ask, assistant_prefill, qwen3_system_hotwords && !hotwords_as_context ? s->hotwords : "",
+            hotwords_as_context ? s->hotwords : "");
         if (raon) { // RaonPipeline.stt; --ask replaces the instruction
             const std::string eff_lang = lang_set ? lang : s->source_language;
             static bool warned = false;

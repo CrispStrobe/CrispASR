@@ -59,6 +59,7 @@
 #include "higgs_stt.h"
 #include "moss_transcribe_diarize.h"
 #include "qwen3_asr.h"
+#include "core/qwen3_prompt.h"
 #include "nemotron3_diar.h"
 #include "qwen3_tts.h"
 #include "omnivoice.h"
@@ -3498,14 +3499,10 @@ int main(int argc, char** argv) {
         std::vector<int32_t> own_ids;
         if ((stage_on("ids") || stage_on("logits")) && ref.has("trace_input_ids")) {
             auto ref_ids_f = ref.get_f32("trace_input_ids");
-            std::string text = "<|im_start|>system\n"
-                               "<|im_end|>\n"
-                               "<|im_start|>user\n"
-                               "<|audio_start|>";
-            for (int i = 0; i < N_enc_own; i++)
-                text += "<|audio_pad|>";
-            text += "<|audio_end|><|im_end|>\n"
-                    "<|im_start|>assistant\n";
+            // Same builder as the CLI / C ABI, so a model-specific system
+            // prefix (#602 Rumble control tokens) is part of what is diffed.
+            const std::string text = core_qwen3_prompt::build(
+                N_enc_own, core_qwen3_prompt::with_system_prefix(qwen3_asr_system_prefix(ctx), ""), "", "", "");
             int n_ids = 0;
             int32_t* ids = qwen3_asr_tokenize(ctx, text.c_str(), &n_ids);
             if (ids) {

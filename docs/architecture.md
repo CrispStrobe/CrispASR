@@ -987,6 +987,38 @@ As in `generate()`, `<|audio_output_pad|>` is masked every step and
 `<|im_end|>` on the first step. The model has no language control; `-l` and
 `--translate` are ignored with a warning.
 
+### rumble-2-flash
+
+Reson8/Rumble-2-Flash (Apache-2.0, #602) is a 0.5B **Qwen3-ASR fine-tune** in
+the native transformers layout (`Qwen3ASRForConditionalGeneration`). It runs
+on the qwen3-asr runtime unchanged: the audio tower (18 layers, d = 896, 8 s
+`n_window_infer` attention windows) and projector are Qwen3-ASR-0.6B's. The
+LLM is Qwen3 with **14** layers (d = 1024, GQA 16/8, tied `lm_head`).
+
+Two things differ from the Qwen release, and neither shows up in the tensor
+shapes:
+
+- **Re-indexed vocabulary.** It has 99 630 tokens, so `<|im_end|>` = 99564,
+  `<|audio_pad|>` = 99595 and so on. The converter takes `eos`/`pad` from the
+  tokenizer instead of Qwen's fixed 151645/151643. The runtime already finds
+  the chat markers by string.
+- **Control tokens in the system turn.** `chat_template.jinja` always opens
+  the system text with `<digits>|<nodigits>`, `<filler>|<nofiller>` and
+  `<verbatim>|<noverbatim>`. The defaults are `<digits><nofiller><verbatim>`.
+  The converter stores them as `qwen3asr.variant = rumble` and
+  `qwen3asr.system_prefix`. The CLI, the C ABI and `crispasr-diff` prepend
+  them through `core_qwen3_prompt::with_system_prefix`.
+  `CRISPASR_QWEN3_SYSTEM_PREFIX` overrides them, for example
+  `<nodigits><filler><noverbatim>`.
+
+`-l` forces the language the way the template's `language` kwarg does: an
+assistant prefill `language <Name><asr_text>`. The model card's
+`apply_transcription_request(language=...)` instead appends the name to the
+system text. The auxiliary CTC head (`ctc/ctc_head.safetensors`, 896 → 99 631
+on `ln_post`) is not converted. Reference dumps:
+`tools/dump_reference.py --backend rumble2`. Validation:
+`tools/ci-heavy/rumble2_validate.py`.
+
 ### moss-transcribe
 
 Dedicated ASR sibling of moss-audio (same author). Uses the **stock

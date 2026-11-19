@@ -49,6 +49,7 @@ parakeet-v2|parakeet-tdt-0.6b-v2-q4_k.gguf
 parakeet-tdt-1.1b|parakeet-tdt-1.1b-q4_k.gguf
 orukeet|orukeet-q4_k.gguf
 confucius4-r2t2|confucius4-r2t2-q4_k.gguf
+rumble-2-flash|rumble-2-flash-q4_k.gguf|qwen3
 dolphin|dolphin-cn-dialect-small-streaming-q4_k.gguf|dolphin
 xasr|x-asr-zh-en-q8_0.gguf|xasr
 auto|granite-speech-5.0-2b-q4_k.gguf|granite

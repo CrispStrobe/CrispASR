@@ -5,6 +5,16 @@
 namespace core_qwen3_prompt {
 
 // Raw context and wrapped hotwords are independent of questions and language bias.
+// #602 Rumble-2-Flash chat_template.jinja: the system text is prefixed with
+// the control tokens unless it already carries them ("<digits>"/"<nodigits>").
+inline std::string with_system_prefix(const char* prefix, const std::string& system) {
+    if (!prefix || !*prefix)
+        return system;
+    if (system.find("<digits>") != std::string::npos || system.find("<nodigits>") != std::string::npos)
+        return system;
+    return std::string(prefix) + system;
+}
+
 inline std::string build(int audio_tokens, std::string system, const std::string& question, const std::string& prefill,
                          const std::string& hotwords, const std::string& context = "") {
     if (!context.empty()) {

@@ -173,6 +173,8 @@ int qwen3_asr_lm_head_dim(struct qwen3_asr_context* ctx);
 // and the pre-adaptor encoder frames (out_N x enc_dim) for the diff harness;
 // free() them.
 bool qwen3_asr_is_raon_speech(struct qwen3_asr_context* ctx);
+// #602 Rumble-2-Flash: control-token prefix for the system turn ("" if none).
+const char* qwen3_asr_system_prefix(struct qwen3_asr_context* ctx);
 float* qwen3_asr_raon_encode(struct qwen3_asr_context* ctx, const float* samples, int n_samples, int* out_N,
                              int* out_dim);
 float* qwen3_asr_raon_encode_stages(struct qwen3_asr_context* ctx, const float* samples, int n_samples, int mel_chunk,
