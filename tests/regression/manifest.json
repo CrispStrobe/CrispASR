@@ -1268,6 +1268,18 @@
       "transcript_tolerance": {"cer_max": 0.1, "wer_max": 0.1}
     },
     {
+      "name": "rumble-2-flash-q4_k",
+      "backend_id": "qwen3",
+      "gguf": {"repo": "cstr/rumble-2-flash-GGUF", "revision": "780b126551f62603755e534952ad2942ac0ebcef", "file": "rumble-2-flash-q4_k.gguf", "approx_size_mb": 425},
+      "skip_diff": true,
+      "cli_extra_args": ["--backend", "qwen3"],
+      "_validation_note": "#602 Reson8/Rumble-2-Flash. Stage-diffed vs fp32 transformers by tools/ci-heavy/rumble2_validate.py (heavy-cpu run 44490348922): F16 cos 1.000000 at every stage; f16/q8_0/q4_k transcripts byte-identical to transformers on jfk/ko-369/paraformer_zh.",
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "Human transcript of samples/jfk.wav (JFK inaugural address), not a model capture.",
+      "transcript_tolerance": {"cer_max": 0.1, "wer_max": 0.1}
+    },
+    {
       "name": "qwen3-asr-1.7b-ja-anime-q4_k",
       "backend_id": "qwen3",
       "gguf": {"repo": "cstr/qwen3-asr-1.7b-ja-anime-GGUF", "revision": "1906c1f812b598d5e9dae091c79656d73b41ec28", "file": "qwen3-asr-1.7b-ja-anime-q4_k.gguf", "approx_size_mb": 1491},
