@@ -39,6 +39,82 @@ DEFAULT_STAGES = [
 ] + [f"encoder_layer_{i}" for i in range(24)]
 
 
+def _attach_fluid_speech(model, nemo_path: str) -> None:
+    """FluidVoice-Labs/fluid-speech-pro (#595): mirror fluid_speech.load().
+
+    The .nemo carries `encoder.fv_insert.*` (a FrameCleaner block run as a
+    forward hook on encoder.pre_encode) and an optional `clean_mode.*`
+    adapter. A plain restore_from(strict=False) silently drops both, so add
+    the block and load every tensor strictly like upstream. Clean mode is
+    folded when CRISPASR_REF_FLUID_CLEAN=1. No-op for other checkpoints.
+    """
+    import os, tarfile, tempfile
+    import torch
+    import torch.nn as nn
+
+    spec = model.cfg.get("fluid_speech") if hasattr(model, "cfg") else None
+    if not spec:
+        return
+
+    class FrameCleaner(nn.Module):  # verbatim structure of fluid_speech.FrameCleaner
+        def __init__(self, width=1024, dim=1024, kernel=15):
+            super().__init__()
+            self.ln = nn.LayerNorm(width)
+            self.down = nn.Linear(width, dim)
+            self.mix = nn.Conv1d(dim, dim, kernel, padding=kernel // 2, groups=dim)
+            self.up = nn.Linear(dim, width)
+
+        def forward(self, x):
+            h = self.down(self.ln(x)).transpose(1, 2)
+            return x + self.up(nn.functional.gelu(self.mix(h)).transpose(1, 2))
+
+    enc = model.encoder
+    enc.fv_insert = FrameCleaner(enc.d_model, int(spec.insert_dim), int(spec.insert_kernel)).to(
+        next(enc.parameters()).device)
+
+    def clean_frames(module, args, out):
+        if isinstance(out, tuple):
+            return (enc.fv_insert(out[0]),) + tuple(out[1:])
+        return enc.fv_insert(out)
+
+    enc.pre_encode.register_forward_hook(clean_frames)
+
+    with tarfile.open(nemo_path) as tar, tempfile.TemporaryDirectory(
+            dir=os.path.dirname(os.path.abspath(nemo_path))) as tmp:
+        member = next(m for m in tar.getmembers() if os.path.basename(m.name) == "model_weights.ckpt")
+        tar.extract(member, tmp, filter="data")
+        # mmap: the state dict is only read while copying into the model.
+        state = torch.load(os.path.join(tmp, member.name), map_location="cpu", weights_only=True, mmap=True)
+        _load_fluid_state(model, spec, state)
+        del state  # unmap before the temp dir is removed (CIFS/Windows refuse otherwise)
+        import gc
+        gc.collect()
+    print(f"  fluid-speech: FrameCleaner attached (dim={spec.insert_dim} kernel={spec.insert_kernel})")
+
+
+def _load_fluid_state(model, spec, state) -> None:
+    """Strict load, then fold clean mode in place (same sums as
+    fluid_speech.fold_clean_mode, without a second copy of the state)."""
+    import os
+    import torch
+    pre = "clean_mode."
+    adapter = {k[len(pre):]: state.pop(k) for k in [k for k in state if k.startswith(pre)]}
+    model.load_state_dict(state, strict=True)
+    if os.environ.get("CRISPASR_REF_FLUID_CLEAN") != "1":
+        return
+    scale = float(spec.clean_mode.alpha) / int(spec.clean_mode.rank)
+    params = dict(model.named_parameters())
+    di, jh = adapter.pop("decoder_input"), adapter.pop("joint_hidden")
+    lstm = "decoder.prediction.dec_rnn.lstm"
+    with torch.no_grad():
+        params[f"{lstm}.bias_ih_l0"].add_(params[f"{lstm}.weight_ih_l0"] @ di)
+        params["joint.pred.bias"].add_(jh)
+        for name in sorted({k.rsplit(".", 1)[0] for k in adapter}):
+            w = params[f"encoder.{name}.weight"]
+            w.add_((scale * (adapter[f"{name}.B"] @ adapter[f"{name}.A"])).view_as(w).to(w.dtype))
+    print("  fluid-speech: clean mode folded")
+
+
 def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
          max_new_tokens: int) -> Dict[str, np.ndarray]:
     """Run NeMo Parakeet-TDT reference forward and return stage captures.
@@ -126,7 +202,14 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         if pretrained.startswith("nvidia/") or "/" not in pretrained:
             model = nemo_asr.models.ASRModel.from_pretrained(pretrained)
         else:
-            model = nemo_asr.models.ASRModel.restore_from(pretrained)
+            try:
+                model = nemo_asr.models.ASRModel.restore_from(pretrained)
+            except RuntimeError as e:
+                # Fluid Speech (#595): extra encoder.fv_insert.* / clean_mode.*
+                # keys; _attach_fluid_speech() re-loads every tensor strictly.
+                if "fv_insert" not in str(e) and "clean_mode." not in str(e):
+                    raise
+                model = nemo_asr.models.ASRModel.restore_from(pretrained, strict=False)
     except TypeError as e:
         if "abstract class ASRModel" not in str(e) or HybridCls is None:
             raise
@@ -135,6 +218,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             model = HybridCls.from_pretrained(pretrained)
         else:
             model = HybridCls.restore_from(pretrained)
+    _attach_fluid_speech(model, pretrained)
     model.eval()
 
     # Disable dither for deterministic mel comparison against C++.

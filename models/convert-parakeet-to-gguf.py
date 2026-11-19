@@ -384,6 +384,12 @@ def remap_name(nemo_name: str) -> str | None:
         # encoder.pre_encode.out.{weight,bias}
         return n.replace("encoder.pre_encode.", "encoder.pre.")
 
+    # ---- Fluid Speech FrameCleaner (#595) ----
+    # encoder.fv_insert.{ln,down,mix,up}.{weight,bias}: a residual block run on
+    # the pre_encode output before the first Conformer layer (fluid_speech.py).
+    if n.startswith("encoder.fv_insert."):
+        return n
+
     # ---- conformer layers ----
     if n.startswith("encoder.layers."):
         rest = n[len("encoder.layers.") :]
@@ -456,8 +462,69 @@ def remap_name(nemo_name: str) -> str | None:
 
 # Tensors that should stay F32 even when --quant-linear is set:
 # layer norms, batch-norm stats, biases, the mel filterbank, the rel-pos biases.
+# ---------------------------------------------------------------------------
+# Fluid Speech clean mode (#595, FluidVoice-Labs/fluid-speech-pro). The .nemo
+# carries an optional LoRA-style adapter under `clean_mode.*`; fluid_speech.py
+# folds it into the base weights (encoder W += alpha/rank * B @ A, plus two
+# input vectors folded into the LSTM layer-0 input bias and joint.pred.bias).
+# The same fold here produces a GGUF that runs clean mode with no runtime code.
+# ---------------------------------------------------------------------------
+
+_CLEAN_MODE_PREFIX = "clean_mode."
+
+
+def split_clean_mode(sd: dict) -> tuple[dict, dict]:
+    adapter = {k[len(_CLEAN_MODE_PREFIX):]: sd[k] for k in sd if k.startswith(_CLEAN_MODE_PREFIX)}
+    base = {k: v for k, v in sd.items() if not k.startswith(_CLEAN_MODE_PREFIX)}
+    return base, adapter
+
+
+def fold_clean_mode(sd: dict, adapter: dict, scale: float) -> dict:
+    """Port of fluid_speech.fold_clean_mode (float32 arithmetic like upstream).
+
+    The two input vectors are folded eagerly (two small tensors); each encoder
+    delta is applied lazily when its tensor is written, so the fold never
+    holds a second float32 copy of the encoder in memory.
+    """
+    adapter = dict(adapter)
+    decoder_input = adapter.pop("decoder_input").float()
+    joint_hidden = adapter.pop("joint_hidden").float()
+    sd = _LazyFoldDict(sd)
+    lstm = "decoder.prediction.dec_rnn.lstm"
+    sd[f"{lstm}.bias_ih_l0"] = sd[f"{lstm}.bias_ih_l0"].float() + sd[f"{lstm}.weight_ih_l0"].float() @ decoder_input
+    sd["joint.pred.bias"] = sd["joint.pred.bias"].float() + joint_hidden
+    names = sorted({k.rsplit(".", 1)[0] for k in adapter})
+    for name in names:
+        key = f"encoder.{name}.weight"
+        if key not in sd:
+            sys.exit(f"clean mode adapts {key}, which the model does not have")
+        sd.deltas[key] = (adapter[f"{name}.A"], adapter[f"{name}.B"], scale)
+    print(f"  clean mode: folding {len(names)} encoder adapters (scale={scale}) + decoder/joint input vectors")
+    return sd
+
+
+class _LazyFoldDict(dict):
+    """dict whose reads of adapted weights return W + scale * B @ A."""
+
+    def __init__(self, base):
+        super().__init__(base)
+        self.deltas = {}
+
+    def __getitem__(self, key):
+        w = super().__getitem__(key)
+        if key in self.deltas:
+            a, b, scale = self.deltas[key]
+            w = w.float() + (scale * (b.float() @ a.float())).view_as(w)
+        return w
+
+    def get(self, key, default=None):
+        return self[key] if key in self else default
+
+
 def is_f32_tensor(gguf_name: str, shape: tuple[int, ...]) -> bool:
     if gguf_name.startswith("preprocessor."):
+        return True
+    if gguf_name == "encoder.fv_insert.mix.weight":  # depthwise kernel, read as F32
         return True
     if gguf_name.endswith(".bias"):
         return True
@@ -490,7 +557,7 @@ _QUANT_TYPE_MAP: dict[str, gguf.GGMLQuantizationType] = {
 
 
 def convert(nemo_path: Path | None, out_path: Path, quant: str | None = None,
-            extract_dir: Path | None = None, hf: str | None = None) -> None:
+            extract_dir: Path | None = None, hf: str | None = None, clean_mode: bool = False) -> None:
     quant_type = _QUANT_TYPE_MAP.get(quant.lower()) if quant else None
     if quant and quant_type is None:
         sys.exit(f"Unknown --quant type '{quant}'. Choices: {list(_QUANT_TYPE_MAP)}")
@@ -508,6 +575,21 @@ def convert(nemo_path: Path | None, out_path: Path, quant: str | None = None,
 
     import yaml
     cfg = yaml.safe_load(nemo_data["config_str"])
+
+    # Fluid Speech (#595): drop the optional clean-mode adapter, or fold it in.
+    sd, clean_adapter = split_clean_mode(sd)
+    fluid_cfg = (cfg or {}).get("fluid_speech") or {}
+    if clean_mode:
+        if not clean_adapter:
+            sys.exit("--clean-mode: this checkpoint has no clean_mode.* adapter")
+        cm = fluid_cfg.get("clean_mode") or {}
+        sd = fold_clean_mode(sd, clean_adapter, float(cm["alpha"]) / int(cm["rank"]))
+    elif clean_adapter:
+        print(f"  clean mode adapter present ({len(clean_adapter)} tensors) - not folded (use --clean-mode)")
+    if any(k.startswith("encoder.fv_insert.") for k in sd):
+        if fluid_cfg.get("insert", "pre") != "pre":
+            sys.exit(f"fluid_speech.insert={fluid_cfg.get('insert')!r} is not supported (only 'pre')")
+        print(f"  Fluid Speech FrameCleaner: dim={fluid_cfg.get('insert_dim')} kernel={fluid_cfg.get('insert_kernel')}")
 
     # Pure-CTC guard. A NeMo EncDecCTCModelBPE (parakeet-ctc-*,
     # stt_*_fastconformer_ctc_*) has an encoder + a CTC classification head
@@ -691,6 +773,8 @@ def convert(nemo_path: Path | None, out_path: Path, quant: str | None = None,
         print(f"  CTC head: vocab_size={ctc_vocab}")
 
     writer.add_array("tokenizer.ggml.tokens", vocab)
+    if fluid_cfg:
+        writer.add_bool("parakeet.fluid_clean_mode", bool(clean_mode))
 
     # ----- inventory: highlight any decoder/joint structure we don't
     # know about so a JA-specific extra Linear/LayerNorm/Dropout-with-
@@ -802,9 +886,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--quant", default=None, help="quantize linear weights (e.g. q4_k, q8_0); default: F16")
     p.add_argument("--extract-dir", default=None, type=Path,
                    help="extract .nemo to this dir and load via mmap (low memory for large models)")
+    p.add_argument("--clean-mode", action="store_true",
+                   help="Fluid Speech (FluidVoice-Labs/fluid-speech-pro): fold the clean_mode.* adapter "
+                        "into the weights (edited text without fillers/repetitions)")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    convert(args.nemo, args.output, quant=args.quant, extract_dir=args.extract_dir, hf=args.hf)
+    convert(args.nemo, args.output, quant=args.quant, extract_dir=args.extract_dir, hf=args.hf,
+            clean_mode=args.clean_mode)
