@@ -132,11 +132,11 @@
     "vibevoice-realtime-0.5b-q4_k",
     "kartoffel-orpheus-de-natural-q8_0",
     "pocket-tts-german-q8_0",
-    "miocodec-v2-44k-f16"
+    "miocodec-v2-44k-f16",
+    "gwen-tts-0.6b-q8_0",
+    "qwen3-tts-1.7b-base-q8_0"
   ],
   "_pending_verification": [
-    "gwen-tts-0.6b-q8_0",
-    "qwen3-tts-1.7b-base-q8_0",
     "rumble-2-flash-q4_k"
   ],
   "_pending_note": "Manifest entries added 2026-11-12 whose CI verification is still outstanding (cancelled/unrun, or re-calibrated after a first-run failure). Moved into `extended` once a dispatch run passes them.",
