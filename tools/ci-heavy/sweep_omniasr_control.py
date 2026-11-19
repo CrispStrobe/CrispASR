@@ -54,8 +54,9 @@ def main():
             if p.name not in slices:
                 sf.write(p, a[s:e], sr, subtype="PCM_16")
                 slices[p.name] = str(p)
-    b = C.build_crispasr()
-    for q, f in (("q4_k", "omniasr-ctc-300m-v2-q4_k.gguf"), ("f16", "omniasr-ctc-300m-v2.gguf")):
+    upstream_only = "--upstream-only" in sys.argv
+    b = None if upstream_only else C.build_crispasr()
+    for q, f in (() if upstream_only else (("q4_k", "omniasr-ctc-300m-v2-q4_k.gguf"), ("f16", "omniasr-ctc-300m-v2.gguf"))):
         g = C.hf("cstr/omniASR-CTC-300M-v2-GGUF", f, "fc3e3765175be5aaf0c9e75ed25a7e8843ef04d5")
         for w in WINDOWS:
             r = C.cli(b, ["-m", g, "-f", C.ROOT / "samples/jfk.wav", "--no-punctuation", "-l", "en"],
@@ -68,6 +69,7 @@ def main():
                       env={"CRISPASR_OMNIASR_CTC_CHUNK_SEC": "0"})
             res["cpp"][f"{q}|{name}"] = r
             C.save(res)
+    C.run(["sudo", "apt-get", "install", "-y", "-qq", "libsndfile1"], check=False)  # fairseq2n needs it
     py = C.venv("omni", ["omnilingual-asr", "numpy", "soundfile", "torch==2.8.0", "torchaudio==2.8.0"],
                 ["--extra-index-url", "https://download.pytorch.org/whl/cu128", "--index-strategy", "unsafe-best-match"])
     (C.SCRATCH / "up.py").write_text(UP)
