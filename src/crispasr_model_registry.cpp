@@ -285,6 +285,11 @@ constexpr Entry k_registry[] = {
     {"qwen3-ja-anime", "qwen3-asr-1.7b-ja-anime-q4_k.gguf",
      "https://huggingface.co/cstr/qwen3-asr-1.7b-ja-anime-GGUF/resolve/main/qwen3-asr-1.7b-ja-anime-q4_k.gguf",
      "~1.3 GB", nullptr, nullptr},
+    // Musci-ASR-qwen-1019 (#595): GRPO fine-tune of Qwen3-ASR-1.7B (Apache-2.0),
+    // config/tokenizer/template identical to the base; standard qwen3 backend.
+    {"musci-asr", "musci-asr-qwen-1019-q4_k.gguf",
+     "https://huggingface.co/cstr/musci-asr-qwen-1019-GGUF/resolve/main/musci-asr-qwen-1019-q4_k.gguf", "~1.3 GB",
+     nullptr, nullptr},
     // higgs-audio-v3-stt: Whisper-large-v3 encoder + Qwen3-1.7B decoder (Apache-2.0).
     {"higgs-stt", "higgs-stt-q4_k.gguf",
      "https://huggingface.co/cstr/higgs-audio-v3-stt-GGUF/resolve/main/higgs-stt-q4_k.gguf",
@@ -824,6 +829,18 @@ constexpr Entry k_registry[] = {
     {"parakeet-redux", "parakeet-redux-q4_k.gguf",
      "https://huggingface.co/cstr/parakeet-redux-GGUF/resolve/main/parakeet-redux-q4_k.gguf", "~402 MB", nullptr,
      nullptr, nullptr, "CC-BY-4.0 (see https://huggingface.co/moondream/parakeet-redux)"},
+    // fluid-speech-pro (#595) — FluidVoice-Labs/fluid-speech-pro: parakeet-tdt-0.6b-v3
+    // plus one FrameCleaner block after subsampling (encoder.fv_insert.*, run by
+    // the parakeet runtime when present). Converted from the .nemo; F16/Q8_0
+    // transcripts equal NeMo on en + de/en. Q8_0 is the default (Q4_K drifts on
+    // code-switched speech). -clean folds the upstream clean-mode adapter in at
+    // conversion: edited text without fillers/repetitions.
+    {"fluid-speech-pro", "fluid-speech-pro-q8_0.gguf",
+     "https://huggingface.co/cstr/fluid-speech-pro-GGUF/resolve/main/fluid-speech-pro-q8_0.gguf", "~677 MB", nullptr,
+     nullptr, nullptr, "CC-BY-4.0 (see https://huggingface.co/FluidVoice-Labs/fluid-speech-pro)"},
+    {"fluid-speech-pro-clean", "fluid-speech-pro-clean-q8_0.gguf",
+     "https://huggingface.co/cstr/fluid-speech-pro-GGUF/resolve/main/fluid-speech-pro-clean-q8_0.gguf", "~677 MB",
+     nullptr, nullptr, nullptr, "CC-BY-4.0 (see https://huggingface.co/FluidVoice-Labs/fluid-speech-pro)"},
     // Phonon-2 (#481) — exact five-value/int6 expansion, existing Parakeet TDT
     // runtime. Q8_0 is the fidelity/size default; Q4_K has more text drift.
     {"phonon2", "phonon2-q8_0.gguf",

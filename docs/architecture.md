@@ -2401,6 +2401,32 @@ F16/Q8_0/Q4_K weights. The reference is transformers' `ParakeetForTDT`
 (`tools/reference_backends/parakeet_hf.py`), with moondream's Photon runtime
 as an independent transcript check.
 
+
+### fluid-speech-pro
+
+FluidVoice's `fluid-speech-pro` (CC-BY-4.0, #595) is parakeet-tdt-0.6b-v3
+plus one residual block on the subsampled frames, before the first Conformer
+layer. Upstream (`fluid_speech.py`) registers it as a forward hook on
+`encoder.pre_encode`:
+
+    x + up(gelu(dwconv15(down(LayerNorm(x)))))   # 1024 -> 1024, depthwise K=15
+
+Its transformers weights and its parakeet.cpp GGUF leave this block out.
+We convert from the `.nemo`, which keeps the block as `encoder.fv_insert.*`.
+The parakeet runtime runs the block whenever those tensors are present
+(`parakeet_build_fv_insert`), and its output is what the `pre_encode_output`
+diff stage compares.
+
+The `.nemo` also has an optional rank-32 "clean mode" adapter (`clean_mode.*`).
+It gives edited text without fillers or repeated words. `--clean-mode` folds
+it into the weights like upstream: `W += alpha/rank * B @ A` on 264 encoder
+linears, the decoder input vector goes into the LSTM layer-0 input bias, and
+the joint vector goes into `joint.pred.bias`. This gives a separate GGUF
+(`-m fluid-speech-pro-clean`) that needs no runtime code. The NeMo reference
+(`tools/reference_backends/parakeet.py`) attaches the block, and folds clean
+mode when `CRISPASR_REF_FLUID_CLEAN=1`. CI validation:
+`tools/ci-heavy/fluid_speech_validate.py`.
+
 ### parakeet-ctc-1.1b-ja
 
 Community Japanese fine-tune of nvidia/parakeet-ctc-1.1b (grider-transwithai,
