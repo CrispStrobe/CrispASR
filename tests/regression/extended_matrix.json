@@ -126,18 +126,17 @@
     "cosyvoice3-llm-rl-q4_k",
     "m2m100-418m-q8_0",
     "truecaser-crf-de",
-    "meanvc2-120ms-40ms-f16"
+    "meanvc2-120ms-40ms-f16",
+    "confucius4-tts-q4_k",
+    "vibevoice-1.5b-tts-q4_k",
+    "vibevoice-realtime-0.5b-q4_k",
+    "kartoffel-orpheus-de-natural-q8_0",
+    "pocket-tts-german-q8_0",
+    "miocodec-v2-44k-f16"
   ],
   "_pending_verification": [
     "gwen-tts-0.6b-q8_0",
     "qwen3-tts-1.7b-base-q8_0",
-    "confucius4-tts-q4_k",
-    "vibevoice-realtime-0.5b-q4_k",
-    "vibevoice-1.5b-tts-q4_k",
-    "pocket-tts-german-q8_0",
-    "raon-opentts-1b-f16",
-    "kartoffel-orpheus-de-natural-q8_0",
-    "miocodec-v2-44k-f16",
     "rumble-2-flash-q4_k"
   ],
   "_pending_note": "Manifest entries added 2026-11-12 whose CI verification is still outstanding (cancelled/unrun, or re-calibrated after a first-run failure). Moved into `extended` once a dispatch run passes them.",
@@ -148,6 +147,7 @@
     "tada-codec": "covered by tada-tts-3b-ml, which decodes through the same pinned tada-codec-f16.gguf via --codec-model; tada-ref.gguf in the repo is a voice prompt, not a reference dump, so no standalone stage diff is possible",
     "f5-tts-v1-base": "synthesis of one sentence exceeds 1200 s on the 4-vCPU GH runner (run 42820528553) - CPU performance issue, not a correctness verdict",
     "fastconformer-ctc-ru-q4_k": "Russian output loses every word space: 'Онсказал,чтосоздалдвернойзвонок,работающийотвай-фай.' on FLEURS ru_ru 1554 (WER 1.0), locally and in CI run 44481521499. en/de variants of the same runtime keep word spaces but drop the space after commas ('so,my'), so this looks like the CTC detokenizer's word-boundary handling. Open finding.",
-    "parakeet-ctc-1.1b-ja-q8_0": "Garbled Japanese on the reazon_baseball fixture: '…1ッチャーの丘本は一回戦の飛鳥上獄戦は、8回6対3302の場面で3人目でバと違りますこちらは協をせ。' (CER 0.56) while haas/reazonspeech/qwen3-ja on the same clip score 0.16-0.34 - CI run 44481521499. Open finding."
+    "parakeet-ctc-1.1b-ja-q8_0": "Garbled Japanese on the reazon_baseball fixture: '…1ッチャーの丘本は一回戦の飛鳥上獄戦は、8回6対3302の場面で3人目でバと違りますこちらは協をせ。' (CER 0.56) while haas/reazonspeech/qwen3-ja on the same clip score 0.16-0.34 - CI run 44481521499. Open finding.",
+    "raon-opentts-1b-f16": "2.8 GB F16 F5-family flow model: one-sentence synthesis exceeded 2400 s on the 4-vCPU GH runner (CI run 44481521499), like f5-tts-v1-base - CPU performance, not a correctness verdict. raon-opentts-0.3b (same runtime) passes."
   }
 }
