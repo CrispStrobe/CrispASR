@@ -142,6 +142,13 @@ def main():
         run([binp("crispasr-quantize"), gg["f16"], gg[q], q], OUT / f"quantize-{q}.log")
     for q, p in gg.items():
         res["quants"][q] = {"bytes": p.stat().st_size, "sha256": sha256(p)}
+    # --export-gguf: ship the validated files in the run artifact, so the
+    # maintainer uploads exactly the bytes this run checked (sha256 above).
+    if "--export-gguf" in sys.argv[1:]:
+        import shutil
+        (OUT / "gguf").mkdir(exist_ok=True)
+        for p in gg.values():
+            shutil.copy2(p, OUT / "gguf" / p.name)
 
     failures = []
     for name, sample, lang_name, lang_iso in CASES:
