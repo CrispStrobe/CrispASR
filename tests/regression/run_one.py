@@ -1541,6 +1541,10 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     # Voice-cloned output carries a mandatory spoken AI-disclosure prefix that
     # `--no-watermark` does not remove; strip it before scoring.
     transcript = strip_ai_disclaimer(raw_transcript)
+    # `disclosure_prefix_words`: the disclosure is spoken in a non-English
+    # voice the fuzzy English match cannot recognise; drop that many leading words.
+    if entry.get("disclosure_prefix_words") and transcript == raw_transcript:
+        transcript = " ".join(_normalize_for_wer(raw_transcript)[int(entry["disclosure_prefix_words"]):])
 
     # ---- 5. WER ----
     wer_max = float(entry["wer_max"])

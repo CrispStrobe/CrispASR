@@ -56,7 +56,6 @@
     "hojo-asr-v1-q4_k",
     "moss-transcribe-preview-2b-q4_k",
     "moss-transcribe-diarize-0.9b-q4_k",
-    "omniasr-ctc-300m-v2-q4_k",
     "omniasr-llm-1b-q4_k",
     "vibevoice-asr-streaming-1.5b-q4_k",
     "vibevoice-asr-bitnet-tq2",
@@ -82,7 +81,6 @@
     "chatterbox-v3-q8_0",
     "chatterbox-nano-q8_0",
     "kartoffelbox-turbo-q8_0",
-    "lahgtna-chatterbox-f16",
     "omnivoice-f16",
     "supertonic3-f16",
     "irodori-tts-500m-v3-q4_k",
@@ -108,7 +106,6 @@
     "zonos-v0.1-transformer-q8_0",
     "cosyvoice3-llm-rl-q4_k",
     "pocket-tts-german-q8_0",
-    "moss-tts-local-v1.5-f16",
     "raon-opentts-1b-f16",
     "kartoffel-orpheus-de-natural-q8_0",
     "qwen3-forced-aligner-0.6b-q4_k",
@@ -143,6 +140,9 @@
     "miocodec-v2-44k-f16"
   ],
   "_excluded": {
+    "lahgtna-chatterbox-f16": "TTS output is not the requested Arabic: roundtrip of 'الطقس جميل جدا اليوم' transcribes as 'الان الحال طائي' (WER 1.0) through cohere-transcribe-arabic-q4_k, which itself transcribes the real Arabic FLEURS clip byte-exact in the same sweep - CI run 43186953345. Open finding (Arabic Chatterbox T3/s3gen path), not masked.",
+    "moss-tts-local-v1.5-f16": "9.1 GB F16 model: one-sentence synthesis exceeded 3000 s on the 4-vCPU GH runner (CI run 43186953345) - CPU performance, not a correctness verdict.",
+    "omniasr-ctc-300m-v2-q4_k": "Transcript truncated after the first clause: 'And so my fellow americas ask not.' on samples/jfk.wav (WER 0.73), reproduced locally and in CI run 43170649072, while omniasr-ctc-1b-v2 (same runtime) passes. Open finding.",
     "tada-codec": "covered by tada-tts-3b-ml, which decodes through the same pinned tada-codec-f16.gguf via --codec-model; tada-ref.gguf in the repo is a voice prompt, not a reference dump, so no standalone stage diff is possible",
     "f5-tts-v1-base": "synthesis of one sentence exceeds 1200 s on the 4-vCPU GH runner (run 42820528553) - CPU performance issue, not a correctness verdict"
   }
