@@ -408,6 +408,10 @@
 #include "mini_bs_roformer.h"
 #define CA_HAVE_MINI_BS_ROFORMER 1
 #endif
+#if __has_include("voice_isolator.h")
+#include "voice_isolator.h"
+#define CA_HAVE_VOICE_ISOLATOR 1
+#endif
 #if __has_include("htdemucs.h")
 #include "htdemucs.h"
 #define CA_HAVE_HTDEMUCS 1
@@ -2362,6 +2366,14 @@ struct crispasr_session {
     mini_bs_roformer_context* mini_bsr_ctx = nullptr;
     mini_bs_roformer_result* mini_bsr_last_result = nullptr;
 #endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    // #602: the model is mono; the session separation contract (and every
+    // binding) reads interleaved stereo stems, so the two mono outputs are
+    // duplicated to L=R here.
+    voice_isolator_context* vi_ctx = nullptr;
+    std::vector<std::vector<float>> vi_stems;
+    int vi_n_samples = 0;
+#endif
 #ifdef CA_HAVE_HTDEMUCS
     htdemucs_context* htdemucs_ctx = nullptr;
     htdemucs_result* htdemucs_last_result = nullptr;
@@ -3585,6 +3597,21 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         mp.gpu_device = crispasr_gpu_device_pref_storage();
         s->mini_bsr_ctx = mini_bs_roformer_init_from_file(model_path, mp);
         if (!s->mini_bsr_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    if (s->backend == "voice-isolator" || s->backend == "voice_isolator") {
+        s->backend = "voice-isolator";
+        auto vp = voice_isolator_default_params();
+        vp.n_threads = s->n_threads;
+        vp.use_gpu = g_open_use_gpu_tls;
+        vp.gpu_device = crispasr_gpu_device_pref_storage();
+        s->vi_ctx = voice_isolator_init_from_file(model_path, vp);
+        if (!s->vi_ctx) {
             delete s;
             return nullptr;
         }
@@ -5361,6 +5388,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     list += ",mini-bs-roformer";
+#endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    list += ",voice-isolator";
 #endif
 #ifdef CA_HAVE_CREPE
     list += ",crepe";
@@ -12183,6 +12213,23 @@ CA_EXPORT int crispasr_session_separate(crispasr_session* s, const float* pcm_st
         return s->mini_bsr_last_result ? s->mini_bsr_last_result->n_sources : -1;
     }
 #endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    if (s->vi_ctx) {
+        s->vi_stems.clear();
+        s->vi_n_samples = 0;
+        voice_isolator_result* r = voice_isolator_separate(s->vi_ctx, pcm_stereo, n_samples, /*in_channels=*/2);
+        if (!r)
+            return -1;
+        s->vi_stems.assign((size_t)r->n_sources, std::vector<float>((size_t)r->n_samples * 2));
+        for (int k = 0; k < r->n_sources; k++)
+            for (int i = 0; i < r->n_samples; i++)
+                s->vi_stems[k][2 * (size_t)i] = s->vi_stems[k][2 * (size_t)i + 1] = r->sources[k][i];
+        s->vi_n_samples = r->n_samples;
+        const int n = r->n_sources;
+        voice_isolator_result_free(r);
+        return n;
+    }
+#endif
     return -1;
 }
 
@@ -12205,6 +12252,10 @@ CA_EXPORT int crispasr_session_separate_n_stems(crispasr_session* s) {
     if (s->mini_bsr_last_result)
         return s->mini_bsr_last_result->n_sources;
 #endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    if (!s->vi_stems.empty())
+        return (int)s->vi_stems.size();
+#endif
     return 0;
 }
 
@@ -12226,6 +12277,10 @@ CA_EXPORT const char* crispasr_session_separate_stem_name(crispasr_session* s, i
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     if (s->mini_bsr_last_result && stem_idx >= 0 && stem_idx < s->mini_bsr_last_result->n_sources)
         return s->mini_bsr_last_result->source_names[stem_idx];
+#endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    if (s->vi_ctx && stem_idx >= 0 && stem_idx < (int)s->vi_stems.size())
+        return voice_isolator_source_name(s->vi_ctx, stem_idx);
 #endif
     return nullptr;
 }
@@ -12261,6 +12316,13 @@ CA_EXPORT const float* crispasr_session_separate_stem(crispasr_session* s, int s
         return s->mini_bsr_last_result->sources[stem_idx];
     }
 #endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    if (stem_idx >= 0 && stem_idx < (int)s->vi_stems.size()) {
+        if (out_n_samples)
+            *out_n_samples = s->vi_n_samples;
+        return s->vi_stems[stem_idx].data();
+    }
+#endif
     if (out_n_samples)
         *out_n_samples = 0;
     return nullptr;
@@ -12284,6 +12346,10 @@ CA_EXPORT int crispasr_session_separate_sample_rate(crispasr_session* s) {
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     if (s->mini_bsr_ctx)
         return mini_bs_roformer_sample_rate(s->mini_bsr_ctx);
+#endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    if (s->vi_ctx)
+        return voice_isolator_sample_rate(s->vi_ctx);
 #endif
     return 0;
 }
@@ -13176,6 +13242,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
         mini_bs_roformer_result_free(s->mini_bsr_last_result);
     if (s->mini_bsr_ctx)
         mini_bs_roformer_free(s->mini_bsr_ctx);
+#endif
+#ifdef CA_HAVE_VOICE_ISOLATOR
+    if (s->vi_ctx)
+        voice_isolator_free(s->vi_ctx);
 #endif
 #ifdef CA_HAVE_RVC_SVC
     if (s->rvc_last)

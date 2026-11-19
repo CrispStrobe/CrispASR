@@ -65,6 +65,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_mimo_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_htdemucs_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mel_band_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mini_bs_roformer_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_voice_isolator_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_scnet_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_crepe_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_btc_chords_backend();
@@ -304,6 +305,9 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_scnet_backend();
     if (name == "mini-bs-roformer" || name == "mini_bs_roformer" || name == "mini-bs-roformer-v2.5")
         return crispasr_make_mini_bs_roformer_backend();
+    if (name == "voice-isolator" || name == "voice_isolator" || name == "inworld-voice-isolator" ||
+        name == "voice-isolator-realtime")
+        return crispasr_make_voice_isolator_backend();
     if (name == "mel-band-roformer" || name == "mel_band_roformer" || name == "melbandroformer" || name == "mbr")
         return crispasr_make_mel_band_roformer_backend();
     if (name == "crepe" || name == "crepe-tiny" || name == "crepe-full" || name == "pitch")
@@ -534,6 +538,7 @@ std::vector<std::string> crispasr_list_backends() {
         "htdemucs",
         "mel-band-roformer",
         "mini-bs-roformer",
+        "voice-isolator",
         "scnet",
         "crepe",
         "btc-chords",
@@ -748,6 +753,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "scnet";
     if (contains_ci("mini-bs-roformer") || contains_ci("mini_bs_roformer"))
         return "mini-bs-roformer";
+    if (contains_ci("voice-isolator") || contains_ci("voice_isolator"))
+        return "voice-isolator";
     if (contains_ci("mel-band-roformer") || contains_ci("mel_band_roformer") || contains_ci("roformer"))
         return "mel-band-roformer";
     if (contains_ci("crepe"))

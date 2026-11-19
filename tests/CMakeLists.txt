@@ -5801,6 +5801,12 @@ if (Python3_Interpreter_FOUND)
     set_tests_properties(mini-bs-roformer-reference-streaming PROPERTIES LABELS "unit;mini-bs-roformer" TIMEOUT 60)
 endif()
 
+if (Python3_Interpreter_FOUND)
+    add_test(NAME voice-isolator-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-voice-isolator-converter.py -v)
+    set_tests_properties(voice-isolator-converter PROPERTIES LABELS "unit;voice-isolator" TIMEOUT 60)
+endif()
+
 if (CRISPASR_BUILD_EXAMPLES AND Python3_Interpreter_FOUND)
     add_test(NAME mini-bs-roformer-quant-policy
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mini-bs-quant-policy.py

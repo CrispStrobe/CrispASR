@@ -25,8 +25,25 @@ struct SincKernel {
     int n_taps() const { return 2 * width + orig; }
 };
 
-inline SincKernel sinc_resample_kernel(int orig_freq, int new_freq, int lowpass_filter_width = 6,
-                                       float rolloff = 0.99f) {
+// Modified Bessel function of the first kind, order 0 (power series; the
+// kaiser window argument is at most beta, ~15, where it converges quickly).
+inline double bessel_i0(double x) {
+    double sum = 1.0, term = 1.0;
+    const double q = x * x / 4.0;
+    for (int k = 1; k < 200; k++) {
+        term *= q / ((double)k * k);
+        sum += term;
+        if (term < sum * 1e-17)
+            break;
+    }
+    return sum;
+}
+
+// beta <= 0: "sinc_interp_hann" (torchaudio default). beta > 0:
+// "sinc_interp_kaiser" with that beta (kaiser_best: width 64, rolloff
+// 0.9475937167399596, beta 14.769656459379492).
+inline SincKernel sinc_resample_kernel(int orig_freq, int new_freq, int lowpass_filter_width = 6, float rolloff = 0.99f,
+                                       double kaiser_beta = 0.0) {
     SincKernel k;
     const int g = std::gcd(orig_freq, new_freq);
     k.orig = orig_freq / g;
@@ -45,8 +62,15 @@ inline SincKernel sinc_resample_kernel(int orig_freq, int new_freq, int lowpass_
             float t = tp + (float)(j - k.width) / (float)k.orig;
             t *= base_freq;
             t = std::fmax(-lw, std::fmin(lw, t));
-            float w = std::cos(t * pi / lw / 2.0f);
-            w *= w;
+            float w;
+            if (kaiser_beta > 0.0) {
+                const float r = t / lw;
+                w = (float)(bessel_i0(kaiser_beta * std::sqrt(std::fmax(0.0, 1.0 - (double)r * r))) /
+                            bessel_i0(kaiser_beta));
+            } else {
+                w = std::cos(t * pi / lw / 2.0f);
+                w *= w;
+            }
             t *= pi;
             const float s = (t == 0.0f) ? 1.0f : std::sin(t) / t;
             k.taps[(size_t)p * n + j] = s * w * scale;
@@ -85,6 +109,13 @@ inline std::vector<float> resample(const float* x, int length, const SincKernel&
 
 inline std::vector<float> resample(const float* x, int length, int orig_freq, int new_freq) {
     return resample(x, length, sinc_resample_kernel(orig_freq, new_freq));
+}
+
+// torchaudio resample(..., resampling_method="sinc_interp_kaiser",
+// lowpass_filter_width=64, rolloff=0.9475937167399596, beta=14.769656459379492)
+// — librosa's "kaiser_best", used by e.g. the Inworld Voice Isolator.
+inline SincKernel kaiser_best_kernel(int orig_freq, int new_freq) {
+    return sinc_resample_kernel(orig_freq, new_freq, 64, 0.9475937167399596f, 14.769656459379492);
 }
 
 } // namespace core_torchaudio

@@ -441,6 +441,11 @@ for the per-task flags and output formats.
   The [**SCNet / SCNet-large candidate backend**](docs/scnet.md) adds native
   four-stem separation with local F16/Q8_0/Q4_K GGUFs; original-checkpoint
   fidelity and paired performance remain qualification gates.
+- **Voice isolation** (`--separate` with a [**voice-isolator**](docs/voice-isolator.md)
+  GGUF) — Inworld Voice Isolator v1 (Apache-2.0, 48 kHz): cleans noisy speech
+  into `<input>_voice.wav` plus the removed `<input>_background.wav`. Offline
+  and realtime (causal, 20 ms look-ahead) checkpoints; also served by
+  `--separate-model` on `/v1/audio/separation` and `Session.separate()`.
 - **Piano transcription** (`--backend piano-transcription`) — piano audio →
   note events (88 keys @ 100 fps, ByteDance/Kong CRNN; F16 GGUF ≈ 77 MB).
 - **Polyphonic note events** (`--backend basic-pitch`) — Spotify Basic Pitch,

@@ -45,6 +45,7 @@
 #include "htdemucs.h"
 #include "mel_band_roformer.h"
 #include "mini_bs_roformer.h"
+#include "voice_isolator.h"
 #include "scnet.h"
 #include "btc_chords.h"
 #include "tabcnn.h"
@@ -1905,6 +1906,12 @@ int main(int argc, char** argv) {
     }
     if (backend_name == "scnet" || backend_name == "scnet-large") {
         return scnet_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
+    }
+    if (backend_name == "voice-isolator" || backend_name == "voice_isolator") {
+        // Self-contained: the reference archive carries its own 48 kHz input
+        // (upstream kaiser_best resample of the harness audio); audio_path is unused.
+        (void)audio_path;
+        return voice_isolator_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/1);
     }
     if (backend_name == "mini-bs-roformer" || backend_name == "mini_bs_roformer" ||
         backend_name == "mini-bs-roformer-v2.5") {

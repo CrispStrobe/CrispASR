@@ -3442,9 +3442,13 @@ class Session(SessionExtras):
         stem names (``"drums"``, ``"bass"``, ``"other"``, ``"vocals"``)
         to stereo interleaved float32 numpy arrays.
 
-        Works with ``htdemucs``, ``mel-band-roformer``, ``mini-bs-roformer`` and ``scnet``.
+        Works with ``htdemucs``, ``mel-band-roformer``, ``mini-bs-roformer``, ``scnet`` and
+        ``voice-isolator``.
         Mini BS RoFormer returns ``bass``, ``drums``, ``other``, ``vocals`` in
-        that order. Arrays own their storage and survive subsequent calls.
+        that order. ``voice-isolator`` (Inworld Voice Isolator, 48000 Hz) mixes
+        the input to mono and returns ``voice`` and ``background``
+        (= input - voice), each duplicated to stereo interleaved (L = R).
+        Arrays own their storage and survive subsequent calls.
         """
         lib = self._lib
         lib.crispasr_session_separate.argtypes = [

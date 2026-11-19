@@ -271,7 +271,8 @@ constructed, and its own capability bit (used for detection and help text,
 never for routing). `docs/source-separation-surface.md` settled this design;
 everything below follows it.
 
-- **Source separation** (`htdemucs`, `mel-band-roformer`, `mini-bs-roformer`) — one mixed input
+- **Source separation** (`htdemucs`, `mel-band-roformer`, `mini-bs-roformer`, `scnet`,
+  `voice-isolator`) — one mixed input
   → N named stems of the *user's own* audio. `CAP_SEPARATE` (bit 22),
   `--separate`, `src/core/separation_io.h`, `crispasr_separate_cli.{h,cpp}`.
   Output is one WAV per stem at the model's native rate, with **no
@@ -1134,6 +1135,25 @@ the same runtime. F16 conversion, Q8_0/Q4_K precision policy, exact blueprint
 layouts and numerical/performance qualification are documented in
 [the model guide](mini-bs-roformer.md) and
 [the qualification guide](mini-bs-roformer-validation.md).
+
+### voice-isolator
+
+Inworld Voice Isolator v1 (Apache-2.0, `inworld/voice-isolator`) isolates
+the foreground voice of 48-kHz mono audio; the removed background is
+`input - voice`. GGUF architecture and backend name are both
+`voice-isolator`; the offline (`voice-isolator-v1`) and realtime
+(`voice-isolator-v1-realtime`, causal, trained look-ahead 0/2/4 frames)
+checkpoints share one runtime (`src/voice_isolator.{h,cpp}`).
+
+A band-split dual-path network over the STFT (n_fft 2048, hop 480): 46
+bands become 512-wide tokens; seven blocks alternate time attention
+(split-half RoPE, exclusive self attention) + band attention with
+bidirectional Mamba along time + Mamba across bands (ggml `ssm_conv` /
+`ssm_scan`); per-band heads emit a bounded complex mask and residual added to
+the input spectrum. STFT/iSTFT and the correction stay F32 on the host; each
+block is its own ggml graph so peak memory is one block's activations.
+Offline rendering follows upstream `enhance()` (8 s windows, 2 s linear
+crossfade, last window reaching back). See [the model guide](voice-isolator.md).
 
 ### piano-transcription
 

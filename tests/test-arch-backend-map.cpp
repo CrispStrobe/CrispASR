@@ -120,6 +120,7 @@ static const std::vector<std::pair<std::string, std::string>>& converter_archs()
         {"htdemucs", "htdemucs"},
         {"mel-band-roformer", "mel-band-roformer"},
         {"mini-bs-roformer", "mini-bs-roformer"},
+        {"voice-isolator", "voice-isolator"},
         {"scnet", "scnet"},
         {"crepe", "crepe"},
         {"btc", "btc-chords"},
@@ -270,6 +271,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "htdemucs",
         "mel-band-roformer",
         "mini-bs-roformer",
+        "voice-isolator",
         "scnet",
         "crepe",
         "btc-chords",
@@ -381,6 +383,7 @@ TEST_CASE("crispasr_detect_backend_from_gguf reads the shared table", "[unit][ar
         {"whisper", "whisper"},        // was already shared — must not regress
         {"mini-bs-roformer", "mini-bs-roformer"},
         {"scnet", "scnet"},
+        {"voice-isolator", "voice-isolator"},
         {"reuse", ""}, // RE-USE is research-only; never auto-open it as a product backend.
         {"mini_bs_roformer", ""},
         {"mini-bs-roformer-v2.5", ""},

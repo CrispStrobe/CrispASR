@@ -84,6 +84,20 @@ constexpr Entry k_registry[] = {
     {"mini-bs-roformer", "mini-bs-roformer-f16.gguf",
      "https://huggingface.co/cstr/mini-bs-roformer-GGUF/resolve/main/mini-bs-roformer-f16.gguf",
      "~88 MB", nullptr, nullptr, nullptr, "MIT", ",f16,q8_0,q4_k,"},
+    // Inworld Voice Isolator v1 (#602) voice isolation (--separate): mono 48 kHz,
+    // stems voice + background. Apache-2.0. Q8_0 is the default (voice SI-SDR
+    // 44 dB vs the upstream F32 output); F16 is reference-precision, Q4_K lite.
+    {"voice-isolator", "voice-isolator-q8_0.gguf", "https://huggingface.co/cstr/inworld-voice-isolator-GGUF/resolve/main/voice-isolator-q8_0.gguf", "~114 MB", nullptr, nullptr,
+     nullptr, "Apache-2.0", ",f16,q8_0,q4_k,"},
+    {"voice-isolator", "voice-isolator-f16.gguf", "https://huggingface.co/cstr/inworld-voice-isolator-GGUF/resolve/main/voice-isolator-f16.gguf", "~129 MB", nullptr, nullptr, nullptr,
+     "Apache-2.0", ",f16,q8_0,q4_k,"},
+    {"voice-isolator", "voice-isolator-q4_k.gguf", "https://huggingface.co/cstr/inworld-voice-isolator-GGUF/resolve/main/voice-isolator-q4_k.gguf", "~90 MB", nullptr, nullptr, nullptr,
+     "Apache-2.0", ",f16,q8_0,q4_k,"},
+    // Realtime (causal, 20 ms look-ahead) checkpoint, same runtime.
+    {"voice-isolator-realtime", "voice-isolator-realtime-q8_0.gguf", "https://huggingface.co/cstr/inworld-voice-isolator-GGUF/resolve/main/voice-isolator-realtime-q8_0.gguf",
+     "~108 MB", nullptr, nullptr, nullptr, "Apache-2.0", ",f16,q8_0,"},
+    {"voice-isolator-realtime", "voice-isolator-realtime-f16.gguf", "https://huggingface.co/cstr/inworld-voice-isolator-GGUF/resolve/main/voice-isolator-realtime-f16.gguf",
+     "~117 MB", nullptr, nullptr, nullptr, "Apache-2.0", ",f16,q8_0,"},
     // Sidon v0.1 (SaruLab) speech restoration (--s2s). w2v-BERT predictor +
     // continuous DAC decoder; MIT. Q8_0 is the best-fidelity practical quant
     // (predictor cos 0.998 vs the upstream F32; ASR round-trip identical). #283.

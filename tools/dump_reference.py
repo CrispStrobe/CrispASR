@@ -401,6 +401,7 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     "mel-band-roformer": "reference_backends.mel_band_roformer",
     # HiDolen V2.5 shared-decoder four-stem model; use its pinned original blueprint.
     "mini-bs-roformer": "reference_backends.mini_bs_roformer",
+    "voice-isolator": "reference_backends.voice_isolator",
     # MioCodec v2 (§249): neural audio codec. model_dir = HF repo ID
     # ("Aratako/MioCodec-25Hz-44.1kHz-v2") or local snapshot dir.
     # Audio arg = mono WAV at 44100 Hz. Captures decode path intermediates
