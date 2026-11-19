@@ -165,6 +165,11 @@ std::vector<std::string> crispasr_tts_plan_chunks_for_backend(const std::string&
     // Match the official generate(text) flow in both CLI and server requests.
     if (backend_name == "dia" || backend_name.rfind("dia-", 0) == 0 || backend_name.rfind("dia_", 0) == 0)
         return {text};
+    // ZONOS3-Mini (#603): one delayed-code AR pass over the whole text with its own EOA, as upstream's
+    // POST /v2/generate (registry max_frames 2000 = 133 s). Splitting re-plays the silence prefill and the
+    // conditioning rows per sentence and diverges from the reference prompt.
+    if (backend_name.rfind("zonos3", 0) == 0)
+        return {text};
 
     // omnivoice defaults to single-shot too, but keep an escape hatch: on a
     // GPU without CUDA-graph reuse (Metal/CPU) single-shot's ~2.7× attention

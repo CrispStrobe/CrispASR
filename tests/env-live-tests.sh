@@ -114,6 +114,8 @@ export CRISPASR_MODEL_MOSS_DIARIZE="${CRISPASR_MODEL_MOSS_DIARIZE:-$CRISPASR_MOD
 # codebooks + transformer codec companion (validated by ASR round-trip, #249).
 # MioTTS-0.6B (Qwen3 + MioCodec, Apache-2.0)
 export CRISPASR_MODEL_MIOTTS="${CRISPASR_MODEL_MIOTTS:-$CRISPASR_MODELS_DIR/miotts-0.6b-q8_0.gguf}"
+# ZONOS3-Mini (Zyphra, Apache-2.0): upstream gguf/backbone-ptq.gguf, zac-keep2.gguf beside it (#603)
+export CRISPASR_MODEL_ZONOS3="${CRISPASR_MODEL_ZONOS3:-$CRISPASR_MODELS_DIR/zonos3-mini/backbone-ptq.gguf}"
 export CRISPASR_MODEL_CONFUCIUS4_T2S="${CRISPASR_MODEL_CONFUCIUS4_T2S:-$CRISPASR_MODELS_DIR/confucius4-tts-t2s-q4_k.gguf}"
 export CRISPASR_MODEL_PIANO_TRANSCRIPTION="${CRISPASR_MODEL_PIANO_TRANSCRIPTION:-$CRISPASR_MODELS_DIR/piano-transcription-f16.gguf}"
 export CRISPASR_MODEL_BASIC_PITCH="${CRISPASR_MODEL_BASIC_PITCH:-$CRISPASR_MODELS_DIR/basic-pitch-f32.gguf}"

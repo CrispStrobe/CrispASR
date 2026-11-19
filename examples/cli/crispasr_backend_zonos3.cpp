@@ -58,6 +58,8 @@ public:
         cp.seed = (uint32_t)p.seed;
         if (const char* c = getenv("CRISPASR_ZONOS3_CFG"))
             cp.cfg_scale = (float)atof(c);
+        if (!p.tts_codec_model.empty())
+            cp.codec_path = p.tts_codec_model.c_str(); // --codec-model zac-keep2.gguf / zac.gguf
         if (const char* m = getenv("CRISPASR_ZONOS3_MAX_FRAMES"))
             cp.max_frames = atoi(m);
         ctx_ = zonos3_tts_init_from_file(p.model.c_str(), cp);

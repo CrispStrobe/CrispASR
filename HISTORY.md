@@ -1,3 +1,20 @@
+## 2026-11-19 — ZONOS3-Mini TTS backend (#603)
+
+- **Backend:** `--backend zonos3` runs Zyphra/ZONOS3-Mini. The 11-layer hybrid has 9 Gated DeltaNet and 2 global GQA layers, Full AttnRes and a latent 64-expert top-2 MoE. It emits 10x4096 delayed codes at 15 Hz, decoded by the mossdual iSTFT codec at 44.1 kHz. The backend loads Zyphra's GGUFs unchanged (`backbone-ptq.gguf`: Q4_0 experts and Q8_0 mixer, Apache-2.0; `zac-keep2.gguf`), so there is no converter and no cstr/ upload. `src/zonos3/` is vendored from Zyphra's MIT ggml server at a50e141, trimmed only where our ggml lacks upstream's Metal `conv_1d_implicit` patch (encoder-only path).
+- **Wiring:** CLI adapter (`--voice <name>.embedding.npy`, `--codec-model`), C ABI session, bindings docs, caps table, Go LDFLAGS, feature matrix, live test `test-zonos3-live`, regression entry `zonos3-mini-en` (extended matrix). zonos3 is exempt from TTS sentence splitting: upstream generates the whole text in one pass.
+- **Diff harness** (`tools/zonos3_diff.py`, against the unmodified upstream `zonos3-cli --validate`, 185 prefill stages, greedy):
+  - input ids are exact;
+  - embeddings reach cos 1.000000;
+  - logits cos 0.99992 (EN) / 0.99970 (DE).
+  - The residual is ggml-version accumulation order (ours 0.26, upstream 0.27). It compounds through near-tie MoE expert flips (2nd/3rd-choice margins 0.0005–0.03).
+  - Control: upstream against itself with only `GGML_LLAMAFILE` toggled differs by the same order (logits cos 0.99994, a different greedy EOS).
+  - Codec only (our decoder on upstream codes): same sample count, cos 0.99997, SNR 42 dB, identical RMS.
+- **Roundtrip** (canary-1b-v2 ASR):
+  - greedy EN and DE are WER 0, for ours and upstream alike;
+  - sampled EN (Cillian) is WER 0;
+  - sampled DE (Wolfgang) differs only in the numeral form ("zwanzig" → "20").
+- **Open:** WAV cloning (`spk-encoder.gguf`, `zac-encoder.gguf`) and upstream text normalization (`zyphra-textnorm`) are not wired; there is no `-m auto` registry entry yet.
+
 ## 2026-11-18 — Shared sentence-end rule for TTS chunking and subtitles
 
 - **Problem:** `crispasr_tts_split_sentences` and `--split-on-punct` ended a sentence at every ". ", so German ordinals and abbreviations split mid-phrase ("am 24. | November", "Dr. | Sieben", "z. | B.") — an audible pause in TTS, a broken subtitle cue.

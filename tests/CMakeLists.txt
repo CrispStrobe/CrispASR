@@ -1347,6 +1347,15 @@ catch_discover_tests(test-confucius4-tts-live
 )
 endif()
 
+# ─── test-zonos3-live — live tests for the ZONOS3-Mini TTS backend (#603)
+add_executable(test-zonos3-live test_zonos3_live.cpp)
+target_include_directories(test-zonos3-live PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/ggml/include)
+target_link_libraries(test-zonos3-live PRIVATE Catch2::Catch2WithMain zonos3_tts)
+catch_discover_tests(test-zonos3-live
+    TEST_SPEC "[zonos3]"
+    PROPERTIES LABELS "live;zonos3"
+    PROPERTIES SKIP_RETURN_CODE 4
+)
 # ─── test-miotts-live — live integration tests for MioTTS backend
 add_executable(test-miotts-live
     test_miotts_live.cpp

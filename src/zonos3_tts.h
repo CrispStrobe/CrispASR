@@ -22,7 +22,7 @@ struct zonos3_tts_context_params {
     bool use_gpu;
     float temperature; // < 0: registry default 0.75; 0 = greedy
     uint32_t seed;
-    int max_frames;         // 15 Hz frames; 0 = default 450 (30 s)
+    int max_frames;         // 15 Hz frames; 0 = registry max_frames (2000 = 133 s)
     float cfg_scale;        // speaker CFG; 1 = off (upstream CLI default)
     const char* codec_path; // zac*.gguf; NULL = $CRISPASR_ZONOS3_CODEC, else zac-keep2.gguf / zac.gguf beside the model
 };

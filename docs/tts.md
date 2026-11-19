@@ -55,6 +55,7 @@ can reduce speech quality.
 | [`kokoro`](#kokoro--multilingual-smallest) | Smallest + fastest. 82 M-param StyleTTS2-derived model. Multilingual via built-in G2P or espeak-ng (dlopen/popen fallback). | No (preset voice packs) | Manual `wget` (no `-m auto`) |
 | [`qwen3-tts`](#qwen3-tts--voice-cloning-highest-fidelity) | Highest fidelity / strongest cloning. Speech-LLM (talker + code predictor + 12 Hz codec). Default voice auto-downloaded with `-m auto`; or supply your own WAV + ref-text. | Optional (auto default voice; or WAV + ref-text or baked voice GGUF) | ~1.3 GB via `-m auto` |
 | **`miotts`** | MioTTS-0.6B (Qwen3 LLM + MioCodec-v2). EN/JA. Single GGUF, model-derived output rate (44.1 kHz for MioCodec-v2; 24 kHz for legacy codecs). Codec-aware mixed quantization (LLM Q4_K + codec F16). | Preset embeddings via `--voice preset.emb.gguf` (required for intelligible speech) | ~793 MB Q8_0 + tokenizer via `-m auto`; 502 MB Q4_K also available |
+| **`zonos3`** | Zyphra ZONOS3-Mini: 9 Gated-DeltaNet + 2 global-attention layers with Full AttnRes and a latent 64-expert top-2 MoE, 10x4096 delayed codes at 15 Hz, mossdual iSTFT codec. Multilingual. Runs Zyphra's published GGUFs unchanged. | 192-d speaker embeddings via `--voice <name>.embedding.npy` (or `--voice Imogen --voice-dir gguf/voices`); no voice = unconditioned | `gguf/backbone-ptq.gguf` (633 MB) + `gguf/zac-keep2.gguf` (431 MB) from `Zyphra/ZONOS3-Mini` |
 | **`arktts`** | Audio8-TTS-Realistic-0.6b (Edge0/Audio8-TTS). 28-layer Dual-AR backbone + 8-layer fast subnetwork predicting 10 acoustic codebooks, causal Snake + ConvNeXt vocoder producing 44.1 kHz audio. Chunked causal decoding bounds memory (<2.5 GB) for arbitrary durations. | Reference audio WAV (`--prompt ref.wav --context "ref text"`) | ~1.28 GB Q4_K / ~1.49 GB Q8_0 / ~1.88 GB F16 via `-m auto` |
 | **`moss-tts`** | MOSS-TTS-v1.5 (MossTTSDelay): Qwen3-8B backbone emitting 32 RVQ audio codebooks under a delay pattern, decoded by a 1.6B transformer codec. Needs the codec companion (`--codec-model`, or auto-downloaded/sibling). | Yes — `--voice ref.wav` (the codec encoder clones the reference speaker) | ~5 GB Q4_K backbone + ~3.5 GB F16 codec via `-m auto` |
 | **`moss-tts-local`** | MOSS-TTS-Local-Transformer-v1.5 (MossTTSLocal, 4B): Qwen3-4B backbone + a 1-layer local/depth transformer that autoregressively emits 12 RVQ codebooks per frame (RQ-Transformer; no delay pattern), decoded to 48 kHz stereo by MOSS-Audio-Tokenizer-v2 (downmixed to mono). Needs the codec companion (`--codec-model`, or auto-downloaded/sibling). | `--voice ref.wav --i-have-rights` (needs the encoder-carrying codec, `--codec-model moss-tts-local-v1.5-codec-enc.gguf`; the plain `-codec.gguf` is decode-only and falls back to the default voice) | ~9.1 GB F16 backbone + ~2.1 GB codec via `-m auto` (F16 is the reliable target; Q4_K long-form runs away) |
@@ -1128,6 +1129,40 @@ Caveats, because these numbers are easy to over-read:
 - **French nasal vowels lose their tilde on both paths.** U+0303 is genuinely
   absent from zonos's 185 symbols, so this is upstream behaviour, not a
   CrispASR defect.
+
+## ZONOS3-Mini — Zyphra's hybrid GDN/MoE TTS
+
+`--backend zonos3` runs [Zyphra/ZONOS3-Mini](https://huggingface.co/Zyphra/ZONOS3-Mini) (weights Apache-2.0)
+from Zyphra's own GGUFs, with no conversion step. The runtime in `src/zonos3/` is vendored from Zyphra's MIT
+ggml server (`servers/ggml`), and the upstream binary is the diff oracle (`tools/zonos3_diff.py`).
+
+```bash
+H=path/to/ZONOS3-Mini          # hf download Zyphra/ZONOS3-Mini --include "gguf/backbone-ptq.gguf" "gguf/zac-keep2.gguf" "gguf/voices/*"
+crispasr --backend zonos3 -m $H/gguf/backbone-ptq.gguf --codec-model $H/gguf/zac-keep2.gguf \
+    --voice Imogen --voice-dir $H/gguf/voices --tts "Hello there." --tts-output out.wav
+```
+
+- **Voices:** a 192-d speaker embedding (`*.embedding.npy`). `--voice` takes a path or a name matched against
+  `<Name>_*.embedding.npy` under `--voice-dir`, including per-language subfolders. Cloning from a WAV
+  (`spk-encoder.gguf`) or from reference codes (`zac-encoder.gguf`, 3.8 GB) is not wired yet.
+- **Codec:** `--codec-model`, else `$CRISPASR_ZONOS3_CODEC`, else `zac-keep2.gguf` / `zac.gguf` next to the
+  backbone. `zac-keep2` is the about 3x faster decoder; `zac.gguf` is the full multi-resolution head.
+- **Whole text in one pass:** the CLI does not sentence-split for zonos3. This matches upstream
+  `POST /v2/generate`; the budget is 2000 frames (133 s).
+- **Sampling** follows the upstream registry defaults (temperature 0.75, top-k 80, top-p 0.69, repetition
+  penalty 2.4 over 96 frames on 6 codebooks). `--temperature` overrides the temperature, and `--seed` is honoured.
+- **Text normalization:** upstream's Rust NeMo-style normalizer (`zyphra-textnorm`) is not linked, so numbers
+  and abbreviations are read as written by the SuperBPE model.
+
+| env | effect |
+|---|---|
+| `CRISPASR_ZONOS3_CODEC` | codec GGUF path |
+| `CRISPASR_ZONOS3_GREEDY=1` | greedy decode (the diff-harness setting) |
+| `CRISPASR_ZONOS3_CFG=<s>` | speaker CFG scale (default 1 = off, as the upstream CLI) |
+| `CRISPASR_ZONOS3_MAX_FRAMES=<n>` | frame budget (default 2000) |
+| `CRISPASR_ZONOS3_SILENCE_PREFILL=<n>` | codec-silence prefill frames (default 3) |
+| `CRISPASR_ZONOS3_DUMP_DIR=<dir>` | diff harness: write prefill-stage `.npy` + `codes.npy` |
+| `CRISPASR_ZONOS3_DECODE_CODES=<codes.npy>` | diff harness: decode a given code matrix (codec-only diff) |
 
 ## Kokoro — multilingual, smallest
 

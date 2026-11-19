@@ -591,12 +591,16 @@ static ggml_tensor* encoder_conv(render_ctx& rc, ggml_tensor* w, ggml_tensor* bi
         auto* kernel = ggml_cont(ctx, ggml_permute(ctx, w, 1, 2, 0, 3)); // [K,IC,OC]
         weights = ggml_cast(ctx, ggml_reshape_2d(ctx, kernel, K * IC, OC), GGML_TYPE_BF16);
         const int left = (int)(K - 1) * dilation + 1 - stride;
+#ifdef ZONOS3_HAVE_CONV_1D_IMPLICIT
+        // CrispASR: ggml_conv_1d_implicit comes from upstream's patches/metal-conv1d-implicit.patch, which our
+        // vendored ggml does not carry; use_conv1d is only ever set by zac-encoder.cpp (not vendored).
         if (rc.m.use_conv1d) {
             // Implicit GEMM: gathers the im2col windows inside the BF16 matmul tile loader, with
             // the same accumulation order as the im2col path below.
             auto* y = ggml_conv_1d_implicit(ctx, weights, x, (int)K, stride, dilation, left);
             return encoder_round(rc, add_bias(ctx, encoder_round(rc, y), bias));
         }
+#endif
         auto* padded = ggml_pad_ext(ctx, x, 0, 0, left, 0, 0, 0, 0, 0);
         auto* input = ggml_cont(ctx, ggml_transpose(ctx, padded)); // [T+left,IC]
         // F32 im2col preserves the already-rounded BF16 inputs exactly; F16

@@ -221,6 +221,8 @@ static const BackendCaps k_backend_caps[] = {
     {"xasr", 270336u, "punctuation-native,auto-download"},
     {"zonos", 75008u, "temperature,flash-attn,auto-download,tts"},
     {"zonos-tts", 75008u, "temperature,flash-attn,auto-download,tts"},
+    {"zonos3", 65792u, "temperature,tts"},
+    {"zonos3-mini", 65792u, "temperature,tts"},
 };
 
 static const int k_backend_caps_count = (int)(sizeof(k_backend_caps) / sizeof(k_backend_caps[0]));

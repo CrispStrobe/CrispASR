@@ -2403,6 +2403,19 @@
       "disclosure_prefix_words": 7,
       "_disclosure_note": "German voice speaks the English AI disclosure (CI run 44481521499: 'Des Audio wasst generorated by Artificial Intelligence der schnelle braune Fuchs ...'); first 7 normalised words dropped.",
       "tts_timeout_s": 1500
+    },
+    {
+      "name": "zonos3-mini-en",
+      "backend_id": "zonos3",
+      "gguf": {"repo": "Zyphra/ZONOS3-Mini", "revision": "2921b8821772b0bd10a04456863d21abf9d2f283", "file": "gguf/backbone-ptq.gguf", "approx_size_mb": 633},
+      "_gguf_note": "Zyphra's own GGUF (Q4_0 experts / Q8_0 mixer PTQ, Apache-2.0), loaded unchanged - no cstr/ conversion. sha256 66fceb6d73a8c30bde80249e4112bb308380ab7f3384fa11c8e4048115e4ceec.",
+      "codec": {"repo": "Zyphra/ZONOS3-Mini", "revision": "2921b8821772b0bd10a04456863d21abf9d2f283", "file": "gguf/zac-keep2.gguf"},
+      "voice": {"repo": "Zyphra/ZONOS3-Mini", "revision": "2921b8821772b0bd10a04456863d21abf9d2f283", "file": "gguf/voices/English/Imogen_en-British_F_1.embedding.npy"},
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.2,
+      "wer_max_note": "#603: local CPU roundtrip (canary-1b-v2) is WER 0 for greedy and sampled synthesis, ours and upstream zonos3-cli alike; headroom for sampling variance across runners.",
+      "tts_timeout_s": 900
     }
   ],
   "align_backends_note": "Forced aligners run `crispasr --align-only` on the pinned GGUF and compare the JSON word alignment with expected_words: identical normalized words, every start/end within tolerance_s. expected_source names where the expected words came from; an upstream reference is preferred over a native capture. Qwen3 timestamps are 80 ms classes, so 0.081 s allows one class of cross-CPU drift.",

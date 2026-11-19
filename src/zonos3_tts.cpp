@@ -60,7 +60,7 @@ extern "C" zonos3_tts_context_params zonos3_tts_context_default_params(void) {
     p.use_gpu = false;
     p.temperature = -1.0f;
     p.seed = 0;
-    p.max_frames = 450;
+    p.max_frames = zonos3_generation().max_frames; // 2000, the servers' default budget
     p.cfg_scale = 1.0f;
     p.codec_path = nullptr;
     return p;
@@ -174,7 +174,7 @@ extern "C" int32_t* zonos3_tts_generate_codes(zonos3_tts_context* ctx, const cha
     zonos3_prompt prompt;
     if (!build_prompt(ctx, text, prompt))
         return nullptr;
-    const int max_frames = ctx->params.max_frames > 0 ? ctx->params.max_frames : 450;
+    const int max_frames = ctx->params.max_frames > 0 ? ctx->params.max_frames : zonos3_generation().max_frames;
     if ((int64_t)prompt.n_rows + max_frames > ctx->model.hp.n_ctx_train)
         return nullptr;
     float cfg = ctx->params.cfg_scale;
@@ -238,6 +238,19 @@ extern "C" float* zonos3_tts_synthesize(zonos3_tts_context* ctx, const char* tex
     if (dump && *dump && zonos3_tts_dump_stages(ctx, text, dump) != 0)
         fprintf(stderr, "zonos3: stage dump to '%s' failed\n", dump);
     int frames = 0, eos = -1, prefill = 0;
+    // Codec-only diff (tools/zonos3_diff.py): decode a given [frames, 10] code matrix (+ <path>.eos.npy =
+    // [eos, prefill], as upstream zonos3-cli --tts writes) instead of generating.
+    if (const char* given = getenv("CRISPASR_ZONOS3_DECODE_CODES")) {
+        std::vector<float> cf, ef;
+        std::vector<int64_t> cs, es;
+        if (!npy::load_f32(given, cf, cs) || cs.size() != 2 || cs[1] != (int64_t)ctx->model.hp.n_codebooks ||
+            !npy::load_f32(std::string(given) + ".eos.npy", ef, es) || ef.size() != 2) {
+            fprintf(stderr, "zonos3: cannot read codes '%s' (+ .eos.npy)\n", given);
+            return nullptr;
+        }
+        std::vector<int32_t> ci(cf.begin(), cf.end());
+        return zonos3_tts_decode_codes(ctx, ci.data(), (int)cs[0], (int)ef[0], (int)ef[1], out_n);
+    }
     int32_t* codes = zonos3_tts_generate_codes(ctx, text, &frames, &eos, &prefill);
     if (!codes)
         return nullptr;
