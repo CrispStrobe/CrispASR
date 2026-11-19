@@ -10,7 +10,7 @@
 #include "zonos3/npy.h"
 
 #include "ggml-backend.h"
-#include "ggml-cpu.h"
+#include "core/ggml_cpu_backend.h"
 
 #include <cmath>
 #include <cstdio>
@@ -33,8 +33,9 @@ struct zonos3_tts_context {
 };
 
 static void set_threads(ggml_backend_t backend, int n) {
-    if (backend && n > 0 && ggml_backend_is_cpu(backend))
-        ggml_backend_cpu_set_n_threads(backend, n);
+    // core_cpu_backend: no direct ggml-cpu symbols, so GGML_BACKEND_DL links.
+    if (backend && n > 0 && core_cpu_backend::is_cpu(backend))
+        core_cpu_backend::set_n_threads(backend, n);
 }
 
 static std::string find_codec(const std::string& model_path, const char* explicit_path) {

@@ -12,7 +12,7 @@
 #include "compat.h"
 #include "backend-device.h"
 #include "ggml-alloc.h"
-#include "ggml-cpu.h"
+#include "core/ggml_cpu_backend.h" // CrispASR: GGML_BACKEND_DL-safe CPU calls
 #include "gguf.h"
 
 #include <algorithm>
@@ -62,7 +62,7 @@ static bool zac_init_backend(zac_model& m, ggml_backend_dev_t dev) {
     if (!m.is_gpu) {
         const char* th = getenv("ZAC_THREADS");
         if (th)
-            ggml_backend_cpu_set_n_threads(m.backend, std::max(1, atoi(th)));
+            core_cpu_backend::set_n_threads(m.backend, std::max(1, atoi(th)));
         // The decoder convs are large f32 GEMMs; ggml's CPU kernels run them ~4x slower than
         // a BLAS backend such as Accelerate. Offload them when one is built in.
         if (ggml_backend_dev_t accel = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_ACCEL)) {

@@ -192,7 +192,7 @@ struct zonos3_align_probe {
     };
     struct window {
         int layer = 0, head = 0, lo = 0, hi = 0;
-    };                             // inclusive text indices (clipped like clip_window)
+    }; // inclusive text indices (clipped like clip_window)
     std::vector<probe_head> heads; // probed heads (global layers only); empty = no probe
     int text_start = -1;           // absolute prompt row of the text BOS
     int text_len = 0;              // BOS..EOS rows inclusive; <= zonos3_batch_features::probe_max_text

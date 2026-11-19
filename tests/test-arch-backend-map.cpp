@@ -253,6 +253,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "voxtral-tts",
         "kugelaudio",
         "zonos",
+        "zonos3", // Zyphra ZONOS3-Mini (#603)
         "indextts",
         "outetts",
         "pocket-tts",
