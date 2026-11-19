@@ -519,6 +519,23 @@ catch_discover_tests(test-audio-resample
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-bert-pretok-spacing — pretokenize whitespace flags (fireredpunc) ───
+add_executable(test-bert-pretok-spacing
+    test-bert-pretok-spacing.cpp
+)
+target_include_directories(test-bert-pretok-spacing PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-bert-pretok-spacing PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-bert-pretok-spacing
+    TEST_SPEC "[pretokenize]"
+    PROPERTIES
+        LABELS unit
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test-voxtral-pretokenize — the tekken regex split (#338 follow-up) ───────
 # Header-only, no weights, no network: expectations are generated from the
 # published `config.pattern` via Python's `regex`, so this pins the SPLIT

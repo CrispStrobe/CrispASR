@@ -8,7 +8,7 @@ upstream model exactly as chatterbox's mtl_tts does
 (ChatterboxMultilingualTTS.from_local(<oddadmix snapshot>).generate(text,
 language_id="ar"), its own conds.pt, default sampling) for several seeds, the
 CrispASR CLI with the regression's arguments for the same seeds, and the CLI
-cloning a real Arabic voice, then scores every WAV with the SAME
+with the upstream conds.pt (baked in the base T3 GGUF) as voice, then scores every WAV with the SAME
 cohere-transcribe-arabic GGUF.
 
   gh workflow run heavy-cpu.yml --ref <branch> -f script=tools/ci-heavy/sweep_lahgtna_control.py \
@@ -26,6 +26,9 @@ PHRASE = "الطقس جميل جدا اليوم"
 SEEDS = [1234, 1, 2]
 UP = r'''
 import json, sys, torch, soundfile as sf
+import perth
+if perth.PerthImplicitWatermarker is None:  # optional native dep missing on CPU runners
+    perth.PerthImplicitWatermarker = perth.DummyWatermarker
 from huggingface_hub import snapshot_download
 from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 d = snapshot_download("oddadmix/lahgtna-chatterbox-v1", revision=sys.argv[1])
@@ -46,12 +49,14 @@ def main():
     b = C.build_crispasr()
     t3 = C.hf("cstr/lahgtna-chatterbox-v1-GGUF", "chatterbox-t3-f16.gguf", "97d045ff08d10dc5686a3bc6a608bf6f8b9584bc")
     s3 = C.hf("cstr/chatterbox-GGUF", "chatterbox-s3gen-q8_0.gguf", "c45504bb8d55473a2213db17ec472ed11b69056a")
-    ref = C.hf("cstr/crispasr-regression-fixtures", "fleurs-validation/ar_eg/1610.wav",
-               "0e0c4dfb541647af315f73c94c24c65394ccdabf")
+    # The base release's T3 GGUF carries the upstream conds.pt verbatim (the
+    # same file oddadmix ships); used as a baked voice it replaces the
+    # espeak-derived conds the lahgtna GGUF was re-converted with (be25b3e8).
+    base_t3 = C.hf("cstr/chatterbox-GGUF", "chatterbox-t3-q4_k.gguf", "c45504bb8d55473a2213db17ec472ed11b69056a")
     asr = C.hf("cstr/cohere-transcribe-arabic-07-2026-GGUF", "cohere-transcribe-arabic-q4_k-imatrix.gguf",
                "dfd6d279cd26c4a8862e5af601976e5c552e709e")
     for seed in SEEDS:
-        for tag, extra in (("builtin", []), ("clone-fleurs", ["--voice", ref])):
+        for tag, extra in (("builtin", []), ("baseconds", ["--voice", base_t3])):
             w = C.SCRATCH / f"cpp_{tag}_seed{seed}.wav"
             r = C.cli(b, ["-m", t3, "--codec-model", s3, "--tts", PHRASE, "--tts-output", w, "--seed", seed,
                           "-l", "ar"] + extra, C.OUT / f"tts-{tag}-{seed}.log",
