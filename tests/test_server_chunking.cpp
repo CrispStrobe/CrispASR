@@ -308,7 +308,7 @@ TEST_CASE("server TTS policy packs sentences into paragraph chunks for bt2-tts",
     REQUIRE(packed.size() > 1);
     for (const auto& c : packed) {
         REQUIRE(c.size() <= 600);
-        REQUIRE(c.size() > 300); // never a lone short sentence
+        REQUIRE(c.size() > 200); // never a lone short sentence, including the tail
         REQUIRE((c.back() == '.' || c.back() == '!'));
     }
 }
@@ -316,5 +316,8 @@ TEST_CASE("server TTS policy packs sentences into paragraph chunks for bt2-tts",
 TEST_CASE("pack_sentences joins greedily and keeps an oversize sentence alone", "[unit][chunking]") {
     auto out = crispasr_tts_pack_sentences({"Aa.", "Bb.", "Cc.", std::string(20, 'x'), "Dd."}, 8);
     REQUIRE(out == std::vector<std::string>{"Aa. Bb.", "Cc.", std::string(20, 'x'), "Dd."});
+    // A short tail borrows trailing sentences from the previous chunk.
+    auto bal = crispasr_tts_pack_sentences({"Aaaa.", "Bbbb.", "Cccc.", "Dddd.", "Ee."}, 23);
+    REQUIRE(bal == std::vector<std::string>{"Aaaa. Bbbb. Cccc.", "Dddd. Ee."});
     REQUIRE(crispasr_tts_pack_sentences({}, 8).empty());
 }

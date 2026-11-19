@@ -192,21 +192,49 @@ std::vector<std::string> crispasr_tts_plan_chunks_for_backend(const std::string&
 }
 
 std::vector<std::string> crispasr_tts_pack_sentences(const std::vector<std::string>& sentences, std::size_t max_chars) {
-    std::vector<std::string> out;
-    std::string cur;
-    for (const auto& s : sentences) {
-        if (s.empty())
+    // Groups of sentence indices, packed greedily.
+    std::vector<std::vector<std::size_t>> groups;
+    std::vector<std::size_t> lens;
+    for (std::size_t i = 0; i < sentences.size(); i++) {
+        const std::size_t n = sentences[i].size();
+        if (n == 0)
             continue;
-        if (!cur.empty() && cur.size() + 1 + s.size() > max_chars) {
-            out.push_back(cur);
-            cur.clear();
+        if (groups.empty() || lens.back() + 1 + n > max_chars) {
+            groups.push_back({i});
+            lens.push_back(n);
+        } else {
+            groups.back().push_back(i);
+            lens.back() += 1 + n;
         }
-        if (!cur.empty())
-            cur += ' ';
-        cur += s;
     }
-    if (!cur.empty())
-        out.push_back(cur);
+    // Rebalance a short tail: move trailing sentences of the previous group
+    // into it while that makes the two sizes closer, so the request never
+    // ends with a lone fragment ("Good God!") as its own generation.
+    if (groups.size() >= 2) {
+        auto& prev = groups[groups.size() - 2];
+        auto& tail = groups.back();
+        std::size_t& lp = lens[lens.size() - 2];
+        std::size_t& lt = lens.back();
+        while (prev.size() > 1) {
+            const std::size_t n = sentences[prev.back()].size();
+            if (lt + 1 + n > max_chars || lt + 1 + n >= lp - n - 1)
+                break;
+            tail.insert(tail.begin(), prev.back());
+            prev.pop_back();
+            lt += 1 + n;
+            lp -= 1 + n;
+        }
+    }
+    std::vector<std::string> out;
+    for (const auto& g : groups) {
+        std::string cur;
+        for (std::size_t i : g) {
+            if (!cur.empty())
+                cur += ' ';
+            cur += sentences[i];
+        }
+        out.push_back(std::move(cur));
+    }
     return out;
 }
 
