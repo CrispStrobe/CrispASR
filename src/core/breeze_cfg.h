@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 namespace breeze_cfg {
@@ -45,6 +46,27 @@ inline void combine(const float* rows, int n, const std::vector<Branch>& branche
         for (size_t b = 1; b < branches.size(); b++)
             v += branches[b].scale * (rows[b * (size_t)n + i] - rows[i]);
         out[i] = v;
+    }
+}
+
+// Repetition penalty over the generated first-codebook history (#594).
+// Applied ONCE per distinct token, exactly as upstream's
+// GeneratedTokenRepetitionPenaltyLogitsProcessor (HF gather/scatter:
+// duplicates read the same original score and write the same penalised
+// value). Applying it per OCCURRENCE compounds it to penalty^k: after a few
+// hundred frames every common code (pauses, steady vowels) is suppressed by
+// orders of magnitude, the backbone loses its text alignment and, on long
+// chunks, starts speaking the <ins_bos> instruction aloud.
+inline void apply_repetition_penalty(float* logits, int n, const std::vector<int32_t>& history, float penalty) {
+    if (penalty == 1.0f || history.empty())
+        return;
+    std::vector<uint8_t> seen((size_t)n, 0);
+    for (int32_t tok : history) {
+        if (tok < 0 || tok >= n || seen[(size_t)tok])
+            continue;
+        seen[(size_t)tok] = 1;
+        // The HF convention: multiply negatives, divide the rest.
+        logits[tok] = logits[tok] < 0.0f ? logits[tok] * penalty : logits[tok] / penalty;
     }
 }
 

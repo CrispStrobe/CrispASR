@@ -3,7 +3,7 @@
 
 # Feature matrix
 
-All 145 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](https://htmlpreview.github.io/?https://github.com/CrispStrobe/CrispASR/blob/main/docs/feature-matrix.html).
+All 148 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](https://htmlpreview.github.io/?https://github.com/CrispStrobe/CrispASR/blob/main/docs/feature-matrix.html).
 
 | Backend | TTS | Voice cloning | Translate | Src/Tgt language | Language detect | Auto-download | Timestamps (native) | Timestamps (CTC) | Word timestamps | Token confidence | Temperature | Beam search | Punctuation toggle | Flash attention | Diarize | GBNF grammar | VAD (internal) | Parallel processors | Beats | Chords | Piano | Pitch | Punctuation Native | S2S | Separate | Streaming | Tab | TTS Speed |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -116,7 +116,7 @@ All 145 backends compiled into the `crispasr` binary, with their declared capabi
 | `hojo-asr` |  |  |  |  | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |
 | `moss-audio` |  |  |  |  |  | ✓ |  |  |  |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |
 | `moss-transcribe` |  |  |  |  |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |
-| `moss-diarize` |  |  |  |  |  | ✓ | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |
+| `moss-diarize` |  |  |  |  |  | ✓ | ✓ |  |  |  | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |
 | `funasr` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `fun-asr-mlt-nano` |  |  |  |  |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `paraformer` |  |  |  |  |  | ✓ |  | ✓ |  |  |  |  | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |
@@ -136,6 +136,8 @@ All 145 backends compiled into the `crispasr` binary, with their declared capabi
 | `parler-tts` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `zonos` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `zonos-tts` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| `zonos3` | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| `zonos3-mini` | ✓ |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `csm` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `csm-tts` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `sesame` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
@@ -145,6 +147,7 @@ All 145 backends compiled into the `crispasr` binary, with their declared capabi
 | `htdemucs` |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
 | `mel-band-roformer` |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
 | `mini-bs-roformer` |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
+| `voice-isolator` |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
 | `scnet` |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |
 | `crepe` |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |
 | `btc-chords` |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |

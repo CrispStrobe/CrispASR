@@ -2,7 +2,7 @@ package whisper
 
 // Minimal TTS + S2S surface for the Go binding. Exposes the unified
 // CrispASR Session API for TTS-capable backends (kokoro, vibevoice,
-// qwen3-tts, moss-tts, orpheus, chatterbox, csm, dia, zonos-tts, speecht5, fastpitch,
+// qwen3-tts, moss-tts, orpheus, chatterbox, csm, dia, zonos-tts, zonos3, speecht5, fastpitch,
 // bananamind-tts, melotts, piper, parler-tts, outetts, indextts, voxcpm2-tts,
 // cosyvoice3-tts, pocket-tts, f5-tts, bark, kugelaudio, tada, lfm2-audio,
 // dots-tts, fireredtts3, ...)

@@ -4,6 +4,7 @@
 // See crispasr_tts_chunking.h for the design rationale (issue #66).
 
 #include "crispasr_tts_chunking.h"
+#include "crispasr_sentence_end.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -101,7 +102,9 @@ std::vector<std::string> crispasr_tts_split_sentences(const std::string& text, s
             // Terminator must be followed by whitespace or end-of-input
             // for it to count as a sentence break — otherwise it's a
             // decimal point ("1.5") or in-word punctuation.
-            if (is_space_or_end(text, i + term_len)) {
+            // A '.' after an ordinal, initial or abbreviation ("am 3. Oktober",
+            // "Dr.", "z. B.") does not end the sentence; see crispasr_sentence_end.h.
+            if (is_space_or_end(text, i + term_len) && (text[i] != '.' || crispasr_period_ends_sentence(text, i))) {
                 std::string chunk = trim(text.substr(chunk_start, i + term_len - chunk_start));
                 if (!chunk.empty())
                     whitespace_split(chunk, max_chars, result);
@@ -162,6 +165,11 @@ std::vector<std::string> crispasr_tts_plan_chunks_for_backend(const std::string&
     // Match the official generate(text) flow in both CLI and server requests.
     if (backend_name == "dia" || backend_name.rfind("dia-", 0) == 0 || backend_name.rfind("dia_", 0) == 0)
         return {text};
+    // ZONOS3-Mini (#603): one delayed-code AR pass over the whole text with its own EOA, as upstream's
+    // POST /v2/generate (registry max_frames 2000 = 133 s). Splitting re-plays the silence prefill and the
+    // conditioning rows per sentence and diverges from the reference prompt.
+    if (backend_name.rfind("zonos3", 0) == 0)
+        return {text};
 
     // omnivoice defaults to single-shot too, but keep an escape hatch: on a
     // GPU without CUDA-graph reuse (Metal/CPU) single-shot's ~2.7× attention
@@ -176,7 +184,63 @@ std::vector<std::string> crispasr_tts_plan_chunks_for_backend(const std::string&
     std::vector<std::string> result = crispasr_tts_split_sentences(text, max_chars);
     if (result.empty())
         result.push_back(text);
+    // bt2-tts (#594): upstream breeze-tts generates the whole request in one
+    // generate(text) with the instruction in front. One generation per
+    // SENTENCE handed the model fragments like "Good God!" or "Do not laugh in
+    // that manner." behind an instruction many times their length; the model
+    // then kept reading the instruction aloud instead of the fragment. Pack
+    // whole sentences back into paragraph-sized chunks: max_chars bytes stays
+    // well inside the 750-frame (60 s) generation cap.
+    if (backend_name.rfind("bt2", 0) == 0)
+        return crispasr_tts_pack_sentences(result, max_chars);
     return result;
+}
+
+std::vector<std::string> crispasr_tts_pack_sentences(const std::vector<std::string>& sentences, std::size_t max_chars) {
+    // Groups of sentence indices, packed greedily.
+    std::vector<std::vector<std::size_t>> groups;
+    std::vector<std::size_t> lens;
+    for (std::size_t i = 0; i < sentences.size(); i++) {
+        const std::size_t n = sentences[i].size();
+        if (n == 0)
+            continue;
+        if (groups.empty() || lens.back() + 1 + n > max_chars) {
+            groups.push_back({i});
+            lens.push_back(n);
+        } else {
+            groups.back().push_back(i);
+            lens.back() += 1 + n;
+        }
+    }
+    // Rebalance a short tail: move trailing sentences of the previous group
+    // into it while that makes the two sizes closer, so the request never
+    // ends with a lone fragment ("Good God!") as its own generation.
+    if (groups.size() >= 2) {
+        auto& prev = groups[groups.size() - 2];
+        auto& tail = groups.back();
+        std::size_t& lp = lens[lens.size() - 2];
+        std::size_t& lt = lens.back();
+        while (prev.size() > 1) {
+            const std::size_t n = sentences[prev.back()].size();
+            if (lt + 1 + n > max_chars || lt + 1 + n >= lp - n - 1)
+                break;
+            tail.insert(tail.begin(), prev.back());
+            prev.pop_back();
+            lt += 1 + n;
+            lp -= 1 + n;
+        }
+    }
+    std::vector<std::string> out;
+    for (const auto& g : groups) {
+        std::string cur;
+        for (std::size_t i : g) {
+            if (!cur.empty())
+                cur += ' ';
+            cur += sentences[i];
+        }
+        out.push_back(std::move(cur));
+    }
+    return out;
 }
 
 std::vector<float> crispasr_tts_concat_with_silence(const std::vector<std::vector<float>>& chunks,

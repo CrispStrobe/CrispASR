@@ -54,3 +54,24 @@ TEST_CASE("a band-limited tone survives 16k->24k->16k", "[unit][resample]") {
         err = std::fmax(err, std::fabs(back[i] - x[i]));
     REQUIRE(err < 1e-3);
 }
+
+TEST_CASE("kaiser_best 16k->48k->16k equals torchaudio sinc_interp_kaiser", "[unit][resample]") {
+    // torchaudio 2.11 resample(x, ..., sinc_interp_kaiser, width 64,
+    // rolloff 0.9475937167399596, beta 14.769656459379492) — the Inworld Voice
+    // Isolator's audio.resample (#602).
+    std::vector<float> x(200);
+    for (int i = 0; i < 200; i++)
+        x[i] = (float)(std::sin(0.37 * i) * 0.5 + 0.1 * std::cos(1.9 * i));
+    const auto up = core_torchaudio::resample(x.data(), 200, core_torchaudio::kaiser_best_kernel(16000, 48000));
+    REQUIRE(up.size() == 600);
+    const int ui[] = {0, 1, 2, 100, 301, 450, 599};
+    const float uv[] = {0.0998393f, 0.1290351f, 0.1434785f, -0.0277722f, -0.3259524f, -0.4967343f, -0.1591326f};
+    for (int k = 0; k < 7; k++)
+        REQUIRE_THAT(up[ui[k]], Catch::Matchers::WithinAbs(uv[k], 2e-5));
+    const auto down = core_torchaudio::resample(up.data(), 600, core_torchaudio::kaiser_best_kernel(48000, 16000));
+    REQUIRE(down.size() == 200);
+    const int di[] = {0, 50, 100, 199};
+    const float dv[] = {0.0785041f, -0.0982175f, -0.3151381f, -0.4132959f};
+    for (int k = 0; k < 4; k++)
+        REQUIRE_THAT(down[di[k]], Catch::Matchers::WithinAbs(dv[k], 2e-5));
+}

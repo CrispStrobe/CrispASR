@@ -205,6 +205,7 @@ static const BackendCaps k_backend_caps[] = {
     {"vibevoice-1.5b", 468034u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts,voice-cloning"},
     {"vibevoice-bitnet", 336962u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,tts"},
     {"vibevoice-streaming", 8660034u, "timestamps-ctc,diarize,flash-attn,punctuation-native,auto-download,streaming"},
+    {"voice-isolator", 5251072u, "auto-download,separate"},
     {"voxcpm2-tts", 204800u, "auto-download,tts,voice-cloning"},
     {"voxcpm2-vae", 2097152u, "s2s"},
     {"voxtral", 1605482u,
@@ -221,6 +222,8 @@ static const BackendCaps k_backend_caps[] = {
     {"xasr", 270336u, "punctuation-native,auto-download"},
     {"zonos", 75008u, "temperature,flash-attn,auto-download,tts"},
     {"zonos-tts", 75008u, "temperature,flash-attn,auto-download,tts"},
+    {"zonos3", 65792u, "temperature,tts"},
+    {"zonos3-mini", 65792u, "temperature,tts"},
 };
 
 static const int k_backend_caps_count = (int)(sizeof(k_backend_caps) / sizeof(k_backend_caps[0]));

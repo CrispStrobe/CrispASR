@@ -122,6 +122,22 @@ TEST_CASE("registry: Phonon-2 selects Q8 and resolves alternate GGUF quants", "[
     REQUIRE(e.backend == "phonon2");
 }
 
+TEST_CASE("registry: voice-isolator offline and realtime resolve their own files", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    REQUIRE(crispasr_registry_lookup("voice-isolator", e));
+    REQUIRE(e.filename == "voice-isolator-q8_0.gguf");
+    REQUIRE(e.license == "Apache-2.0");
+    REQUIRE(crispasr_registry_lookup("voice-isolator", e, "f16"));
+    REQUIRE(e.filename == "voice-isolator-f16.gguf");
+    REQUIRE(crispasr_registry_lookup("voice-isolator", e, "q4_k"));
+    REQUIRE(e.filename == "voice-isolator-q4_k.gguf");
+    REQUIRE(crispasr_registry_lookup("voice-isolator-realtime", e));
+    REQUIRE(e.filename == "voice-isolator-realtime-q8_0.gguf");
+    REQUIRE_FALSE(crispasr_registry_lookup("voice-isolator-realtime", e, "q4_k"));
+    REQUIRE(crispasr_registry_lookup_by_filename("voice-isolator-realtime-f16.gguf", e));
+    REQUIRE(e.backend == "voice-isolator-realtime");
+}
+
 TEST_CASE("registry: mini-bs-roformer defaults to Q8_0 and resolves qualified quants", "[unit][registry]") {
     CrispasrRegistryEntry e;
     REQUIRE(crispasr_registry_lookup("mini-bs-roformer", e));
@@ -694,8 +710,9 @@ TEST_CASE("registry: fill with preferred quant does not crash on any entry (#152
         crispasr_registry_get_at(i, e);
         CrispasrRegistryEntry eq;
         const bool found = crispasr_registry_lookup(e.backend, eq, "q4_k");
-        if (e.backend == "nemotron") {
-            // Only F16 is qualified; manufacturing a Q4 download is rejected.
+        if (e.backend == "nemotron" || e.backend == "voice-isolator-realtime") {
+            // Only F16 (nemotron) / F16+Q8_0 (realtime voice isolator) are
+            // qualified; manufacturing a Q4 download is rejected.
             REQUIRE_FALSE(found);
             continue;
         }

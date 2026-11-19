@@ -65,6 +65,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_mimo_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_htdemucs_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mel_band_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mini_bs_roformer_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_voice_isolator_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_scnet_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_crepe_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_btc_chords_backend();
@@ -83,6 +84,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_paraformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sensevoice_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_sidon_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_miotts_backend();
+std::unique_ptr<CrispasrBackend> crispasr_create_zonos3_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_arktts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_bt2_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_create_piano_transcription_backend();
@@ -181,7 +183,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_higgs_stt_backend();
     if (name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" || name == "qwen3_17b" || name == "mega-asr" ||
         name == "mega_asr" || name == "megaasr" || name == "raon-speech" || name == "raon-speech-9b" ||
-        name == "raon_speech")
+        name == "raon_speech" || name == "rumble-2-flash" || name == "rumble2" || name == "rumble")
         return crispasr_make_qwen3_backend(name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" ||
                                            name == "qwen3_17b");
     if (name == "fastconformer-ctc" || name == "fastconformer_ctc" || name == "canary-ctc" || name == "canary_ctc")
@@ -303,6 +305,9 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_scnet_backend();
     if (name == "mini-bs-roformer" || name == "mini_bs_roformer" || name == "mini-bs-roformer-v2.5")
         return crispasr_make_mini_bs_roformer_backend();
+    if (name == "voice-isolator" || name == "voice_isolator" || name == "inworld-voice-isolator" ||
+        name == "voice-isolator-realtime")
+        return crispasr_make_voice_isolator_backend();
     if (name == "mel-band-roformer" || name == "mel_band_roformer" || name == "melbandroformer" || name == "mbr")
         return crispasr_make_mel_band_roformer_backend();
     if (name == "crepe" || name == "crepe-tiny" || name == "crepe-full" || name == "pitch")
@@ -374,6 +379,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_confucius4_tts_backend();
     if (name == "parler-tts" || name == "parler_tts" || name == "parler" || name == "parlertts")
         return crispasr_make_parler_tts_backend();
+    if (name == "zonos3" || name == "zonos3-mini" || name == "zonos3_mini")
+        return crispasr_create_zonos3_backend();
     if (name == "zonos" || name == "zonos-tts" || name == "zonos_tts")
         return crispasr_make_zonos_backend();
     if (name == "csm" || name == "csm-tts" || name == "csm_tts" || name == "sesame" || name == "sesame-csm")
@@ -520,6 +527,8 @@ std::vector<std::string> crispasr_list_backends() {
         "parler-tts",
         "zonos",
         "zonos-tts",
+        "zonos3",
+        "zonos3-mini",
         "csm",
         "csm-tts",
         "sesame",
@@ -529,6 +538,7 @@ std::vector<std::string> crispasr_list_backends() {
         "htdemucs",
         "mel-band-roformer",
         "mini-bs-roformer",
+        "voice-isolator",
         "scnet",
         "crepe",
         "btc-chords",
@@ -743,6 +753,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "scnet";
     if (contains_ci("mini-bs-roformer") || contains_ci("mini_bs_roformer"))
         return "mini-bs-roformer";
+    if (contains_ci("voice-isolator") || contains_ci("voice_isolator"))
+        return "voice-isolator";
     if (contains_ci("mel-band-roformer") || contains_ci("mel_band_roformer") || contains_ci("roformer"))
         return "mel-band-roformer";
     if (contains_ci("crepe"))
@@ -833,6 +845,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "indextts";
     if (contains_ci("raon-speech") || contains_ci("raon_speech"))
         return "qwen3"; // #455 speech-to-text, not Raon-OpenTTS
+    if (contains_ci("rumble-2") || contains_ci("rumble2") || contains_ci("rumble_2"))
+        return "qwen3"; // #602 Reson8 Rumble-2-Flash (Qwen3-ASR fine-tune)
     if (contains_ci("f5-tts") || contains_ci("f5tts") || contains_ci("F5TTS") || contains_ci("raon"))
         return "f5-tts"; // #387 Raon-OpenTTS rides the f5-tts runtime
     if (contains_ci("pocket-tts") || contains_ci("pocket_tts") || contains_ci("pockettts"))
@@ -916,6 +930,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "csm";
     if (contains_ci("parler") && contains_ci("tts"))
         return "parler-tts";
+    if (contains_ci("zonos3"))
+        return "zonos3";
     if (contains_ci("zonos"))
         return "zonos";
     if (contains_ci("hojo"))

@@ -256,6 +256,16 @@ struct parakeet_model {
     ggml_tensor* mel_window = nullptr; // (win_length,)
 
     parakeet_pre_encode pre_encode;
+
+    // Fluid Speech FrameCleaner (#595, FluidVoice-Labs/fluid-speech-pro):
+    // residual LN -> Linear -> depthwise Conv1d(K) -> GELU -> Linear block on
+    // the pre_encode output, before the first Conformer layer. All nullptr
+    // for every other parakeet GGUF.
+    ggml_tensor *fv_ln_w = nullptr, *fv_ln_b = nullptr;
+    ggml_tensor *fv_down_w = nullptr, *fv_down_b = nullptr;
+    ggml_tensor *fv_mix_w = nullptr, *fv_mix_b = nullptr; // (dim, 1, K) F32
+    ggml_tensor *fv_up_w = nullptr, *fv_up_b = nullptr;
+
     std::vector<parakeet_enc_layer> enc;
     parakeet_predictor predictor;
     parakeet_joint joint;
@@ -539,6 +549,18 @@ static bool parakeet_load_model(parakeet_model& model, parakeet_vocab& vocab, co
     model.pre_encode.conv6_b = require(model, "encoder.pre.conv.6.bias");
     model.pre_encode.out_w = require(model, "encoder.pre.out.weight");
     model.pre_encode.out_b = require(model, "encoder.pre.out.bias");
+
+    // Fluid Speech FrameCleaner (optional; all-or-nothing)
+    model.fv_down_w = try_get(model, "encoder.fv_insert.down.weight");
+    if (model.fv_down_w) {
+        model.fv_ln_w = require(model, "encoder.fv_insert.ln.weight");
+        model.fv_ln_b = require(model, "encoder.fv_insert.ln.bias");
+        model.fv_down_b = require(model, "encoder.fv_insert.down.bias");
+        model.fv_mix_w = require(model, "encoder.fv_insert.mix.weight");
+        model.fv_mix_b = require(model, "encoder.fv_insert.mix.bias");
+        model.fv_up_w = require(model, "encoder.fv_insert.up.weight");
+        model.fv_up_b = require(model, "encoder.fv_insert.up.bias");
+    }
 
     // Encoder layers
     model.enc.resize(model.hparams.n_layers);
@@ -982,6 +1004,30 @@ static void parakeet_fold_batchnorm(parakeet_model& model, ggml_backend_t backen
 static const float kLayerNormEps = 1e-5f;
 static const float kBatchNormEps = 1e-5f;
 
+// Fluid Speech FrameCleaner on the pre_encode output cur (d_model, T):
+//   x + up(gelu(dwconv_K(down(LayerNorm(x)))))   (fluid_speech.py, #595)
+// nn.LayerNorm eps 1e-5, exact (erf) GELU, Conv1d padding K/2 with bias.
+static ggml_tensor* parakeet_build_fv_insert(ggml_context* ctx0, const parakeet_model& m, ggml_tensor* cur, int T) {
+    if (!m.fv_down_w)
+        return cur;
+    const int dim = (int)m.fv_down_w->ne[1];
+    const int K = (int)m.fv_mix_w->ne[0];
+    ggml_tensor* h = ggml_norm(ctx0, cur, 1e-5f);
+    h = ggml_add(ctx0, ggml_mul(ctx0, h, m.fv_ln_w), m.fv_ln_b);
+    h = ggml_add(ctx0, ggml_mul_mat(ctx0, m.fv_down_w, h), m.fv_down_b); // (dim, T)
+    ggml_tensor* w = m.fv_mix_w->type == GGML_TYPE_F32 ? m.fv_mix_w : ggml_cast(ctx0, m.fv_mix_w, GGML_TYPE_F32);
+    w = ggml_reshape_4d(ctx0, w, K, 1, 1, dim);
+    h = ggml_cont(ctx0, ggml_transpose(ctx0, h)); // (T, dim)
+    h = ggml_reshape_4d(ctx0, h, T, 1, dim, 1);
+    h = ggml_conv_2d_dw_direct(ctx0, w, h, 1, 1, K / 2, 0, 1, 1);
+    h = ggml_cont(ctx0, ggml_permute(ctx0, h, 1, 2, 0, 3));
+    h = ggml_reshape_2d(ctx0, h, dim, T);
+    h = ggml_add(ctx0, h, m.fv_mix_b);
+    h = ggml_gelu_erf(ctx0, h);
+    h = ggml_add(ctx0, ggml_mul_mat(ctx0, m.fv_up_w, h), m.fv_up_b);
+    return ggml_add(ctx0, cur, h);
+}
+
 static ggml_cgraph* parakeet_build_graph_encoder(parakeet_context* ctx, int T_mel) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
@@ -1003,6 +1049,7 @@ static ggml_cgraph* parakeet_build_graph_encoder(parakeet_context* ctx, int T_me
     // ----- Pre-encode (dw_striding subsampling 8×) -----
     int T = 0;
     ggml_tensor* cur = core_conformer::build_pre_encode(ctx0, mel, m.pre_encode, (int)hp.subsampling_channels, &T);
+    cur = parakeet_build_fv_insert(ctx0, m, cur, T);
 
     // ----- xscaling: NeMo's RelPositionalEncoding multiplies the encoder
     // input by sqrt(d_model) before the conformer layers when the model's
@@ -3924,8 +3971,10 @@ static ggml_cgraph* parakeet_build_graph_encoder_dump(parakeet_context* ctx, int
 
     int T = 0;
     ggml_tensor* cur = core_conformer::build_pre_encode(ctx0, mel, m.pre_encode, (int)hp.subsampling_channels, &T);
+    cur = parakeet_build_fv_insert(ctx0, m, cur, T);
 
-    // Tag pre-encode output BEFORE the xscaling. NeMo's pre_encode forward
+    // Tag pre-encode output BEFORE the xscaling (after the Fluid Speech
+    // FrameCleaner, which upstream runs as a forward hook on pre_encode). NeMo's pre_encode forward
     // also returns the post-projection output (the multiply by sqrt(d) is
     // an attribute of the rel-pos encoder, not the subsampling module).
     {

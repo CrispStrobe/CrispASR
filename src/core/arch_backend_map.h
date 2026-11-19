@@ -261,6 +261,8 @@ inline const entry* table(size_t* n_out) {
         {"zonos",                     "zonos"},
         {"zonos-tts",                 "zonos"},
         {"zonos_tts",                 "zonos"},
+        {"zonos3",                    "zonos3"},
+        {"zonos3-mini",               "zonos3"},
         // The IndexTTS converter emits two GGUFs; only the GPT one is the model
         // a session opens (the bigvgan vocoder is a component, deliberately
         // absent so pointing a session at it fails loudly instead of silently).
@@ -309,6 +311,7 @@ inline const entry* table(size_t* n_out) {
         {"htdemucs",                  "htdemucs"},
         {"demucs",                    "htdemucs"},
         {"mini-bs-roformer",          "mini-bs-roformer"},
+        {"voice-isolator",            "voice-isolator"},
         {"scnet",                     "scnet"},
         {"mel-band-roformer",         "mel-band-roformer"},
         {"mel_band_roformer",         "mel-band-roformer"},

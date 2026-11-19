@@ -6,6 +6,8 @@ Supports both model formats:
   - Non-HF (thinker.*):  Qwen/Qwen3-ASR-0.6B, etc.
   - HF (-hf):            Qwen/Qwen3-ASR-0.6B-hf, Qwen/Qwen3-ASR-1.7B-hf, etc.
   - Fine-tunes:          jaykwok/Qwen3-ASR-1.7B-JA-Anime-Galgame-hf, etc.
+  - Reson8/Rumble-2-Flash (#602): HF layout, 14-layer LLM, 99 630-token
+    re-indexed vocab, control tokens in the system turn.
 
 Architecture (all sizes share the same structure):
 
@@ -515,8 +517,26 @@ def convert(input_dir: Path, out_path: Path, streaming_recipe: str = "") -> None
     writer.add_uint32("qwen3asr.audio_start_token_id", audio_start_id)
     writer.add_uint32("qwen3asr.audio_end_token_id", audio_end_id)
     writer.add_uint32("qwen3asr.audio_pad_token_id", audio_pad_id)
-    writer.add_uint32("qwen3asr.eos_token_id", 151645)
-    writer.add_uint32("qwen3asr.pad_token_id", 151643)
+    # #602 Rumble-2-Flash re-indexes the vocabulary (99 630 tokens, <|im_end|>
+    # = 99564), so look the chat markers up instead of assuming Qwen's ids.
+    tok_index = {t: i for i, t in enumerate(tokens)}
+    writer.add_uint32("qwen3asr.eos_token_id", tok_index.get("<|im_end|>", 151645))
+    writer.add_uint32("qwen3asr.pad_token_id", tok_index.get("<|endoftext|>", 151643))
+    # Reson8 control tokens (chat_template.jinja): the system turn always opens
+    # with <digits>|<nodigits> <filler>|<nofiller> <verbatim>|<noverbatim>; the
+    # template defaults are digits=true, filler=false, verbatim=true.
+    if all(t in tok_index for t in ("<digits>", "<nofiller>", "<verbatim>")):
+        writer.add_string("qwen3asr.variant", "rumble")
+        writer.add_string("qwen3asr.system_prefix", "<digits><nofiller><verbatim>")
+        # The model was trained with, and transformers/vLLM always run, the
+        # n_window_infer (8 s = 104 frames) block-diagonal encoder attention
+        # (Qwen3ASRAudioAttention splits on cu_seqlens in every attention
+        # implementation). crisp_audio mode 1 is exactly that mask; the
+        # Qwen release GGUFs keep full attention (their qwen_asr CPU path).
+        writer.add_uint32("qwen3asr.n_window", int(audio.get("n_window", 50)))
+        writer.add_uint32("qwen3asr.n_window_infer", int(audio.get("n_window_infer", 800)))
+        writer.add_uint32("qwen3asr.audio.attn_window_mode", 1)
+        print("  variant: rumble (Reson8 control tokens in the system turn)")
     if raon:
         writer.add_string("qwen3asr.variant", "raon-speech")
         writer.add_float32("qwen3asr.adaptor.norm_eps", float(adaptor_cfg.get("norm_eps", 1e-6)))

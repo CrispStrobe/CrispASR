@@ -12,6 +12,7 @@
 #include "mel_band_roformer.h"
 #include "mini_bs_roformer.h"
 #include "scnet.h"
+#include "voice_isolator.h"
 
 #include <cstdio>
 #include <fstream>
@@ -95,7 +96,45 @@ int crispasr_run_separate(const whisper_params& params) {
         std::vector<float> mono;
         std::vector<std::vector<float>> stereo;
 
-        if (arch == "scnet") {
+        if (arch == "voice-isolator") {
+            // Inworld Voice Isolator (#602): mono 48 kHz; stems voice + background
+            // (background = input - voice, upstream's definition).
+            auto vp = voice_isolator_default_params();
+            vp.use_gpu = params.use_gpu;
+            vp.n_threads = params.n_threads;
+            vp.gpu_device = params.gpu_device;
+            auto* ctx = voice_isolator_init_from_file(model.c_str(), vp);
+            if (!ctx) {
+                rc = 2;
+                break;
+            }
+            const int sr = voice_isolator_sample_rate(ctx);
+            if (!read_audio_data(fname, mono, stereo, /*stereo=*/false, /*target_rate=*/sr)) {
+                fprintf(stderr, "crispasr: error: cannot read '%s'\n", fname.c_str());
+                voice_isolator_free(ctx);
+                rc = 20;
+                continue;
+            }
+            auto* r = voice_isolator_separate(ctx, mono.data(), (int)mono.size(), 1);
+            if (!r) {
+                fprintf(stderr, "crispasr: --separate failed on '%s'\n", fname.c_str());
+                voice_isolator_free(ctx);
+                rc = 1;
+                continue;
+            }
+            crispasr_separation_view v;
+            v.n_sources = r->n_sources;
+            v.n_channels = r->n_channels;
+            v.n_frames = r->n_samples;
+            v.sample_rate = r->sample_rate;
+            v.sources = r->sources;
+            v.source_names = r->source_names;
+            if (write_stems(v, fname, params) == 0)
+                rc = 1;
+            voice_isolator_result_free(r);
+            voice_isolator_free(ctx);
+
+        } else if (arch == "scnet") {
             auto mp = scnet_default_params();
             mp.use_gpu = params.use_gpu;
             mp.n_threads = params.n_threads;
@@ -257,7 +296,7 @@ int crispasr_run_separate(const whisper_params& params) {
         } else {
             fprintf(stderr,
                     "crispasr: --separate: '%s' is not a separation model (arch='%s'). "
-                    "Expected scnet, mini-bs-roformer, mel-band-roformer or htdemucs.\n",
+                    "Expected scnet, mini-bs-roformer, mel-band-roformer, htdemucs or voice-isolator.\n",
                     model.c_str(), arch.c_str());
             return 2;
         }

@@ -130,6 +130,10 @@ struct qwen3_asr_hparams {
     // tower + Qwen3 LLM, plus a 2-layer EmbeddingAdaptor between them and a
     // 24 kHz, 8 s-chunked front end (see qwen3_asr_raon_encode_stages).
     bool raon_speech = false;
+    // #602 Reson8 Rumble-2-Flash (qwen3asr.variant = "rumble"): the system
+    // turn opens with control tokens (chat_template.jinja defaults
+    // "<digits><nofiller><verbatim>"); empty for every other model.
+    std::string system_prefix;
     float adaptor_eps = 1e-6f;
     uint32_t raon_chunk_samples = 192000;       // 8 s at 24 kHz
     uint32_t raon_samples_per_frame = 1920;     // 24 kHz / 12.5 Hz
@@ -340,6 +344,7 @@ static bool qwen3_asr_load_model(qwen3_asr_model& model, qwen3_asr_vocab& vocab,
         hp.eos_token_id = core_gguf::kv_u32(gctx, "qwen3asr.eos_token_id", hp.eos_token_id);
         hp.pad_token_id = core_gguf::kv_u32(gctx, "qwen3asr.pad_token_id", hp.pad_token_id);
         hp.raon_speech = core_gguf::kv_str(gctx, "qwen3asr.variant", "") == "raon-speech";
+        hp.system_prefix = core_gguf::kv_str(gctx, "qwen3asr.system_prefix", "");
         hp.adaptor_eps = core_gguf::kv_f32(gctx, "qwen3asr.adaptor.norm_eps", hp.adaptor_eps);
         hp.raon_chunk_samples = core_gguf::kv_u32(gctx, "qwen3asr.raon.chunk_samples", hp.raon_chunk_samples);
         hp.raon_samples_per_frame =
@@ -1916,6 +1921,18 @@ static bool qwen3_asr_run_adaptor(qwen3_asr_context* ctx, const float* x, int N,
     out.resize((size_t)ggml_nelements(o));
     ggml_backend_tensor_get(o, out.data(), 0, out.size() * sizeof(float));
     return true;
+}
+
+// #602: control-token prefix of the system turn ("" when the model has none).
+// CRISPASR_QWEN3_SYSTEM_PREFIX overrides it, e.g. "<nodigits><filler><noverbatim>"
+// for Rumble-2-Flash's digits=false / filler=true / verbatim=false options.
+extern "C" const char* qwen3_asr_system_prefix(qwen3_asr_context* ctx) {
+    if (!ctx)
+        return "";
+    if (const char* e = getenv("CRISPASR_QWEN3_SYSTEM_PREFIX"))
+        if (!ctx->model.hparams.system_prefix.empty())
+            return e;
+    return ctx->model.hparams.system_prefix.c_str();
 }
 
 extern "C" bool qwen3_asr_is_raon_speech(qwen3_asr_context* ctx) {

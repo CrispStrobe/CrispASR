@@ -54,6 +54,7 @@
 #include "htdemucs.h"           // §381: htdemucs separation backend
 #include "mel_band_roformer.h"  // §381: mel-band-roformer separation backend
 #include "mini_bs_roformer.h"
+#include "voice_isolator.h"
 #include "scnet.h"
 #include "crispasr_chat.h"             // /v1/chat/completions
 #include "../server/ws_stream.h"       // real-time WebSocket ASR streaming (--ws-port)
@@ -1619,13 +1620,14 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // mel-band-roformer), and holds it resident. A std::mutex serialises
     // concurrent requests. Mirrors the --chat-model precedent.
     // -----------------------------------------------------------------------
-    enum class SepArch { NONE, HTDEMUCS, MEL_BAND_ROFORMER, MINI_BS_ROFORMER, SCNET };
+    enum class SepArch { NONE, HTDEMUCS, MEL_BAND_ROFORMER, MINI_BS_ROFORMER, SCNET, VOICE_ISOLATOR };
     struct SepCtx {
         SepArch arch = SepArch::NONE;
         htdemucs_context* htd_ctx = nullptr;
         mel_band_roformer_context* mbr_ctx = nullptr;
         mini_bs_roformer_context* mini_bsr_ctx = nullptr;
         scnet_context* scnet_ctx = nullptr;
+        voice_isolator_context* vi_ctx = nullptr;
         std::mutex mtx;
         int sample_rate = 0;
 
@@ -1638,6 +1640,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 return mini_bs_roformer_n_sources(mini_bsr_ctx);
             if (arch == SepArch::SCNET && scnet_ctx)
                 return scnet_n_sources(scnet_ctx);
+            if (arch == SepArch::VOICE_ISOLATOR && vi_ctx)
+                return voice_isolator_n_sources(vi_ctx);
             return 0;
         }
         const char* source_name(int i) const {
@@ -1649,6 +1653,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 return mini_bs_roformer_source_name(mini_bsr_ctx, i);
             if (arch == SepArch::SCNET && scnet_ctx)
                 return scnet_source_name(scnet_ctx, i);
+            if (arch == SepArch::VOICE_ISOLATOR && vi_ctx)
+                return voice_isolator_source_name(vi_ctx, i);
             return "";
         }
     };
@@ -1726,10 +1732,24 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             sep_ctx->sample_rate = scnet_sample_rate(sep_ctx->scnet_ctx);
             fprintf(stderr, "crispasr-server: separation model loaded — scnet (%d Hz, %d stems)\n",
                     sep_ctx->sample_rate, sep_ctx->n_sources());
+        } else if (sep_arch == "voice-isolator") {
+            auto vp = voice_isolator_default_params();
+            vp.use_gpu = params.use_gpu;
+            vp.n_threads = params.n_threads;
+            vp.gpu_device = params.gpu_device;
+            sep_ctx->vi_ctx = voice_isolator_init_from_file(sep_resolved.c_str(), vp);
+            if (!sep_ctx->vi_ctx) {
+                fprintf(stderr, "crispasr-server: failed to load voice-isolator from '%s'\n", sep_resolved.c_str());
+                return 1;
+            }
+            sep_ctx->arch = SepArch::VOICE_ISOLATOR;
+            sep_ctx->sample_rate = voice_isolator_sample_rate(sep_ctx->vi_ctx);
+            fprintf(stderr, "crispasr-server: separation model loaded — voice-isolator (%d Hz, %d stems, mono)\n",
+                    sep_ctx->sample_rate, sep_ctx->n_sources());
         } else {
             fprintf(stderr,
                     "crispasr-server: --separate-model: unsupported arch '%s' "
-                    "(expected htdemucs, mel-band-roformer, mini-bs-roformer or scnet)\n",
+                    "(expected htdemucs, mel-band-roformer, mini-bs-roformer, scnet or voice-isolator)\n",
                     sep_arch.c_str());
             return 1;
         }
@@ -1839,6 +1859,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         mel_band_roformer_result* mbr_r = nullptr;
         mini_bs_roformer_result* mini_bsr_r = nullptr;
         scnet_result* scnet_r = nullptr;
+        voice_isolator_result* vi_r = nullptr;
         {
             std::lock_guard<std::mutex> lock(sep_ctx->mtx);
             if (sep_ctx->arch == SepArch::HTDEMUCS) {
@@ -1889,6 +1910,19 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 view.sample_rate = scnet_r->sample_rate;
                 view.sources = scnet_r->sources;
                 view.source_names = scnet_r->source_names;
+            } else if (sep_ctx->arch == SepArch::VOICE_ISOLATOR) {
+                // mono out: voice + background (= input - voice)
+                vi_r = voice_isolator_separate(sep_ctx->vi_ctx, pcm.data(), n_frames, n_channels);
+                if (!vi_r) {
+                    json_error(res, 500, "separation failed");
+                    return;
+                }
+                view.n_sources = vi_r->n_sources;
+                view.n_channels = vi_r->n_channels;
+                view.n_frames = vi_r->n_samples;
+                view.sample_rate = vi_r->sample_rate;
+                view.sources = vi_r->sources;
+                view.source_names = vi_r->source_names;
             }
         }
 
@@ -1922,6 +1956,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             mini_bs_roformer_result_free(mini_bsr_r);
         if (scnet_r)
             scnet_result_free(scnet_r);
+        if (vi_r)
+            voice_isolator_result_free(vi_r);
 
         if (n_parts == 0) {
             json_error(res, 400, "no stems matched the selection");
@@ -4171,6 +4207,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         const char* arch_name = sep_ctx->arch == SepArch::HTDEMUCS           ? "htdemucs"
                                 : sep_ctx->arch == SepArch::MINI_BS_ROFORMER ? "mini-bs-roformer"
                                 : sep_ctx->arch == SepArch::SCNET            ? "scnet"
+                                : sep_ctx->arch == SepArch::VOICE_ISOLATOR   ? "voice-isolator"
                                                                              : "mel-band-roformer";
         fprintf(stderr, "  POST /v1/audio/separation         — source separation (%s, %d stems)\n", arch_name,
                 sep_ctx->n_sources());
@@ -4242,6 +4279,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             mini_bs_roformer_free(sep_ctx->mini_bsr_ctx);
         if (sep_ctx->scnet_ctx)
             scnet_free(sep_ctx->scnet_ctx);
+        if (sep_ctx->vi_ctx)
+            voice_isolator_free(sep_ctx->vi_ctx);
         sep_ctx.reset();
     }
 

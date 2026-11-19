@@ -121,6 +121,7 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     "moss-tts":   "reference_backends.moss_tts",
     "qwen3":      "reference_backends.qwen3",
     "raon-speech": "reference_backends.raon_speech",  # #455 Raon-Speech-9B STT
+    "rumble2":    "reference_backends.rumble2",  # #602 Reson8/Rumble-2-Flash (HF qwen3_asr)
     "nemotron3-diar": "reference_backends.nemotron3_diar",  # #466 Nemotron-3-Diarization
     # X-ASR (#436): icefall streaming Zipformer2 transducer, driven chunk by chunk
     # like sherpa-onnx. Needs XASR_ICEFALL_DIR (icefall zipformer/ sources).
@@ -400,6 +401,7 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     "mel-band-roformer": "reference_backends.mel_band_roformer",
     # HiDolen V2.5 shared-decoder four-stem model; use its pinned original blueprint.
     "mini-bs-roformer": "reference_backends.mini_bs_roformer",
+    "voice-isolator": "reference_backends.voice_isolator",
     # MioCodec v2 (§249): neural audio codec. model_dir = HF repo ID
     # ("Aratako/MioCodec-25Hz-44.1kHz-v2") or local snapshot dir.
     # Audio arg = mono WAV at 44100 Hz. Captures decode path intermediates

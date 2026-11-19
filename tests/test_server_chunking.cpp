@@ -2,13 +2,15 @@
 //
 // Pins the splitter behaviour the /v1/audio/speech long-form path
 // depends on (PLAN §75d / issue #66): boundary detection, abbreviation
-// over-split (acceptable), Unicode terminator support, max_chars
+// and ordinal handling (shared with live translation via
+// crispasr_sentence_end.h), Unicode terminator support, max_chars
 // fallback, concat with silence pad.
 
 #include "crispasr_tts_chunking.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -54,14 +56,42 @@ TEST_CASE("splitter does NOT split decimal numbers", "[unit][chunking]") {
     REQUIRE(out[0] == "The value is 1.5 today.");
 }
 
-TEST_CASE("splitter over-splits English abbreviations (documented)", "[unit][chunking]") {
-    // "Mr. Smith" gets split — the period is followed by whitespace.
-    // Documented limitation; produces an extra ~200 ms pause but
-    // doesn't break audio. Real fix is ICU BreakIterator.
+TEST_CASE("splitter keeps abbreviations, initials and ordinals inside the sentence", "[unit][chunking]") {
+    // Formerly a documented over-split ("Mr." | "Smith said hi."). The '.'
+    // rule is now shared with live translation (lt_ends_sentence).
+    auto en = crispasr_tts_split_sentences("Mr. Smith said hi.");
+    REQUIRE(en.size() == 1);
+    REQUIRE(en[0] == "Mr. Smith said hi.");
+    auto de = crispasr_tts_split_sentences("Am 3. Oktober kam Dr. Müller z. B. nach Berlin. Er blieb! Was nun?");
+    REQUIRE(de.size() == 3);
+    REQUIRE(de[0] == "Am 3. Oktober kam Dr. Müller z. B. nach Berlin.");
+    REQUIRE(de[1] == "Er blieb!");
+    REQUIRE(de[2] == "Was nun?");
+}
+
+TEST_CASE("splitter still ends sentences at years, ellipses and closing brackets", "[unit][chunking]") {
+    auto out = crispasr_tts_split_sentences("Das war 1990. Das hatte ich gehofft... Die Akte (Nr. 216/94). Ende.");
+    REQUIRE(out.size() == 4);
+    REQUIRE(out[0] == "Das war 1990.");
+    REQUIRE(out[1] == "Das hatte ich gehofft...");
+    REQUIRE(out[2] == "Die Akte (Nr. 216/94).");
+    REQUIRE(out[3] == "Ende.");
+}
+
+TEST_CASE("CRISPASR_SENTENCE_ABBREV=0 restores the bare '. ' rule", "[unit][chunking]") {
+#if defined(_WIN32)
+    _putenv_s("CRISPASR_SENTENCE_ABBREV", "0");
+#else
+    setenv("CRISPASR_SENTENCE_ABBREV", "0", 1);
+#endif
     auto out = crispasr_tts_split_sentences("Mr. Smith said hi.");
+#if defined(_WIN32)
+    _putenv_s("CRISPASR_SENTENCE_ABBREV", "");
+#else
+    unsetenv("CRISPASR_SENTENCE_ABBREV");
+#endif
     REQUIRE(out.size() == 2);
     REQUIRE(out[0] == "Mr.");
-    REQUIRE(out[1] == "Smith said hi.");
 }
 
 TEST_CASE("splitter handles CJK ideographic full stop U+3002", "[unit][chunking]") {
@@ -259,4 +289,35 @@ TEST_CASE("concat negative silence_samples treated as zero", "[unit][chunking]")
     std::vector<std::vector<float>> chunks = {{1.0f}, {2.0f}};
     auto out = crispasr_tts_concat_with_silence(chunks, -100);
     REQUIRE(out.size() == 2);
+}
+
+// #594: one bt2-tts generation per sentence made the model read its style
+// instruction aloud in place of short fragments ("Good God!", "Chapter 14").
+// The policy must hand it paragraph-sized chunks of whole sentences.
+TEST_CASE("server TTS policy packs sentences into paragraph chunks for bt2-tts", "[unit][chunking]") {
+    const std::string text = "\"My dear Victor,\" cried he, \"what, for God's sake, is the matter? Do not laugh in "
+                             "that manner. How ill you are! What is the cause of all this?\"";
+    auto out = crispasr_tts_plan_chunks_for_backend(text, "bt2-tts");
+    REQUIRE(out.size() == 1);
+    REQUIRE(out[0].find("Do not laugh in that manner.") != std::string::npos);
+
+    std::string longer;
+    for (int i = 0; i < 40; i++)
+        longer += "Upon hearing this he appeared satisfied and consented. Good God! ";
+    auto packed = crispasr_tts_plan_chunks_for_backend(longer, "bt2-tts", 600);
+    REQUIRE(packed.size() > 1);
+    for (const auto& c : packed) {
+        REQUIRE(c.size() <= 600);
+        REQUIRE(c.size() > 200); // never a lone short sentence, including the tail
+        REQUIRE((c.back() == '.' || c.back() == '!'));
+    }
+}
+
+TEST_CASE("pack_sentences joins greedily and keeps an oversize sentence alone", "[unit][chunking]") {
+    auto out = crispasr_tts_pack_sentences({"Aa.", "Bb.", "Cc.", std::string(20, 'x'), "Dd."}, 8);
+    REQUIRE(out == std::vector<std::string>{"Aa. Bb.", "Cc.", std::string(20, 'x'), "Dd."});
+    // A short tail borrows trailing sentences from the previous chunk.
+    auto bal = crispasr_tts_pack_sentences({"Aaaa.", "Bbbb.", "Cccc.", "Dddd.", "Ee."}, 23);
+    REQUIRE(bal == std::vector<std::string>{"Aaaa. Bbbb. Cccc.", "Dddd. Ee."});
+    REQUIRE(crispasr_tts_pack_sentences({}, 8).empty());
 }

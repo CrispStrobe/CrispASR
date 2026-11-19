@@ -168,7 +168,8 @@ class ManifestSchemaTests(unittest.TestCase):
         """
         for entry in self.manifest["backends"]:
             has_in_repo = "sample" in entry
-            has_hf = "fixture_sample_path" in entry
+            has_hf = "fixture_sample_path" in entry or (
+                "sample_hf" in entry and len(entry["sample_hf"].get("revision", "")) == 40)
             self.assertTrue(
                 has_in_repo or has_hf,
                 f"{entry['name']}: neither `sample` (in-repo) nor "

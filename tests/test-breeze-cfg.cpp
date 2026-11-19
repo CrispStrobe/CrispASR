@@ -55,3 +55,31 @@ TEST_CASE("breeze cfg — a single branch combines to itself", "[unit][breeze-cf
     breeze_cfg::combine(rows.data(), 3, breeze_cfg::plan(true, 1.0f), out.data());
     REQUIRE(out == rows);
 }
+
+// #594: upstream's GeneratedTokenRepetitionPenaltyLogitsProcessor penalises
+// each distinct generated token ONCE (gather/scatter). A token emitted 300
+// times must be exactly as penalised as one emitted once; compounding it to
+// 1.1^300 suppressed every common code and made the model read its
+// instruction aloud on long chunks.
+TEST_CASE("breeze cfg — repetition penalty applies once per distinct token", "[unit][breeze-cfg]") {
+    std::vector<float> logits = {2.2f, -1.0f, 3.0f, 0.0f};
+    std::vector<int32_t> history(300, 0);
+    history.push_back(1);
+    history.push_back(1);
+    history.push_back(-5);  // out of range: ignored
+    history.push_back(999); // out of range: ignored
+    breeze_cfg::apply_repetition_penalty(logits.data(), 4, history, 1.1f);
+    REQUIRE(logits[0] == 2.2f / 1.1f);
+    REQUIRE(logits[1] == -1.0f * 1.1f);
+    REQUIRE(logits[2] == 3.0f); // never generated
+    REQUIRE(logits[3] == 0.0f);
+}
+
+TEST_CASE("breeze cfg — repetition penalty 1 and empty history are no-ops", "[unit][breeze-cfg]") {
+    std::vector<float> logits = {2.0f, -1.0f};
+    const std::vector<float> orig = logits;
+    breeze_cfg::apply_repetition_penalty(logits.data(), 2, {0, 1}, 1.0f);
+    REQUIRE(logits == orig);
+    breeze_cfg::apply_repetition_penalty(logits.data(), 2, {}, 1.3f);
+    REQUIRE(logits == orig);
+}

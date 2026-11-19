@@ -1831,6 +1831,24 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# zonos3_tts — Zyphra ZONOS3-Mini (GDN/attention hybrid + latent MoE, mossdual
+# iSTFT codec, 44.1 kHz). src/zonos3/ is vendored from Zyphra/ZONOS3-Mini
+# servers/ggml (MIT, src/zonos3/LICENSE.zyphra). Issue #603.
+# ---------------------------------------------------------------------------
+add_library(zonos3_tts STATIC zonos3_tts.h zonos3_tts.cpp
+    zonos3/zonos3.cpp zonos3/zonos3-graph.cpp zonos3/zonos3-prompt.cpp zonos3/zonos3-sampler.cpp
+    zonos3/zonos3-tokenizer.cpp zonos3/zonos3-text.cpp zonos3/zonos3-accent.cpp zonos3/zonos3-steer.cpp
+    zonos3/zonos3-generation.cpp zonos3/zac.cpp)
+set_target_properties(zonos3_tts PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(zonos3_tts PUBLIC .)
+target_include_directories(zonos3_tts PRIVATE zonos3 zonos3/vendor)
+target_compile_features   (zonos3_tts PUBLIC cxx_std_17)
+target_link_libraries     (zonos3_tts PUBLIC ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(zonos3_tts PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # arktts — Edge0/Audio8-TTS-Realistic-0.6b (ArkttsModel + Snake vocoder)
 # ---------------------------------------------------------------------------
 add_library(arktts STATIC arktts.h arktts.cpp)
@@ -2964,6 +2982,17 @@ if (CRISPASR_BUILD_MINI_BSR_PROBE)
     set_target_properties(mini-bs-roformer-validation PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 
+# voice-isolator — Inworld Voice Isolator v1 (48 kHz voice isolation, #602)
+# Band-split dual-path attention + Mamba (ggml ssm_conv/ssm_scan) graphs.
+add_library(voice-isolator STATIC voice_isolator.h voice_isolator.cpp)
+set_target_properties(voice-isolator PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(voice-isolator PUBLIC .)
+target_compile_features(voice-isolator PUBLIC cxx_std_17)
+target_link_libraries(voice-isolator PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if (NOT MSVC)
+    target_compile_options(voice-isolator PRIVATE -O3)
+endif()
+
 # mel-band-roformer — Mel-Band RoFormer source separation (§248)
 # ---------------------------------------------------------------------------
 add_library(mel-band-roformer STATIC mel_band_roformer.h mel_band_roformer.cpp)
@@ -3120,6 +3149,9 @@ endif()
 # failed to link with undefined _miotts_* symbols.
 if (TARGET miotts)
     target_link_libraries(crispasr-lib PUBLIC miotts)
+endif()
+if (TARGET zonos3_tts)
+    target_link_libraries(crispasr-lib PUBLIC zonos3_tts)
 endif()
 if (TARGET arktts)
     target_link_libraries(crispasr-lib PUBLIC arktts)
@@ -3443,6 +3475,9 @@ if (TARGET mel-band-roformer)
 endif()
 if (TARGET mini-bs-roformer)
     target_link_libraries(crispasr-lib PUBLIC mini-bs-roformer)
+endif()
+if (TARGET voice-isolator)
+    target_link_libraries(crispasr-lib PUBLIC voice-isolator)
 endif()
 if (TARGET scnet)
     target_link_libraries(crispasr-lib PUBLIC scnet)

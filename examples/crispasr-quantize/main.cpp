@@ -285,6 +285,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // measured calibration sweeps; this policy itself is not a quality claim.
     const bool is_mini_bs_roformer = (arch == "mini-bs-roformer");
 
+    // Inworld Voice Isolator (#602): the per-band spectral encoders and the
+    // per-band decoder heads (which emit the complex mask/residual directly)
+    // stay at source precision, as do the host-read decoder condition and
+    // look-ahead embedding. Only the dual-path backbone (attention, FFN, Mamba
+    // projections) is quantized.
+    const bool is_voice_isolator = (arch == "voice-isolator");
+
     // SCNet matrices include flattened convolution kernels and recurrent gates.
     // Q4_K rows that cannot fit its 256-value blocks use Q8_0, never the
     // unrelated legacy Q4_0 format. Sub-32-wide rows retain source precision.
@@ -977,6 +984,9 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             (granite_quant_all || sname.find("proj.") != 0) &&
             !(is_mini_bs_roformer && (sname.find("freq_domain_model.mask_model.band_split.") == 0 ||
                                       sname.find("freq_domain_model.mask_model.mask_estimator.") == 0)) &&
+            !(is_voice_isolator &&
+              (sname.find("encoders.") == 0 || sname.find("denoise_decoder.") == 0 ||
+               sname.find("lookahead_embedding") == 0 || sname.find("conv1d") != std::string::npos)) &&
             // CREPE: allow-list, not a deny-list — only the conv kernels and the
             // dense classifier matrix. conv*.bias / conv*_BN.scale / .offset /
             // classifier.bias stay F32 (per-channel affines; see is_crepe note).

@@ -1308,17 +1308,6 @@ static void mask_reserved(float* logits, int n, const breeze_hparams& hp) {
         logits[i] = -INFINITY;
 }
 
-static void apply_repetition_penalty(float* logits, int n, const std::vector<int32_t>& history, float penalty) {
-    if (penalty == 1.0f || history.empty())
-        return;
-    for (int32_t tok : history) {
-        if (tok < 0 || tok >= n)
-            continue;
-        // The HF convention: divide positives, multiply negatives.
-        logits[tok] = logits[tok] > 0.0f ? logits[tok] / penalty : logits[tok] * penalty;
-    }
-}
-
 static int32_t sample_logits(float* logits, int n, float temperature, int topk, float topp, uint64_t& rng) {
     if (temperature <= 0.0f) {
         int best = 0;
@@ -1802,7 +1791,7 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
         if (f == 0 && opt.dump_cb0_logits)
             std::memcpy(opt.dump_cb0_logits, bb_logits.data(), bb_logits.size() * sizeof(float));
         mask_reserved(bb_logits.data(), n_logits, hp);
-        apply_repetition_penalty(bb_logits.data(), n_logits, cb0_history, opt.repetition_penalty);
+        breeze_cfg::apply_repetition_penalty(bb_logits.data(), n_logits, cb0_history, opt.repetition_penalty);
         const int32_t cb0 =
             sample_logits(bb_logits.data(), n_logits, bb_temp, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
         if (cb0 == (int32_t)hp.backbone_eos_token_id)

@@ -239,12 +239,6 @@ jobs:
           ln -s "$(command -v clang-format)" "$RUNNER_TEMP/clang-format-18"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
-      # The generated capability catalogue includes the optional ONNX adapters.
-      # Its exact drift check needs the same complete roster, not a native-only
-      # build that omits four rows. Other platform jobs retain native-only builds.
-      - name: Fetch pinned ONNX Runtime SDK for the complete capability check
-        run: bash scripts/fetch_onnxruntime.sh "$RUNNER_TEMP/onnxruntime-sdk"
-
       # Examples/server stay at their defaults: some tests link `common`, which
       # lives under examples/, so switching them off would break configure.
       - name: Configure (tests ON)
@@ -254,7 +248,6 @@ jobs:
           -DGGML_NATIVE=OFF
           -DGGML_OPENBLAS=ON
           -DCRISPASR_BUILD_TESTS=ON
-          -DCRISPASR_ONNXRUNTIME_ROOT="$RUNNER_TEMP/onnxruntime-sdk"
 
       - name: Check Python unit registration
         run: |

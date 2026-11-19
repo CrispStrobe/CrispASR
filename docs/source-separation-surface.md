@@ -6,7 +6,9 @@ returns **N named stems of the user's own audio**. The supported backends are
 `htdemucs` (4-stem: `drums`/`bass`/`other`/`vocals`), `mel-band-roformer`
 (2-stem: `vocals`/`other` for a 1-stem vocals model; `stem0…stemN` otherwise),
 `mini-bs-roformer` (HiDolen V2.5: `bass`/`drums`/`other`/`vocals`),
-and `scnet` (SCNet / SCNet-large: `drums`/`bass`/`other`/`vocals`).
+`scnet` (SCNet / SCNet-large: `drums`/`bass`/`other`/`vocals`) and
+`voice-isolator` (Inworld Voice Isolator v1, mono 48 kHz: `voice`/`background`,
+see [voice-isolator.md](voice-isolator.md)).
 
 This doc is the **single agreed surface** all separation backends route through,
 with shared CLI flags and output conventions. Authored by the M1/Metal
@@ -30,7 +32,7 @@ crispasr --separate -m <model.gguf> -f mix.flac [--stems vocals,drums] [--sep-ou
 - **`--separate`** enables the task (alias intent: `--task separate`). Routes to
   the separation dispatcher BEFORE the ASR backend is constructed.
 - Backend is auto-detected from the GGUF `general.architecture`
-  (`htdemucs` / `mel-band-roformer` / `mini-bs-roformer` / `scnet`) after the normal `-m` resolution, so a
+  (`htdemucs` / `mel-band-roformer` / `mini-bs-roformer` / `scnet` / `voice-isolator`) after the normal `-m` resolution, so a
   concrete `-m <gguf>` never needs `--backend`. Only the auto-download path
   needs it, to pick which model to fetch (`--backend htdemucs|mel-band-roformer`;
   `mel-band-roformer` is the default resolution key when `--backend` is unset).
@@ -38,7 +40,8 @@ crispasr --separate -m <model.gguf> -f mix.flac [--stems vocals,drums] [--sep-ou
   empty / `all` writes every stem. A backend ignores names it doesn't have.
 - **Output**: one WAV per selected stem, named
   `<input-stem>_<source>.wav` next to the input, or under `--sep-output-dir`.
-  Stereo, 16-bit PCM, at the model's native rate (44100). **No AI-provenance
+  Stereo, 16-bit PCM, at the model's native rate (44100; `voice-isolator`:
+  mono at 48000 — the Session C ABI duplicates it to L = R). **No AI-provenance
   INFO chunk** — the audio is the user's, not AI-generated.
 
 SCNet requires a concrete converted GGUF path and does not advertise
