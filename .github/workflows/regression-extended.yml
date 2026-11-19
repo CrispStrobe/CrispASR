@@ -79,7 +79,9 @@ jobs:
           bad = [n for n in ext if n not in names or n in nightly]
           assert not bad, f'extended entries missing from manifest or duplicated in nightly: {bad}'
           want = [s.strip() for s in os.environ.get('SUBSET', '').split(',') if s.strip()]
-          unknown = [s for s in want if s not in ext]
+          pending = json.load(open('tests/regression/extended_matrix.json')).get('_pending_verification', [])
+          assert not [n for n in pending if n not in names or n in nightly], 'bad _pending_verification entry'
+          unknown = [s for s in want if s not in ext and s not in pending]
           assert not unknown, f'not in extended_matrix.json: {unknown}'
           print(json.dumps(want or ext))
           PY
