@@ -106,8 +106,6 @@ def main() -> None:
     ap.add_argument("--dtype", choices=("f16", "f32"), default="f16")
     args = ap.parse_args()
 
-    import gguf  # noqa: PLC0415
-
     digest = sha256(args.input)
     variant = KNOWN_SHA256.get(digest)
     if variant is None:
@@ -132,6 +130,9 @@ def main() -> None:
             raise SystemExit(f"encoder {i} shape mismatch")
     causal = bool(cfg.get("causal", False))
     choices = list(cfg.get("lookahead_frames_choices", []))
+
+    # imported after validation so the refusal checks need no gguf install
+    import gguf  # noqa: PLC0415
 
     w = gguf.GGUFWriter(str(args.output), ARCH)
     w.add_name("Inworld Voice Isolator v1" + (" realtime" if causal else ""))
