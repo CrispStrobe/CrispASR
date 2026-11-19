@@ -70,7 +70,7 @@ def main():
             res["cpp"][f"{q}|{name}"] = r
             C.save(res)
     C.run(["sudo", "apt-get", "install", "-y", "-qq", "libsndfile1"], check=False)  # fairseq2n needs it
-    py = C.venv("omni", ["omnilingual-asr", "numpy", "soundfile", "pyarrow<18", "torch==2.8.0", "torchaudio==2.8.0"],
+    py = C.venv("omni", ["omnilingual-asr", "numpy>=2", "soundfile", "torch==2.8.0", "torchaudio==2.8.0"],
                 ["--extra-index-url", "https://download.pytorch.org/whl/cu128", "--index-strategy", "unsafe-best-match"])
     (C.SCRATCH / "up.py").write_text(UP)
     files = [str(C.ROOT / "samples/jfk.wav")] + sorted(slices.values())
