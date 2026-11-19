@@ -53,6 +53,11 @@ std::vector<std::string> crispasr_tts_split_sentences(const std::string& text, s
 std::vector<std::string> crispasr_tts_plan_chunks_for_backend(const std::string& text, const std::string& backend_name,
                                                               std::size_t max_chars = 600);
 
+// Greedily join consecutive sentences (space-separated) into chunks of at most
+// max_chars bytes. A single sentence longer than max_chars stays on its own
+// (the splitter already bounded it). Used for bt2-tts (#594).
+std::vector<std::string> crispasr_tts_pack_sentences(const std::vector<std::string>& sentences, std::size_t max_chars);
+
 // Concatenate per-chunk PCM with `silence_samples` zeros inserted
 // BETWEEN chunks. No pad before the first chunk or after the last —
 // avoids audible click at output boundaries. silence_samples <= 0

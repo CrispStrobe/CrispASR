@@ -290,3 +290,31 @@ TEST_CASE("concat negative silence_samples treated as zero", "[unit][chunking]")
     auto out = crispasr_tts_concat_with_silence(chunks, -100);
     REQUIRE(out.size() == 2);
 }
+
+// #594: one bt2-tts generation per sentence made the model read its style
+// instruction aloud in place of short fragments ("Good God!", "Chapter 14").
+// The policy must hand it paragraph-sized chunks of whole sentences.
+TEST_CASE("server TTS policy packs sentences into paragraph chunks for bt2-tts", "[unit][chunking]") {
+    const std::string text = "\"My dear Victor,\" cried he, \"what, for God's sake, is the matter? Do not laugh in "
+                             "that manner. How ill you are! What is the cause of all this?\"";
+    auto out = crispasr_tts_plan_chunks_for_backend(text, "bt2-tts");
+    REQUIRE(out.size() == 1);
+    REQUIRE(out[0].find("Do not laugh in that manner.") != std::string::npos);
+
+    std::string longer;
+    for (int i = 0; i < 40; i++)
+        longer += "Upon hearing this he appeared satisfied and consented. Good God! ";
+    auto packed = crispasr_tts_plan_chunks_for_backend(longer, "bt2-tts", 600);
+    REQUIRE(packed.size() > 1);
+    for (const auto& c : packed) {
+        REQUIRE(c.size() <= 600);
+        REQUIRE(c.size() > 300); // never a lone short sentence
+        REQUIRE((c.back() == '.' || c.back() == '!'));
+    }
+}
+
+TEST_CASE("pack_sentences joins greedily and keeps an oversize sentence alone", "[unit][chunking]") {
+    auto out = crispasr_tts_pack_sentences({"Aa.", "Bb.", "Cc.", std::string(20, 'x'), "Dd."}, 8);
+    REQUIRE(out == std::vector<std::string>{"Aa. Bb.", "Cc.", std::string(20, 'x'), "Dd."});
+    REQUIRE(crispasr_tts_pack_sentences({}, 8).empty());
+}

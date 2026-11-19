@@ -179,7 +179,35 @@ std::vector<std::string> crispasr_tts_plan_chunks_for_backend(const std::string&
     std::vector<std::string> result = crispasr_tts_split_sentences(text, max_chars);
     if (result.empty())
         result.push_back(text);
+    // bt2-tts (#594): upstream breeze-tts generates the whole request in one
+    // generate(text) with the instruction in front. One generation per
+    // SENTENCE handed the model fragments like "Good God!" or "Do not laugh in
+    // that manner." behind an instruction many times their length; the model
+    // then kept reading the instruction aloud instead of the fragment. Pack
+    // whole sentences back into paragraph-sized chunks: max_chars bytes stays
+    // well inside the 750-frame (60 s) generation cap.
+    if (backend_name.rfind("bt2", 0) == 0)
+        return crispasr_tts_pack_sentences(result, max_chars);
     return result;
+}
+
+std::vector<std::string> crispasr_tts_pack_sentences(const std::vector<std::string>& sentences, std::size_t max_chars) {
+    std::vector<std::string> out;
+    std::string cur;
+    for (const auto& s : sentences) {
+        if (s.empty())
+            continue;
+        if (!cur.empty() && cur.size() + 1 + s.size() > max_chars) {
+            out.push_back(cur);
+            cur.clear();
+        }
+        if (!cur.empty())
+            cur += ' ';
+        cur += s;
+    }
+    if (!cur.empty())
+        out.push_back(cur);
+    return out;
 }
 
 std::vector<float> crispasr_tts_concat_with_silence(const std::vector<std::vector<float>>& chunks,
