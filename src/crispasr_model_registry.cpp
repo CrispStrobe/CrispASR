@@ -288,7 +288,7 @@ constexpr Entry k_registry[] = {
     // Musci-ASR-qwen-1019 (#595): GRPO fine-tune of Qwen3-ASR-1.7B (Apache-2.0),
     // config/tokenizer/template identical to the base; standard qwen3 backend.
     {"musci-asr", "musci-asr-qwen-1019-q4_k.gguf",
-     "https://huggingface.co/cstr/musci-asr-qwen-1019-GGUF/resolve/main/musci-asr-qwen-1019-q4_k.gguf", "~1.3 GB",
+     "https://huggingface.co/cstr/musci-asr-qwen-1019-GGUF/resolve/main/musci-asr-qwen-1019-q4_k.gguf", "~1.5 GB",
      nullptr, nullptr},
     // higgs-audio-v3-stt: Whisper-large-v3 encoder + Qwen3-1.7B decoder (Apache-2.0).
     {"higgs-stt", "higgs-stt-q4_k.gguf",

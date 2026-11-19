@@ -1280,6 +1280,40 @@
       "transcript_tolerance": {"cer_max": 0.1, "wer_max": 0.1}
     },
     {
+      "name": "fluid-speech-pro-q8_0",
+      "backend_id": "parakeet",
+      "gguf": {"repo": "cstr/fluid-speech-pro-GGUF", "revision": "7318433d936a85d496c9204cc5a7aeb5c3021476", "file": "fluid-speech-pro-q8_0.gguf", "approx_size_mb": 677},
+      "skip_diff": true,
+      "_validation_note": "#595 FluidVoice-Labs/fluid-speech-pro (parakeet-tdt-0.6b-v3 + encoder.fv_insert FrameCleaner). tools/ci-heavy/fluid_speech_validate.py (heavy-cpu run 44600046468): F16 28/28 NeMo stages PASS on jfk + multispeaker; F16/Q8_0 transcripts equal NeMo.",
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "Human transcript of samples/jfk.wav (JFK inaugural address), not a model capture.",
+      "transcript_tolerance": {"cer_max": 0.1, "wer_max": 0.1}
+    },
+    {
+      "name": "fluid-speech-pro-clean-q8_0",
+      "backend_id": "parakeet",
+      "gguf": {"repo": "cstr/fluid-speech-pro-GGUF", "revision": "7318433d936a85d496c9204cc5a7aeb5c3021476", "file": "fluid-speech-pro-clean-q8_0.gguf", "approx_size_mb": 677},
+      "skip_diff": true,
+      "_validation_note": "#595 FluidVoice-Labs/fluid-speech-pro clean mode folded at conversion (parakeet-tdt-0.6b-v3 + encoder.fv_insert FrameCleaner). tools/ci-heavy/fluid_speech_validate.py (heavy-cpu run 44600046468): F16 28/28 NeMo stages PASS on jfk + multispeaker; F16/Q8_0 transcripts equal NeMo.",
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "Human transcript of samples/jfk.wav (JFK inaugural address), not a model capture.",
+      "transcript_tolerance": {"cer_max": 0.1, "wer_max": 0.1}
+    },
+    {
+      "name": "musci-asr-qwen-1019-q4_k",
+      "backend_id": "qwen3",
+      "gguf": {"repo": "cstr/musci-asr-qwen-1019-GGUF", "revision": "b6b266e1b268b6ed1234eacd585f8ea4dc50508f", "file": "musci-asr-qwen-1019-q4_k.gguf", "approx_size_mb": 1491},
+      "skip_diff": true,
+      "cli_extra_args": ["--backend", "qwen3"],
+      "_validation_note": "#595 Musci-research/Musci-ASR-qwen-1019 (Qwen3-ASR-1.7B GRPO fine-tune). tools/ci-heavy/musci_validate.py (heavy-cpu run 44600040132): F16 cos 1.000000 at every stage on jfk + paraformer_zh; f16/q8_0/q4_k transcripts equal fp32 qwen_asr.",
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "Human transcript of samples/jfk.wav (JFK inaugural address), not a model capture.",
+      "transcript_tolerance": {"cer_max": 0.1, "wer_max": 0.1}
+    },
+    {
       "name": "qwen3-asr-1.7b-ja-anime-q4_k",
       "backend_id": "qwen3",
       "gguf": {"repo": "cstr/qwen3-asr-1.7b-ja-anime-GGUF", "revision": "1906c1f812b598d5e9dae091c79656d73b41ec28", "file": "qwen3-asr-1.7b-ja-anime-q4_k.gguf", "approx_size_mb": 1491},

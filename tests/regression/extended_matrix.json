@@ -139,7 +139,7 @@
   ],
   "_pending_verification": [
     "rumble-2-flash-q4_k"
-  ],
+  , "fluid-speech-pro-q8_0", "fluid-speech-pro-clean-q8_0", "musci-asr-qwen-1019-q4_k"],
   "_pending_note": "Manifest entries added 2026-11-12 whose CI verification is still outstanding (cancelled/unrun, or re-calibrated after a first-run failure). Moved into `extended` once a dispatch run passes them.",
   "_excluded": {
     "lahgtna-chatterbox-f16": "TTS output is not the requested Arabic: roundtrip of 'الطقس جميل جدا اليوم' transcribes as 'الان الحال طائي' (WER 1.0) through cohere-transcribe-arabic-q4_k, which itself transcribes the real Arabic FLEURS clip byte-exact in the same sweep - CI run 43186953345. Open finding (Arabic Chatterbox T3/s3gen path), not masked.",
