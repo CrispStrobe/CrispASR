@@ -991,8 +991,13 @@ As in `generate()`, `<|audio_output_pad|>` is masked every step and
 
 Reson8/Rumble-2-Flash (Apache-2.0, #602) is a 0.5B **Qwen3-ASR fine-tune** in
 the native transformers layout (`Qwen3ASRForConditionalGeneration`). It runs
-on the qwen3-asr runtime unchanged: the audio tower (18 layers, d = 896, 8 s
-`n_window_infer` attention windows) and projector are Qwen3-ASR-0.6B's. The
+on the qwen3-asr runtime: the audio tower (18 layers, d = 896) and projector
+are Qwen3-ASR-0.6B's. Transformers and vLLM always split encoder attention
+into 8 s `n_window_infer` windows (104 frames). The model was trained that
+way, so its GGUF sets `qwen3asr.audio.attn_window_mode = 1` (crisp_audio's
+block-diagonal mask). Without it, every clip longer than 8 s drifts from
+encoder block 0 on (jfk: `ln_post` cos_min 0.10). The Qwen release GGUFs
+keep full attention. The
 LLM is Qwen3 with **14** layers (d = 1024, GQA 16/8, tied `lm_head`).
 
 Two things differ from the Qwen release, and neither shows up in the tensor

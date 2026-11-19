@@ -528,6 +528,14 @@ def convert(input_dir: Path, out_path: Path, streaming_recipe: str = "") -> None
     if all(t in tok_index for t in ("<digits>", "<nofiller>", "<verbatim>")):
         writer.add_string("qwen3asr.variant", "rumble")
         writer.add_string("qwen3asr.system_prefix", "<digits><nofiller><verbatim>")
+        # The model was trained with, and transformers/vLLM always run, the
+        # n_window_infer (8 s = 104 frames) block-diagonal encoder attention
+        # (Qwen3ASRAudioAttention splits on cu_seqlens in every attention
+        # implementation). crisp_audio mode 1 is exactly that mask; the
+        # Qwen release GGUFs keep full attention (their qwen_asr CPU path).
+        writer.add_uint32("qwen3asr.n_window", int(audio.get("n_window", 50)))
+        writer.add_uint32("qwen3asr.n_window_infer", int(audio.get("n_window_infer", 800)))
+        writer.add_uint32("qwen3asr.audio.attn_window_mode", 1)
         print("  variant: rumble (Reson8 control tokens in the system turn)")
     if raon:
         writer.add_string("qwen3asr.variant", "raon-speech")
