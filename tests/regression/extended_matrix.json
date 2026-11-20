@@ -111,6 +111,7 @@
     "moonshine-tiny-de-dattazigzag-q4_k",
     "fastconformer-ctc-de-q4_k",
     "fastconformer-ctc-en-pc-q4_k",
+    "fastconformer-ctc-ru-q4_k",
     "parakeet-ctc-0.6b-q4_k",
     "parakeet-ctc-1.1b-q4_k",
     "parakeet-tdt-0.6b-v2-q4_k",
@@ -139,7 +140,7 @@
   ],
   "_pending_verification": [
     "rumble-2-flash-q4_k"
-  , "fluid-speech-pro-q8_0", "fluid-speech-pro-clean-q8_0", "musci-asr-qwen-1019-q4_k", "fastconformer-ctc-ru-q4_k"],
+  , "fluid-speech-pro-q8_0", "fluid-speech-pro-clean-q8_0", "musci-asr-qwen-1019-q4_k"],
   "_pending_note": "Manifest entries added 2026-11-12 whose CI verification is still outstanding (cancelled/unrun, or re-calibrated after a first-run failure). Moved into `extended` once a dispatch run passes them.",
   "_excluded": {
     "lahgtna-chatterbox-f16": "Upstream reproduces it, not a port bug: upstream ChatterboxMultilingualTTS.from_local(oddadmix/lahgtna-chatterbox-v1@6b37e50d, its own conds.pt).generate('الطقس جميل جدا اليوم', language_id='ar') scored through the same cohere-transcribe-arabic-q4_k gives WER 0.75 / 2.5 / 2.0 for seeds 1 / 1234 / 2 ('...اليوم ساعرف ايه اليوم', 'The sun is very beautiful. What's the temperature like?', 'Um, the place is great, just like that.'); the CLI gives WER 4.25 / 1.5 / 1.0 with the GGUF's built-in conds and 0.5 / 1.75 / 1.0 with the upstream conds.pt as voice. Text token ids are identical to the upstream MTLTokenizer ([ar] 721, ...). Control arm tools/ci-heavy/sweep_lahgtna_control.py, heavy-cpu run 44538595767. Original finding: CI run 43186953345.",
