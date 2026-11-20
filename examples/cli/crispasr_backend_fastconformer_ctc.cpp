@@ -47,8 +47,17 @@ public:
         // the encoder's per-chunk z-norm differs from the global z-norm the
         // model was trained on.  Verified: single-pass on 60 s EN goes from
         // 74.6 % to 98.5 % coverage (issue #89 follow-up).
-        return CAP_TIMESTAMPS_CTC | CAP_PARALLEL_PROCESSORS | CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_DIARIZE |
-               CAP_UNBOUNDED_INPUT | CAP_INTERNAL_CHUNKING;
+        //
+        // CAP_PUNCTUATION_NATIVE is model-dependent: the *_pc releases
+        // (stt_{en,de,ru,...}_fastconformer_hybrid_large_pc) emit punctuation
+        // and case themselves, and auto-running FireRedPunc (Chinese+English)
+        // over them re-punctuated Russian/German text. Detected in init()
+        // from the vocabulary: a punctuated model has "," / "." pieces.
+        uint32_t caps = CAP_TIMESTAMPS_CTC | CAP_PARALLEL_PROCESSORS | CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE |
+                        CAP_DIARIZE | CAP_UNBOUNDED_INPUT | CAP_INTERNAL_CHUNKING;
+        if (punct_native_)
+            caps |= CAP_PUNCTUATION_NATIVE;
+        return caps;
     }
 
     bool init(const whisper_params& p) override {
@@ -60,7 +69,26 @@ public:
             fprintf(stderr, "crispasr[fastconformer-ctc]: failed to load model '%s'\n", p.model.c_str());
             return false;
         }
+        punct_native_ = vocab_has_punctuation(ctx_);
         return true;
+    }
+
+    // True when the SentencePiece vocabulary carries sentence punctuation as
+    // pieces ("," / "." / "?", optionally ▁-prefixed) — i.e. the model was
+    // trained on punctuated transcripts.
+    static bool vocab_has_punctuation(canary_ctc_context* ctx) {
+        const int n = canary_ctc_n_vocab(ctx);
+        for (int i = 0; i < n; i++) {
+            const char* t = canary_ctc_token_text(ctx, i);
+            if (!t)
+                continue;
+            std::string s(t);
+            if (s.rfind("\xE2\x96\x81", 0) == 0)
+                s = s.substr(3);
+            if (s == "," || s == "." || s == "?")
+                return true;
+        }
+        return false;
     }
 
     std::vector<crispasr_segment> transcribe(const float* samples, int n_samples, int64_t t_offset_cs,
@@ -132,6 +160,7 @@ public:
 
 private:
     canary_ctc_context* ctx_ = nullptr;
+    bool punct_native_ = false;
     crispasr_ctc_logits last_logits_;
 };
 
