@@ -22,10 +22,16 @@
 #include <thread>
 #include <vector>
 
-// §193 Accelerate cblas_sgemm for all cpu_linear calls.
+// §193 Accelerate cblas_sgemm for all cpu_linear calls. Elsewhere use the
+// <cblas.h> (OpenBLAS) the build found (HAVE_BLAS): the scalar fallback below is
+// a single-threaded double-accumulate loop, ~8x slower on long audio.
 // Set FIRERED_VAD_FORCE_SCALAR=1 to validate scalar fallback.
+#if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
 #if defined(HAVE_ACCELERATE)
 #include <Accelerate/Accelerate.h>
+#else
+#include <cblas.h>
+#endif
 static bool firered_vad_use_scalar() {
     static int v = -1;
     if (v < 0)
@@ -135,7 +141,7 @@ static void read_f32(ggml_tensor* t, std::vector<float>& out) {
 // Linear: out[i] = sum_j w[i*K+j] * x[j] + b[i], for each time step
 // out[T,N] = x[T,K] @ w[N,K]^T + b[N]  (w is row-major [N,K])
 static void cpu_linear(const float* x, const float* w, const float* b, float* out, int T, int K, int N) {
-#if defined(HAVE_ACCELERATE)
+#if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
     if (!firered_vad_use_scalar()) {
         // w stored as [N,K] → CblasTrans to get x[T,K] @ w^T[K,N] → out[T,N]
         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, T, N, K, 1.0f, x, K, w, K, 0.0f, out, N);

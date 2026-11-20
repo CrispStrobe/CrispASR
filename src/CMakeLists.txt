@@ -2589,6 +2589,10 @@ if(APPLE)
     endif()
     target_link_libraries(firered-vad PUBLIC ${ACCELERATE_LIB})
     target_compile_definitions(firered-vad PRIVATE HAVE_ACCELERATE ACCELERATE_NEW_LAPACK)
+else()
+    # cpu_linear() takes the cblas_sgemm path under HAVE_BLAS; without it the
+    # DFSMN layers run a scalar loop, ~8x slower on long audio.
+    target_link_libraries(firered-vad PRIVATE crispasr-cpu-blas)
 endif()
 
 # marblenet-vad — NVIDIA MarbleNet VAD (1D separable CNN, 91.5K params)
