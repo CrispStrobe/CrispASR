@@ -31,6 +31,7 @@ def production_code(root):
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>

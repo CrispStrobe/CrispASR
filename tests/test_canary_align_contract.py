@@ -35,6 +35,7 @@ class SubwordAlignContract(unittest.TestCase):
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
