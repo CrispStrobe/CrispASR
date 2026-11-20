@@ -800,10 +800,14 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
                 ggml_backend_free(m->backend);
                 m->backend = nullptr;
             }
-            // #568: on Metal the separated stems lose most of the signal
-            // (vocals RMS 0 vs 0.154 on CPU). Until the Metal path is fixed and
-            // qualified, run on CPU; CRISPASR_MINI_BS_ROFORMER_METAL=1 opts back
-            // in for debugging.
+            // #568: a physical M1 produced near-silent vocals on Metal. Every
+            // linear() here tags GGML_PREC_F32, which routes small-batch Q8_0
+            // and Q4_K GEMMs to bespoke Metal kernels; those kernels were lost
+            // in the ggml kernel-file split (restored: Q8_0 in ggml 9b8305fb,
+            // Q4_K in 97098170; tests/test_metal_kernel_names.py guards it).
+            // Hosted runners cannot run these kernels (Paravirtual GPU, no
+            // SIMD-group reduction), so physical-Mac parity is still unproven:
+            // run on CPU by default, CRISPASR_MINI_BS_ROFORMER_METAL=1 opts in.
             const char* bn = m->backend ? ggml_backend_name(m->backend) : nullptr;
             const bool metal = bn && (std::strncmp(bn, "MTL", 3) == 0 || std::strncmp(bn, "Metal", 5) == 0);
             if (metal && !crispasr_env::get("CRISPASR_MINI_BS_ROFORMER_METAL")) {

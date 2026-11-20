@@ -283,6 +283,11 @@ jobs:
       - name: Check production GPU backend/device selection without hardware
         run: python3 tests/test_gpu_backend_selection.py -v
 
+      # #568: string-named Metal kernels lost in a kernel-file split only fail
+      # on real Apple GPUs, which hosted runners do not have.
+      - name: Metal kernels named by host code exist
+        run: python3 tests/test_metal_kernel_names.py -v
+
       - name: CANN model validator false-success and archive controls
         run: python3 tests/test_cann_model_validator.py -v
 

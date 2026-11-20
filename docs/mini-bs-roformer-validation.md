@@ -449,3 +449,25 @@ input. It does not establish that the original physical M1 configuration is
 fixed, nor does a single Q8 speech input meet the F16/Q8/Q4 and synthetic-band
 accuracy gates. Keep the default CPU fallback until those gates pass on the
 relevant hardware; retain the original issue for the unresolved cases.
+
+## Issue #568: missing Metal kernels and hosted-runner limits (2026-11-20)
+
+The hosted `macos-15` GPU is an `Apple Paravirtual device`, family Apple5, with
+no SIMD-group reduction or matrix multiply. ggml-metal therefore declines every
+MUL_MAT, RMS norm, softmax and flash-attention op there, and the scheduler runs
+them on the CPU. Matching CPU/"Metal" results on hosted runners (all 25 stages
+for F16 and Q8_0; chunked 14.6 s separation for F16, Q8_0 and Q4_K; the source
+and ggml pins of the reporter's build) say nothing about the kernels a physical
+M-series Mac runs.
+
+On a physical Mac, each `linear()` tags `GGML_PREC_F32`. ggml-metal sends
+small-batch PREC_F32 Q8_0 and Q4_K GEMMs to bespoke kernels looked up by name.
+When the fork split `ggml-metal.metal` into `kernels/*.metal`, those kernels
+were dropped. The Q8_0 pair came back in ggml `9b8305fb`, and the Q4_K pair
+(`kernel_quantize_q8_K_f32`, `kernel_mul_mv_q4_K_q8_K`) in `97098170`. The
+restored kernels compile with `xcrun metal` and in the embedded library.
+`tests/test_metal_kernel_names.py` runs in Linux CI and fails on any kernel
+the host code names but no `.metal` file defines. It includes a positive
+control. The default CPU fallback stays until the physical-Mac gates in
+PLAN.md lane M1 pass.
+

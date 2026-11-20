@@ -672,7 +672,7 @@ Each lane gives the start state, the exact steps, the acceptance and what to do 
 
 ### Lane M1 — #568 Mini-BS-RoFormer Metal output (needs Apple hardware)
 
-- **State:** mitigated in v0.8.50. On Metal the backend falls back to CPU (`src/mini_bs_roformer.cpp`, search `#568`); `CRISPASR_MINI_BS_ROFORMER_METAL=1` opts back in. The root cause is unknown; the reporter suspects the per-stem decoder or mask application.
+- **State:** mitigated in v0.8.50. On Metal the backend falls back to CPU (`src/mini_bs_roformer.cpp`, search `#568`); `CRISPASR_MINI_BS_ROFORMER_METAL=1` opts back in. 2026-11-20: every Mini-BS `linear()` tags `GGML_PREC_F32`, which routes small-batch Q8_0/Q4_K GEMMs on Metal to bespoke kernels that the ggml kernel-file split had dropped. Q8_0 was restored in ggml `9b8305fb` (pinned by `d423eac27`, a day before the fallback); Q4_K (`kernel_quantize_q8_K_f32`, `kernel_mul_mv_q4_K_q8_K`) in ggml `97098170`. `tests/test_metal_kernel_names.py` now fails CI on any host-named Metal kernel without a definition. Hosted macOS runners cannot test this: their Apple Paravirtual GPU (Apple5, no SIMD-group reduction) never runs MUL_MAT on Metal, so the hosted CPU/Metal runs that matched (F16/Q8_0/Q4_K, per stage) did not exercise these kernels. Physical-Mac acceptance below is still required.
 - **Do, on an Apple Silicon Mac:**
   1. Build with Metal. Run `crispasr --separate -m mini-bs-roformer -f <stereo 44.1 kHz speech>` with `CRISPASR_MINI_BS_ROFORMER_METAL=1`, and again with `--no-gpu`.
   2. Bisect with the stage dump or diff tooling (`crispasr-diff` / `tools/` Mini-BS validators) to find the first diverging stage.
