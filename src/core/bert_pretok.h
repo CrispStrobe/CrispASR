@@ -74,12 +74,24 @@ inline void append_utf8(std::string& out, uint32_t cp) {
 // BertNormalizer(clean_text=true, handle_chinese_chars=true, lowercase=false,
 // strip_accents=false) + BertPreTokenizer. Returns the pre-token words; the
 // caller runs WordPiece over each.
-inline std::vector<std::string> pretokenize(const std::string& text) {
+//
+// `out_space_before`, when non-null, receives one flag per returned word: 1
+// when whitespace separated it from the previous word in `text`. Callers that
+// rebuild the original text from the words (fireredpunc) need it to keep the
+// input's word spacing; the pre-tokenizer itself discards it.
+inline std::vector<std::string> pretokenize(const std::string& text, std::vector<uint8_t>* out_space_before = nullptr) {
     std::vector<std::string> words;
     std::string cur;
+    bool pending_space = false;
+    auto push = [&](std::string w) {
+        words.push_back(std::move(w));
+        if (out_space_before)
+            out_space_before->push_back(pending_space ? 1 : 0);
+        pending_space = false;
+    };
     auto flush = [&]() {
         if (!cur.empty()) {
-            words.push_back(cur);
+            push(cur);
             cur.clear();
         }
     };
@@ -94,13 +106,14 @@ inline std::vector<std::string> pretokenize(const std::string& text) {
             continue;                      // control/format (soft hyphen, ZWJ, ...)
         if (cat == core_unicode::CAT_WS) { // every whitespace -> word break
             flush();
+            pending_space = true;
             continue;
         }
         if (is_cjk_ideograph(cp) || is_bert_punct(cp)) { // isolated single-cp word
             flush();
             std::string one;
             append_utf8(one, cp);
-            words.push_back(one);
+            push(one);
             continue;
         }
         append_utf8(cur, cp);
