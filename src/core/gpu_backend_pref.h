@@ -31,8 +31,15 @@ namespace crispasr_gpu_pref {
 
 // The preference is a simple global — set once at process start,
 // read many times. Thread-safe via the string copy in get().
-inline std::string& pref_storage() {
-    static std::string s;
+//
+// A zero-initialised char buffer, not a function-local static std::string:
+// with gcc 15 (ubuntu 26.04) the header-local std::string shared between
+// libcrispasr.so and test-vad was observed unconstructed (data == nullptr),
+// so copying it segfaulted in whisper_vad_init. Zero-init needs no
+// constructor and no guard, so it is valid in every DSO and init order.
+inline constexpr size_t pref_capacity = 64;
+inline char* pref_storage() {
+    static char s[pref_capacity];
     return s;
 }
 
@@ -47,12 +54,14 @@ inline std::mutex& pref_mutex() {
 // backend init_from_file. Empty string = auto.
 inline void crispasr_set_gpu_backend_pref(const char* name) {
     std::lock_guard<std::mutex> lock(crispasr_gpu_pref::pref_mutex());
-    crispasr_gpu_pref::pref_storage() = name ? name : "";
+    char* dst = crispasr_gpu_pref::pref_storage();
+    std::strncpy(dst, name ? name : "", crispasr_gpu_pref::pref_capacity - 1);
+    dst[crispasr_gpu_pref::pref_capacity - 1] = '\0';
 }
 
 inline std::string crispasr_get_gpu_backend_pref() {
     std::lock_guard<std::mutex> lock(crispasr_gpu_pref::pref_mutex());
-    return crispasr_gpu_pref::pref_storage();
+    return std::string(crispasr_gpu_pref::pref_storage());
 }
 
 inline int& crispasr_gpu_device_pref_storage() {
