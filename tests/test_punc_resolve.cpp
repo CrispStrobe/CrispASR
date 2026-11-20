@@ -64,8 +64,7 @@ TEST_CASE("previous PCS defaults stay selectable", "[unit][punctuation]") {
         const auto s = crispasr_resolve_punc_model("pcs-q4k-imatrix");
         REQUIRE(s.kind == crispasr_punc_kind::pcs);
         REQUIRE(s.cache_filename == "pcs-xlmr-base-q4_k-imatrix.gguf");
-        REQUIRE(s.url ==
-                "https://huggingface.co/cstr/pcs-xlmr-base-GGUF/resolve/main/pcs-xlmr-base-q4_k-imatrix.gguf");
+        REQUIRE(s.url == "https://huggingface.co/cstr/pcs-xlmr-base-GGUF/resolve/main/pcs-xlmr-base-q4_k-imatrix.gguf");
     }
 }
 
