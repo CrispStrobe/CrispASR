@@ -1250,8 +1250,6 @@
       "backend_id": "qwen3",
       "gguf": {"repo": "cstr/confucius4-r2t2-GGUF", "revision": "6a9aa41833f577a7a2f5d0a2ed61d8250c0c57b4", "file": "confucius4-r2t2-q4_k.gguf", "approx_size_mb": 1491},
       "skip_diff": true,
-      "cli_extra_args": ["--backend", "qwen3"],
-      "_backend_note": "Without --backend the CLI auto-detects this Qwen3-ASR GGUF as confucius4-tts (name-prefix match) and fails to init (exit 13, missing transformer.ln_f; CI run 43170649072). Pinned explicitly here; the misroute itself is an open CLI finding.",
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
       "expected_transcript_source": "Human transcript of samples/jfk.wav (JFK inaugural address), not a model capture.",
