@@ -4959,6 +4959,15 @@ target_link_libraries(test-align-ab-bench PRIVATE
 crispasr_discover_ab_tests(test-align-ab-bench "align")
 
 # ─── test-conformer-ab-bench — conformer_ibm.h paired A/B speed and parity bench ────
+# Same cause as #421 (see the hift-simdconv note above): the test compares the
+# baseline and accelerated shaw_block_attention loops for bit-identity, and with
+# contraction on, clang 14 / gcc -march=native on arm64 fuse their multiply-adds
+# differently once one loop vectorises (CI ubuntu-22.04-arm: 19.3% identical;
+# -ffp-contract=off restores 100% on every compiler/flag combo). Pin contraction
+# off for this test TU only; shipped kernels keep fmadd.
+if (NOT MSVC)
+    set_source_files_properties(test-conformer-ab-bench.cpp PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+endif()
 add_executable(test-conformer-ab-bench test-conformer-ab-bench.cpp)
 target_include_directories(test-conformer-ab-bench PRIVATE
     ${PROJECT_SOURCE_DIR}/src
