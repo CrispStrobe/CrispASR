@@ -4188,7 +4188,28 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
     // Create the ggml_tensor metadata first (no_alloc=true), then alloc backend buffer.
     auto& M = ctx->vae_wn_ggml_tensors;
 
+    auto is_convt_key = [](const std::string& k) {
+        // "vae.dec.layer.{2..7}.block.1" - the six ConvTranspose1d upsamplers
+        static const std::string pre = "vae.dec.layer.", suf = ".block.1";
+        return k.size() == pre.size() + 1 + suf.size() && k.compare(0, pre.size(), pre) == 0 && k[pre.size()] >= '2' &&
+               k[pre.size()] <= '7' && k.compare(pre.size() + 1, suf.size(), suf) == 0;
+    };
+
     for (const auto& e : wn_entries) {
+        if (is_convt_key(e.key)) {
+            // The six upsamplers only run through the decomposed col2im path, so
+            // allocate them directly in its permuted [IC, K*OC] layout (K=ksize,
+            // OC=e.in_ch, IC=e.out_ch) and never upload the unpermuted copy:
+            // 168 MB less VRAM and upload on every start (#461).
+            ggml_tensor* tp =
+                ggml_new_tensor_2d(ctx->vae_wn_ggml_ctx, GGML_TYPE_F32, e.out_ch, (int64_t)e.ksize * e.in_ch);
+            if (!tp) {
+                return false;
+            }
+            ggml_set_name(tp, (e.key + ".perm").c_str());
+            M[e.key + ".perm"] = tp;
+            continue;
+        }
         // Tensor shape: depthwise → ne=[K, 1, C]; otherwise ne=[K, in_ch, out_ch].
         // For the transposed-conv entries we passed out_ch (= legacy "Cc" arg) as
         // wn_reconstruct's out_ch — but wn_reconstruct emits buffer with layout
@@ -4284,13 +4305,6 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
 
     // Now populate. WN convs: reconstruct from g/v, write into the tensor.
     double t_fetch = 0, t_wn = 0, t_up = 0, t_perm = 0; // CRISPASR_VOXCPM2_BENCH split (#461)
-    auto is_convt_key = [](const std::string& k) {
-        // "vae.dec.layer.{2..7}.block.1" - the six ConvTranspose1d upsamplers
-        static const std::string pre = "vae.dec.layer.", suf = ".block.1";
-        return k.size() == pre.size() + 1 + suf.size() && k.compare(0, pre.size(), pre) == 0 && k[pre.size()] >= '2' &&
-               k[pre.size()] <= '7' && k.compare(pre.size() + 1, suf.size(), suf) == 0;
-    };
-    std::map<std::string, std::unique_ptr<float[]>> host_perm;
     for (const auto& e : wn_entries) {
         auto c0 = std::chrono::steady_clock::now();
         const float* g = vae_tensor_f32(T, e.g_name);
@@ -4301,17 +4315,17 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
         auto c1 = std::chrono::steady_clock::now();
         std::vector<float> w = wn_reconstruct(g, v, e.out_ch, e.in_ch, e.ksize);
         auto c2 = std::chrono::steady_clock::now();
-        ggml_backend_tensor_set(M[e.key], w.data(), 0, w.size() * sizeof(float));
-        auto c3 = std::chrono::steady_clock::now();
+        auto c3 = c2;
         if (is_convt_key(e.key)) {
-            // Permute for the decomposed transposed-conv path straight from the
-            // host copy: tensor ne = [K, e.in_ch, e.out_ch] = [K, OC, IC] of
-            // core_convt's layout. Saves downloading 168 MB back from the GPU
-            // just to permute it (#461).
+            // Permute on the host straight from the reconstructed weight
+            // (layout [K, OC, IC] of core_convt) and upload only that (#461).
             const float* wp = w.data();
             auto buf = std::make_unique<float[]>(w.size());
             core_convt::permute_convt1d_host([wp](size_t i) { return wp[i]; }, buf.get(), e.ksize, e.in_ch, e.out_ch);
-            host_perm[e.key] = std::move(buf);
+            ggml_backend_tensor_set(M[e.key + ".perm"], buf.get(), 0, w.size() * sizeof(float));
+        } else {
+            ggml_backend_tensor_set(M[e.key], w.data(), 0, w.size() * sizeof(float));
+            c3 = std::chrono::steady_clock::now();
         }
         auto c4 = std::chrono::steady_clock::now();
         t_fetch += std::chrono::duration<double, std::milli>(c1 - c0).count();
@@ -4383,56 +4397,6 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
             for (int c = 0; c < C; c++)
                 bv[c] = be[(size_t)sr_bucket * C + c];
             ggml_backend_tensor_set(M[sr_pfx + ".sr_bias"], bv.data(), 0, bv.size() * sizeof(float));
-        }
-    }
-
-    // Permute ConvTranspose1d upsample weights for decomposed col2im path.
-    // The 6 transposed conv weights are stored in M as "vae.dec.layer.{2..7}.block.1".
-    {
-        const int n = 6;
-        ggml_tensor* srcs[6];
-        ggml_tensor** dsts[6];
-        // Temporary storage for the permuted weight pointers; they'll be
-        // inserted into M after the batch call.
-        ggml_tensor* perm_ptrs[6] = {};
-        for (int b = 0; b < n; b++) {
-            std::string key = "vae.dec.layer." + std::to_string(b + 2) + ".block.1";
-            auto it = M.find(key);
-            srcs[b] = (it != M.end()) ? it->second : nullptr;
-            dsts[b] = &perm_ptrs[b];
-        }
-        voxcpm2_bench_stage st("vae.wn perm_upload");
-        bool have_all = true;
-        for (int b = 0; b < n; b++)
-            have_all = have_all && srcs[b] && host_perm.count(ggml_get_name(srcs[b]));
-        if (have_all) {
-            ggml_init_params pp = {ggml_tensor_overhead() * (size_t)n + 4096, nullptr, true};
-            ctx->vae_perm_ctx = ggml_init(pp);
-            for (int b = 0; b < n; b++) {
-                const int K = (int)srcs[b]->ne[0], OC = (int)srcs[b]->ne[1], IC = (int)srcs[b]->ne[2];
-                perm_ptrs[b] = ggml_new_tensor_2d(ctx->vae_perm_ctx, GGML_TYPE_F32, IC, K * OC);
-            }
-            ctx->vae_perm_buf = ggml_backend_alloc_ctx_tensors(ctx->vae_perm_ctx, ctx->backend);
-            if (!ctx->vae_perm_buf) {
-                ggml_free(ctx->vae_perm_ctx);
-                ctx->vae_perm_ctx = nullptr;
-                for (int b = 0; b < n; b++)
-                    perm_ptrs[b] = nullptr;
-                have_all = false;
-            } else {
-                for (int b = 0; b < n; b++)
-                    ggml_backend_tensor_set(perm_ptrs[b], host_perm[ggml_get_name(srcs[b])].get(), 0,
-                                            ggml_nbytes(perm_ptrs[b]));
-            }
-        }
-        if (!have_all)
-            core_convt::permute_convt1d_weights_batch(srcs, dsts, n, ctx->backend, &ctx->vae_perm_ctx,
-                                                      &ctx->vae_perm_buf);
-        for (int b = 0; b < n; b++) {
-            if (perm_ptrs[b]) {
-                std::string key = "vae.dec.layer." + std::to_string(b + 2) + ".block.1.perm";
-                M[key] = perm_ptrs[b];
-            }
         }
     }
 
@@ -4657,8 +4621,7 @@ static std::vector<float> vae_decode_graph(voxcpm2_context* ctx, const std::vect
         {
             ggml_tensor* wp = Wget(lp + ".block.1.perm");
             if (wp) {
-                ggml_tensor* w = Wget(lp + ".block.1");
-                const int K = w ? (int)w->ne[0] : 2 * up_rates[b];
+                const int K = (int)(wp->ne[1] / vae_decoder_block_out_ch(b));
                 cur = core_convt::convt1d_decomp_tf(ctx0, cur, wp, Bias(lp + ".block.1"), up_rates[b], K,
                                                     /*crop_left=*/0, /*crop_right=*/K - up_rates[b]);
             } else {
