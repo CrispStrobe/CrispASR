@@ -519,6 +519,23 @@ catch_discover_tests(test-audio-resample
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-ctc-punct-space — NeMo space-before-punctuation decode step (unit) ───
+add_executable(test-ctc-punct-space
+    test-ctc-punct-space.cpp
+)
+target_include_directories(test-ctc-punct-space PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-ctc-punct-space PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-ctc-punct-space
+    TEST_SPEC "[ctc-punct]"
+    PROPERTIES
+        LABELS unit
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test-bert-pretok-spacing — pretokenize whitespace flags (fireredpunc) ───
 add_executable(test-bert-pretok-spacing
     test-bert-pretok-spacing.cpp

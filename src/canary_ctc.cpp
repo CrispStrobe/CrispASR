@@ -12,6 +12,7 @@
 #include "canary_ctc.h"
 #include "core/parakeet_gguf.h"
 #include "core/crispasr_env.h"
+#include "core/ctc_punct_space.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -38,6 +39,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <set>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -155,6 +157,9 @@ struct cc_model {
 struct canary_ctc_vocab {
     std::vector<std::string> id_to_token;
     std::unordered_map<std::string, int> token_to_id;
+    // NeMo's supported_punctuation (core/ctc_punct_space.h): marks after which
+    // decoding removes the preceding space, as AbstractCTCDecoding does.
+    std::set<uint32_t> punct;
 };
 
 struct canary_ctc_context {
@@ -543,6 +548,7 @@ static bool cc_load_model(cc_model& model, canary_ctc_vocab& vocab, const char* 
             for (int i = 0; i < (int)vocab.id_to_token.size(); i++) {
                 vocab.token_to_id[vocab.id_to_token[i]] = i;
             }
+            vocab.punct = core_ctc_punct::supported_punctuation(vocab.id_to_token);
         }
 
         core_gguf::free_metadata(gctx);
@@ -964,6 +970,7 @@ extern "C" char* canary_ctc_greedy_decode(struct canary_ctc_context* ctx, const 
             prev = best;
         }
     }
+    result = core_ctc_punct::strip_space_before(result, ctx->vocab.punct);
     auto lo = result.find_first_not_of(' ');
     auto hi = result.find_last_not_of(' ');
     std::string trimmed = (lo == std::string::npos) ? "" : result.substr(lo, hi - lo + 1);
@@ -1048,6 +1055,17 @@ extern "C" struct canary_ctc_decode_result* canary_ctc_greedy_decode_with_probs(
     for (const auto& e : emits) {
         piece_offsets.emplace_back((int)concatenated.size(), (int)e.piece.size());
         concatenated += e.piece;
+    }
+    // NeMo removes the space before supported punctuation after decoding;
+    // remap the piece offsets onto the stripped text.
+    {
+        std::vector<int> kept;
+        concatenated = core_ctc_punct::strip_space_before(concatenated, ctx->vocab.punct, &kept);
+        for (auto& po : piece_offsets) {
+            const int s = kept[po.first];
+            po.second = kept[po.first + po.second] - s;
+            po.first = s;
+        }
     }
     auto lo = concatenated.find_first_not_of(' ');
     auto hi = concatenated.find_last_not_of(' ');
