@@ -52,9 +52,27 @@ inline crispasr_punc_spec crispasr_resolve_punc_model(const std::string& punc_mo
         return s;
     }
     if (m == "pcs") {
+        // Q4_K+imatrix with encoder layer 0 and the truecase head at Q8_0: matches
+        // the original model on CrispEmbed's PCS parity corpus (4 heads, decoded
+        // text exact). The all-4-bit files turn "I'm OK" into "I'm ok"/"I'm oK".
+        // Pinned to the Hub revision it was qualified at.
+        s.kind = crispasr_punc_kind::pcs;
+        s.cache_filename = "pcs-xlmr-base-q4_k-mixed.gguf";
+        s.url = "https://huggingface.co/cstr/pcs-xlmr-base-GGUF/resolve/"
+                "a685c2ead4c14a590ba657c1ea5eaa1b7da7f955/pcs-xlmr-base-q4_k-mixed.gguf";
+        return s;
+    }
+    if (m == "pcs-q4k") {
+        // The previous default (plain Q4_K), kept selectable.
         s.kind = crispasr_punc_kind::pcs;
         s.cache_filename = "pcs-xlmr-base-q4_k.gguf";
         s.url = "https://huggingface.co/cstr/pcs-xlmr-base-GGUF/resolve/main/pcs-xlmr-base-q4_k.gguf";
+        return s;
+    }
+    if (m == "pcs-q4k-imatrix") {
+        s.kind = crispasr_punc_kind::pcs;
+        s.cache_filename = "pcs-xlmr-base-q4_k-imatrix.gguf";
+        s.url = "https://huggingface.co/cstr/pcs-xlmr-base-GGUF/resolve/main/pcs-xlmr-base-q4_k-imatrix.gguf";
         return s;
     }
     if (m.find("pcs") != std::string::npos) {
