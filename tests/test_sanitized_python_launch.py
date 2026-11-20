@@ -64,7 +64,8 @@ file(WRITE "${CMAKE_BINARY_DIR}/environment.txt" "${affected_env}\n${native_env}
                     else:
                         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
                         affected, native = (build / 'environment.txt').read_text().splitlines()
-                        expected = f'KEEP=present;LD_PRELOAD={runtime}:existing.so' if number == 0 else 'KEEP=present'
+                        expected = (f'KEEP=present;LD_PRELOAD={runtime}:existing.so;ASAN_OPTIONS=detect_leaks=0'
+                                    if number == 0 else 'KEEP=present')
                         self.assertEqual(affected, expected)
                         self.assertEqual(native, '')
 
