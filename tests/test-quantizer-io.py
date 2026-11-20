@@ -39,7 +39,10 @@ class QuantizerIO(unittest.TestCase):
         if fault is not None:
             if FAULTS is None:
                 self.skipTest('Linux stdio fault library unavailable')
-            env.update(LD_PRELOAD=str(FAULTS), QUANTIZER_IO_OUTPUT=str(output),
+            # Preserve an already-preloaded sanitizer runtime ahead of the
+            # injector; replacing it makes ASan fail before fault assertions.
+            preload = env.get('LD_PRELOAD')
+            env.update(LD_PRELOAD=f'{preload}:{FAULTS}' if preload else str(FAULTS), QUANTIZER_IO_OUTPUT=str(output),
                        QUANTIZER_IO_FAULT=fault, QUANTIZER_IO_INPUT=str(self.source))
         run = subprocess.run([str(QUANT), str(self.source), str(output), 'q8_0', *extra],
                              capture_output=True, text=True, env=env)

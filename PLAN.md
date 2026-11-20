@@ -1,3 +1,119 @@
+### ASR final checkpoint / handoff (2026-11-18)
+
+- Final user instruction authorizes the normal checkpoint push. See
+  [PR #599 ASR handoff](docs/validation/pr599-asr-handoff.md) for the complete
+  source/commit list, all19 failed jobs, actual retained checks, SDK byte gap,
+  runtime limits and remaining steps. Earlier local-only notes below are dated
+  historical constraints superseded for this checkpoint publication.
+- Code snapshot `1a3d7f63dc187496774c44cdff4069d74b33b418`; keep PR #599
+  draft and #598 open. Required current-head CI remains unrun; checkpoint uses
+  `[skip ci]` to preserve the instruction to stop new execution. No merge or
+  runtime-success claim. Stop after publishing and reporting the checkpoint.
+
+### PR #599 Python ASan launch ordering — local only, cycle 181 (2026-11-18)
+
+- Retained ASan logs fail before ctypes C ABI assertions because the runtime
+  is not first in the loader list. For the three affected tests on Linux/GCC
+  ASan only, preload the runtime located by the actual C++ compiler. Missing
+  runtime is a configuration failure; native test launch settings and other
+  sanitizer configurations are unchanged. Preserve the runtime before adding
+  the quantizer's fault injector instead of overwriting `LD_PRELOAD`.
+- Pure controls pass five mock CMake configurations and three mocked
+  quantizer environment cases; the old quantizer environment loses the
+  runtime in both nonempty-preload controls. No sanitizer/native backend,
+  model or performance execution is claimed. Runtime validation is unrun.
+- TSan fails at ctypes dlopen with static TLS allocation failure. That fact
+  narrows the startup stage but does not prove a safe remedy. The VAD log
+  ends after model loading with a segfault and no fault-site/backtrace.
+  Leave both gaps, Conformer parity and the external exact-SDK-byte gap open.
+
+### PR #599 remaining failures — local only, cycle 180 (2026-11-18)
+
+- Exact terminal GCC Debug and Clang Debug amd64 logs each show 20 unit
+  failures from absent NumPy; the local prerequisite repair remains untested
+  on hosted runners. All 19 published failures remain failures.
+- ASan reports 832 bytes in eight backend allocations leaked by ArkTTS's
+  null/empty-path initialization test. Initialization's default context deleter
+  bypassed backend cleanup on early return. Use `arktts_free` as the pending
+  context's deleter; successful initialization still releases ownership.
+- Single-translation-unit syntax checking passes after this ownership fix;
+  no rebuilt ASan test or runtime leak-resolution proof is claimed. Preserve
+  the VAD, Conformer and sanitizer-loader gaps, SDK pin/checksum, and draft PR.
+
+### PR #599 CI failure propagation — local only, cycle 179 (2026-11-18)
+
+- Preserve published `82d9daa14823`: terminal checks are 63 pass, 19 fail,
+  7 skip. Keep the PR draft and issue #598 open; do not publish these repairs
+  while automatic model/performance CI runs remain outside authorization.
+- Capture producer and logging statuses before shell assignments overwrite
+  them; stop after failed downloads, configure/build/tests or benchmarks.
+  Debug failure now prevents both Release and benchmark execution. Successful
+  performance commands and baselines remain intact; crashes remain failures.
+- Register 14 pure mock shell controls. The frozen script and test passed all
+  14 controls after directory guards, with Bash syntax and whitespace checks
+  passing. Preserve the failed baseline (10 failures, 2 errors); no controls
+  were rerun in cycle 179 and no real build/model/performance run is claimed.
+- Compiler jobs also need the NumPy prerequisite demonstrated by their failed
+  logs; supply the pinned NumPy and bind CMake to that Python interpreter.
+  Hosted validation remains unrun. VAD, Conformer exact-bit parity, sanitizer
+  leak/loader failures and the external SDK exact-byte gap remain unresolved.
+
+### PR #599 independent CI repairs — prepared locally, cycle 177 (2026-11-18)
+
+- Preserve published `82d9daa14823` and its passing checks. Existing failed jobs
+  have distinct causes: SDK HTTP 404; CLI `getenv`/`atoi` declarations; x86
+  AVX-512 build/host mismatch; missing NumPy; ARM Rust signed/unsigned C-char
+  buffers. The missing benchmark binary follows failed Debug tests preventing
+  the Release build; no benchmark or test gate is waived.
+- Local repairs add `<cstdlib>`/qualified CLI calls, use `c_char` for five Rust
+  output buffers, supply NumPy to the five legacy CI jobs and bind CMake to that
+  Python, and apply the existing AVX2/FMA baseline to x86 low-perf CI too.
+- Installed unsigned-char ARM target metadata check reproduces all 11 Rust
+  type errors before the buffer fix and passes after. CLI adapter syntax passes.
+  Neither is Windows/ARM Linux runtime or CUDA proof. Remaining x86 faulting
+  controls require hosted verification before claiming resolution.
+- The x86 ISA candidate is confined to the low-perf CI invocation: its actual
+  job reports compiled AVX512F and host missing AVX512F, alongside SIGILL.
+  Product ISA defaults, benchmark code/baselines, test gates and crash failures
+  remain unchanged. This candidate is unqualified until actual supported-host
+  verification; a flag edit is not a test/performance pass.
+- Keep this repair local: publishing would automatically rerun model/perf CI,
+  which is outside this cycle's authorization. SDK pin/checksum stay unchanged;
+  PR #599 remains draft and #598 stays open.
+
+### Issue #598 CUDA SSM convolution fallback — ASR owner (2026-11-18)
+
+- Claimed in `fix/598-ssm-cuda-fallback`, based on PR #590 merge
+  `3b3dae4817b4ef0dded9dde8f4713178833de8d1`. PR #590 head `534e4703c3a5`
+  completed 56 passing / 4 skipped exact-head checks; #589 is closed.
+- Reject unsupported convolution widths in CUDA capability detection so the
+  scheduler sends K=8/16/31 to CPU. Add model-free scheduling and numerical
+  fallback coverage, plus optional real-CUDA coverage where hardware exists.
+- Shared-host memory limit is 5 GiB; preserve 1 GiB headroom and use hosted CI
+  for heavy builds. No CUDA runtime result is claimed before an actual run.
+- Local standalone test linked to retained CPU ggml libraries: all 132 real
+  scheduler/scalar-oracle cases pass; the legacy capability control fails.
+  Two source-contract checks bind the tested predicate to the actual CUDA
+  supports-op branch and kernel dispatch widths. Optional CUDA operator and
+  xASR Q8_0 session/JFK tests are registered only in CUDA builds and skip without
+  hardware/model. CUDA execution and the Windows reporter setup remain unrun.
+- PR #599 initial head `ac960b57faf8` exposed a pre-existing CI concurrency
+  collision: both CI workflows used the same display name/key, canceling the
+  required application CI. Use the distinct literal prefixes documented in
+  those workflows so the ordinary ggml-bump and application checks both run.
+- Wider CI also exposed missing standard declarations for `getenv`/`atoi` in
+  the legacy llama graph header on MinGW/Clang. Include `<cstdlib>` and qualify
+  those calls. The unit job separately failed before compilation on HTTP 404
+  fetching the unchanged pinned ONNX SDK; preserve checksum and coverage gates.
+- Final-head MinGW/Clang progressed past that header and found a separate
+  missing `strtol` declaration in `llama-vocab.cpp`; include `<cstdlib>` and
+  qualify `std::strtol`. No tokenizer behavior changes.
+- SDK route diagnosis: the exact v1.30.0 Linux x64 asset, release API, tag ref
+  and raw tag source return HTTP 404, including HTTP/1.1 and direct resolved API
+  routing. No redirect or local proxy explains it; a public ggml API control
+  succeeds. No verified alternate SDK bytes were obtained. Keep the existing
+  downloader/version/checksum and unit coverage unchanged; PR #599 stays draft.
+
 ### Issue #589 disclosure quality — exact CUDA pack gate accepted (2026-11-15)
 
 - Acceptance follow-up measured on `85f026d31`: general row-max centering before

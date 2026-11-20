@@ -30,6 +30,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -107,8 +108,8 @@ public:
         wp.audio_ctx = p.audio_ctx;
         if (wp.audio_ctx == 0 && p.stream && n_samples > 0) {
             static const int stream_ac_gate = []() {
-                const char* e = getenv("CRISPASR_WHISPER_STREAM_AUDIO_CTX");
-                return e ? atoi(e) : 0;
+                const char* e = std::getenv("CRISPASR_WHISPER_STREAM_AUDIO_CTX");
+                return e ? std::atoi(e) : 0;
             }();
             if (stream_ac_gate != 0) {
                 if (stream_ac_gate > 1) {

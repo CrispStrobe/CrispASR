@@ -155,11 +155,11 @@ function gg_download_model {
     local model_file="$MNT/models/ggml-${model_name}.bin"
 
     if [ ! -f ${model_file} ]; then
-        local cwd=`pwd`
-        mkdir -p "$MNT/models"
-        cd "$MNT/models"
-        bash "$cwd/models/download-ggml-model.sh" ${model_name} .
-        cd "$cwd"
+        mkdir -p "$MNT/models" || return $?
+        (
+            cd "$MNT/models" || exit $?
+            bash "$SRC/models/download-ggml-model.sh" "$model_name" .
+        )
     fi
 }
 
@@ -167,20 +167,42 @@ function gg_printf {
     printf -- "$@" >> $OUT/README.md
 }
 
-# Helper function to check command exit status
-function gg_check_last_command_status {
-    local exit_file=$1
-    local command_name=$2
+# Pass PIPESTATUS immediately after the pipeline: local assignments would
+# otherwise replace the producer's failure with their own successful status.
+function gg_check_command_status {
+    local exit_status=$1
+    local log_status=$2
+    local exit_file=$3
+    local command_name=$4
 
-    local exit_status=$?
-    echo "$exit_status" > "$exit_file"
+    if [ "$exit_status" -eq 0 ]; then
+        exit_status=$log_status
+    fi
+    if printf '%s\n' "$exit_status" > "$exit_file"; then
+        :
+    else
+        local write_status=$?
+        if [ "$exit_status" -eq 0 ]; then
+            exit_status=$write_status
+        fi
+    fi
 
     if [ $exit_status -ne 0 ]; then
         echo "Error: Command $command_name failed with exit status $exit_status"
-        return 1
+        return "$exit_status"
     fi
 
     return 0
+}
+
+function gg_run_logged {
+    local log_file=$1
+    local exit_file=$2
+    local command_name=$3
+    shift 3
+
+    { time "$@"; } 2>&1 | tee -a "$log_file"
+    gg_check_command_status "${PIPESTATUS[0]}" "${PIPESTATUS[1]}" "$exit_file" "$command_name"
 }
 
 # Usage: gg_run <test_name> [additional_args...]
@@ -189,7 +211,8 @@ function gg_check_last_command_status {
 #   test_name       - Name of the test to run (calls gg_run_<test_name>)
 #   additional_args - Any additional arguments to pass to the test function (first argument is appended to the log filename)
 function gg_run {
-    ci=$1
+    local ci=$1
+    local cur
 
     if [ $# -gt 1 ]; then
         ci="${ci}_${2}"
@@ -199,8 +222,11 @@ function gg_run {
     set -x
 
     gg_run_$1 "$@" | tee $OUT/$ci.log
-    cur=$?
-    echo "$cur" > $OUT/$ci.exit
+    if gg_check_command_status "${PIPESTATUS[0]}" "${PIPESTATUS[1]}" "$OUT/$ci.exit" "$ci"; then
+        cur=0
+    else
+        cur=$?
+    fi
 
     set +x
     set +o pipefail
@@ -208,15 +234,18 @@ function gg_run {
     gg_sum_$1 "$@"
 
     ret=$((ret | cur))
+    return "$cur"
 }
 
 function gg_check_build_requirements {
     if ! command -v cmake &> /dev/null; then
         gg_printf 'cmake not found, please install'
+        return 127
     fi
 
     if ! command -v make &> /dev/null; then
         gg_printf 'make not found, please install'
+        return 127
     fi
 }
 
@@ -225,25 +254,24 @@ function gg_check_build_requirements {
 function gg_run_ctest {
     mode=$2
 
-    cd ${SRC}
+    cd "$SRC" || return $?
 
-    rm -rf build-ci-${mode} && mkdir build-ci-${mode} && cd build-ci-${mode}
+    rm -rf "build-ci-${mode}" && mkdir "build-ci-${mode}" && cd "build-ci-${mode}" || return $?
 
-    set -e
+    gg_check_build_requirements || return $?
 
-    gg_check_build_requirements
-
-    (time cmake -DCMAKE_BUILD_TYPE=${mode} ${CMAKE_EXTRA} .. ) 2>&1 | tee -a $OUT/${ci}-cmake.log
-    (time make -j$(nproc)                                    ) 2>&1 | tee -a $OUT/${ci}-make.log
+    gg_run_logged "$OUT/${ci}-cmake.log" "$OUT/${ci}-cmake.exit" configure \
+        cmake -DCMAKE_BUILD_TYPE=${mode} -DPython3_EXECUTABLE="$(command -v python3)" ${CMAKE_EXTRA} .. || return $?
+    gg_run_logged "$OUT/${ci}-make.log" "$OUT/${ci}-make.exit" build \
+        make -j$(nproc) || return $?
 
     # `-L main` was upstream whisper.cpp's label convention; NOTHING in this
     # tree carries it, so this ctest ran ZERO tests while the job stayed green
     # (found in the 2026-09-02 orphaned-label audit, same failure mode as the
     # dead `cli` label). `unit` is the no-model suite that runs everywhere —
     # and this is the only place it runs in a Debug build.
-    (time ctest --output-on-failure -L unit -E test-opt ) 2>&1 | tee -a $OUT/${ci}-ctest.log
-
-    set +e
+    gg_run_logged "$OUT/${ci}-ctest.log" "$OUT/${ci}-ctest.exit" ctest \
+        ctest --output-on-failure -L unit -E test-opt || return $?
 }
 
 function gg_sum_ctest {
@@ -259,7 +287,7 @@ function gg_sum_ctest {
 }
 
 function gg_run_bench {
-    cd ${SRC}
+    cd "$SRC" || return $?
 
     # set flash attention flag if enabled
     fattn="-nfa"
@@ -270,12 +298,12 @@ function gg_run_bench {
     # run memcpy benchmark if not encoder-only mode
     if [ "$BENCH_ENCODER_ONLY" -eq 0 ]; then
         echo "Running memcpy benchmark"
-        (time ./build-ci-release/bin/crispasr-bench -w 1 -t $BENCH_N_THREADS 2>&1) | tee -a $OUT/${ci}-memcpy.log
-        gg_check_last_command_status "$OUT/${ci}-memcpy.exit" "memcpy benchmark"
+        gg_run_logged "$OUT/${ci}-memcpy.log" "$OUT/${ci}-memcpy.exit" "memcpy benchmark" \
+            ./build-ci-release/bin/crispasr-bench -w 1 -t $BENCH_N_THREADS || return $?
 
         echo "Running ggml_mul_mat benchmark with $BENCH_N_THREADS threads"
-        (time ./build-ci-release/bin/crispasr-bench -w 2 -t $BENCH_N_THREADS 2>&1) | tee -a $OUT/${ci}-mul_mat.log
-        gg_check_last_command_status "$OUT/${ci}-mul_mat.exit" "ggml_mul_mat benchmark"
+        gg_run_logged "$OUT/${ci}-mul_mat.log" "$OUT/${ci}-mul_mat.exit" "ggml_mul_mat benchmark" \
+            ./build-ci-release/bin/crispasr-bench -w 2 -t $BENCH_N_THREADS || return $?
     fi
 
     echo "Running benchmark for all models"
@@ -285,8 +313,7 @@ function gg_run_bench {
         printf "| %16s | %13s | %3s | %3s | %7s | %7s | %7s | %7s | %7s |\n" "Config" "Model" "Th" "FA" "Enc." "Dec." "Bch5" "PP" "Commit"
         printf "| %16s | %13s | %3s | %3s | %7s | %7s | %7s | %7s | %7s |\n" "---" "---" "---" "---" "---" "---" "---" "---" "---"
     } | tee -a $OUT/${ci}-models-table.log
-
-    res=0
+    gg_check_command_status "${PIPESTATUS[0]}" "${PIPESTATUS[1]}" "$OUT/${ci}-header.exit" "benchmark table" || return $?
 
     # run benchmark for each model
     for model in "${MODELS[@]}"; do
@@ -294,12 +321,12 @@ function gg_run_bench {
 
         # run the benchmark and capture output
         output=$(./build-ci-release/bin/crispasr-bench -m $MNT/models/ggml-$model.bin -t $BENCH_N_THREADS $fattn 2>&1)
-        ret=$?
+        local model_status=$?
 
         # save the raw output
         echo "$output" > $OUT/${ci}-bench-$model.log
 
-        if [ $ret -eq 0 ]; then
+        if [ $model_status -eq 0 ]; then
             # parse the benchmark results
             encode_time=$(echo "$output" | grep "encode time" | awk '{print $11}')
             decode_time=$(echo "$output" | grep "decode time" | awk '{print $11}')
@@ -338,11 +365,11 @@ function gg_run_bench {
                 | tee -a $OUT/${ci}-models-table.log
         else
             echo "Benchmark failed for model: $model" | tee -a $OUT/${ci}-bench-errors.log
-            res=1
+            return "$model_status"
         fi
     done
 
-    return $res
+    return 0
 }
 
 function gg_sum_bench {
@@ -382,16 +409,23 @@ function gg_sum_bench {
 ret=0
 
 for model in "${MODELS[@]}"; do
-    test $ret -eq 0 && gg_download_model ${model}
+    if gg_download_model "$model"; then
+        :
+    else
+        ret=$?
+        break
+    fi
 done
 
 test $ret -eq 0 && gg_run ctest debug
 test $ret -eq 0 && gg_run ctest release
 
-# Benchmarks are informational — don't fail the CI on benchmark errors
-# (SIGILL on low-perf runners with heterogeneous CPU features, OOM, etc.)
-gg_run bench || true
+# Run the same performance checks only after both test builds pass. Missing
+# binaries, crashes and log failures must remain failures, not timing results.
+test $ret -eq 0 && gg_run bench
 
-cat $OUT/README.md
+if [ -f "$OUT/README.md" ]; then
+    cat "$OUT/README.md"
+fi
 
 exit $ret

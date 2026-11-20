@@ -629,7 +629,7 @@ impl Session {
 
     /// List of backend names the loaded CrispASR library was compiled with.
     pub fn available_backends() -> Vec<String> {
-        let mut buf = vec![0i8; 256];
+        let mut buf = vec![0 as c_char; 256];
         let mut n = unsafe {
             crispasr_sys::crispasr_session_available_backends(buf.as_mut_ptr(), buf.len() as i32)
         };
@@ -669,7 +669,7 @@ impl Session {
     /// backend that genuinely declares no capabilities is a different answer.
     pub fn backend_caps(backend: &str) -> Result<Vec<String>, String> {
         let name = CString::new(backend).map_err(|e| format!("invalid backend: {e}"))?;
-        let mut buf = [0i8; 1024];
+        let mut buf = [0 as c_char; 1024];
         let n = unsafe {
             crispasr_sys::crispasr_backend_caps_abi(
                 name.as_ptr(),
@@ -702,7 +702,7 @@ impl Session {
         // so the buffer is never guessed and never silently truncated.
         let need = unsafe { crispasr_sys::crispasr_backend_caps_list_abi(std::ptr::null_mut(), 0) };
         let cap = if need < 0 { (-need) as usize } else { 65536 };
-        let mut buf = vec![0i8; cap.max(1024)];
+        let mut buf = vec![0 as c_char; cap.max(1024)];
         let n = unsafe {
             crispasr_sys::crispasr_backend_caps_list_abi(buf.as_mut_ptr(), buf.len() as i32)
         };
@@ -750,7 +750,7 @@ impl Session {
         let path = CString::new(model_path).map_err(|e| format!("invalid path: {e}"))?;
         // Sized for the longest plausible list; the ABI returns -5 rather than
         // truncating, so a too-small buffer can never under-report.
-        let mut buf = [0i8; 512];
+        let mut buf = [0 as c_char; 512];
         let n = unsafe {
             crispasr_sys::crispasr_detect_backends_from_gguf(
                 path.as_ptr(),
@@ -773,7 +773,7 @@ impl Session {
     /// Detect the backend from a GGUF file without opening it.
     pub fn detect_backend(model_path: &str) -> Result<String, String> {
         let path = CString::new(model_path).map_err(|e| format!("invalid path: {e}"))?;
-        let mut buf = [0i8; 64];
+        let mut buf = [0 as c_char; 64];
         let n = unsafe {
             crispasr_sys::crispasr_detect_backend_from_gguf(
                 path.as_ptr(),
