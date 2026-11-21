@@ -1,3 +1,8 @@
+## 2026-11-21 — Haas-ja: byte-fallback kanji restored; accuracy verified against the original model (#605)
+
+- **Bug:** Haas-ja's SentencePiece vocabulary spells kanji outside its 3,072 pieces as `<0xHH>` byte pieces (256 of them; parakeet-ja has none). `spiece_to_text` treated every `<...>` piece as a control token, so those characters vanished: 骨董品 → 骨品, and 娯, 徘徊, 焉, 竣, 踵, 癌, 塵 were lost. The new `core_spm::piece_to_text` (`src/core/spm_piece.h`) decodes byte pieces to their raw byte; consecutive tokens reassemble the character. `test-core-spm-piece` failed on the old behaviour.
+- **Verification** (`tools/kaggle/haas-ja-bench-verify`, upstream eval script, jacer v1.2): the original model reproduces its model card. FLEURS 3.67 / 2.98 / 2.35 % (card 3.67 / 2.98 / 2.34), JSUT 5.33 / 2.44 / 1.37 % (card 5.32 / 2.43 / 1.36). CrispASR Q8_0 on the same FLEURS audio: 3.77 / 3.11 / 2.54 % before the fix, 3.69 / 3.02 / 2.36 % after; 605 / 650 transcripts byte-identical to the original.
+
 ## 2026-11-21 — Haas-ja uses its upstream long-form recipe (#605)
 
 - **Change:** Haas-ja no longer inherits parakeet-ja's #89 long-audio workarounds (VAD forced on, 12 s slices). Like upstream `haas_asr.transcribe_longform`, it cuts 30 s chunks at the quietest 0.1 s within 2 s of each target and decodes each in one pass. `parakeet_quiet_point_bounds` is a sample-exact port of `split_at_quiet_points` (unit-tested against the upstream Python). An explicit `--vad` caps slices at 30 s. The session C ABI takes the same route. `CRISPASR_HAAS_LONGFORM=0` restores the old path.

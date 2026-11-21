@@ -32,6 +32,30 @@ architecture metadata; the alias entrypoint and registry are covered by
 `tests/test_haas_dispatch.py` and `tests/test-registry.cpp`. These are dispatch
 tests, not a general accuracy benchmark for every audio domain or quantization.
 
+## Accuracy
+
+The original model's published scores reproduce, and CrispASR matches them.
+`tools/kaggle/haas-ja-bench-verify` rebuilt two subsets of
+[asr-ja-bench](https://huggingface.co/datasets/third-intelligence/asr-ja-bench)
+with its own `rebuild.py` and scored them with upstream's evaluation script
+(jacer v1.2). CER strict / flex / kana, lower is better:
+
+| | FLEURS (650 utterances) | JSUT basic5000 (5,000) |
+|---|---|---|
+| Model card | 3.67 / 2.98 / 2.34 % | 5.32 / 2.43 / 1.36 % |
+| Original model, NeMo bf16 (T4, batch 16) | 3.67 / 2.98 / 2.35 % | 5.33 / 2.44 / 1.37 % |
+| CrispASR, Q8_0 (M1 Metal) | 3.69 / 3.02 / 2.36 % | not measured |
+
+On FLEURS, 605 of 650 CrispASR transcripts are byte-identical to the original
+model's; the rest differ by Q8_0 rounding. Before the byte-fallback fix of
+2026-11-21 (#605), CrispASR dropped kanji outside the model's 3,072-piece
+vocabulary (骨董品 came out as 骨品) and scored 3.77 %.
+
+These are clean, human-transcribed recordings. Noisy audio is a different
+matter: on a 3-minute game stream with music and sound effects (#605), even two
+whisper models agree with each other on only 72 % of the content, so no score
+against them can show 95 % there.
+
 ## Long audio
 
 Haas-ja follows its own upstream long-form recipe

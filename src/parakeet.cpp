@@ -13,6 +13,7 @@
 //              8198 = 8192 vocab + 1 blank + 5 TDT durations {0,1,2,3,4}
 
 #include "parakeet.h"
+#include "core/spm_piece.h"
 #include "core/parakeet_gguf.h"
 #include "core/parakeet_word_ranges.h"
 #include "core/crispasr_env.h"
@@ -4315,21 +4316,11 @@ extern "C" const char* parakeet_token_to_str(struct parakeet_context* ctx, int i
 // Public transcribe entry points
 // ===========================================================================
 
-// Convert a SentencePiece vocab string to user-visible text:
-//   '▁foo'  → ' foo'    (word-start prefix)
-//   '<unk>' → ''        (filtered)
-//   anything else → as-is
+// Convert a SentencePiece vocab string to user-visible text: '▁foo' → ' foo',
+// '<0xE8>' → the raw byte (byte fallback, #605), '<unk>' → '', anything else
+// as is. See core/spm_piece.h.
 static std::string spiece_to_text(const std::string& piece) {
-    if (piece.empty())
-        return "";
-    if (piece.size() >= 2 && piece[0] == '<' && piece.back() == '>')
-        return "";
-    // Replace leading U+2581 (▁ = 0xE2 0x96 0x81) with a space
-    if (piece.size() >= 3 && (unsigned char)piece[0] == 0xE2 && (unsigned char)piece[1] == 0x96 &&
-        (unsigned char)piece[2] == 0x81) {
-        return std::string(" ") + piece.substr(3);
-    }
-    return piece;
+    return core_spm::piece_to_text(piece);
 }
 
 // ---------------------------------------------------------------------------

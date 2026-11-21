@@ -1,0 +1,13 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-haas-ja-bench-verify",
+  "title": "CrispASR Haas-ja bench verify",
+  "code_file": "haas_bench.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -6374,6 +6374,18 @@ catch_discover_tests(test-core-env-gate
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test-core-spm-piece — src/core/spm_piece.h, SentencePiece piece → text,
+# including byte-fallback <0xHH> pieces (#605: Haas-ja dropped rare kanji).
+add_executable(test-core-spm-piece test-core-spm-piece.cpp)
+target_include_directories(test-core-spm-piece PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test-core-spm-piece PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-spm-piece
+    TEST_SPEC "[spm-piece]"
+    PROPERTIES
+        LABELS unit
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test-core-gap-fill-policy — src/core/gap_fill_policy.h, the #89 gap-fill
 # decisions shared by the CLI/server pass and the session C ABI (#605): the
 # CRISPASR_GAP_FILL tri-state, the confidence gate and the seam-duplicate rule.
