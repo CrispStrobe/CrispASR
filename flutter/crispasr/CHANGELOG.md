@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.8.55
+
+* **New backends:** ZONOS3-Mini TTS, Rumble-2-Flash ASR, Inworld Voice Isolator, Fluid Speech Pro and Musci-ASR. **Fixes:** bt2-tts instruction bleed (#594), mini-bs-roformer on Metal by default (#568), NeMo-exact punctuation spacing for punctuated FastConformer CTC models, gcc 15 VAD segfault, voxcpm2 VAE upload (#461).
+
 ## 0.8.54
 
 * **VibeVoice:** Reject ASR/TTS checkpoint task mismatches with a clear diagnostic; converters record the source model's task capability.
