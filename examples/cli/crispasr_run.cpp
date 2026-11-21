@@ -1865,11 +1865,8 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
         }
 
         // Issue #89 gap-fill second pass (bounded-window backends only).
-        if (be.vad_slice_cap_seconds() > 0) {
-            const char* gf = getenv("CRISPASR_GAP_FILL");
-            if (!gf || atoi(gf) != 0)
-                crispasr_gap_fill_slice(be, params, samples.data(), (int)samples.size(), SR, sl, segs);
-        }
+        if (crispasr_gap_fill_active(be))
+            crispasr_gap_fill_slice(be, params, samples.data(), (int)samples.size(), SR, sl, segs);
 
         // Issue #267: run external CTC alignment BEFORE diarization so
         // that word timestamps are available when the diarize step splits
@@ -2014,11 +2011,7 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
     split_in.backend_supports_split = backend.supports_split_transcribe();
     split_in.worker_pool_requested = n_workers > 1;
     split_in.return_logits = params.return_logits;
-    {
-        const char* gf = getenv("CRISPASR_GAP_FILL");
-        const bool gap_fill_on = !gf || atoi(gf) != 0;
-        split_in.post_pass_reenters_model = backend.vad_slice_cap_seconds() > 0 && gap_fill_on;
-    }
+    split_in.post_pass_reenters_model = crispasr_gap_fill_active(backend);
     const bool use_split_pipeline = crispasr_split::enabled(split_in, getenv("CRISPASR_SLICE_PIPELINE"));
 
     // Run slices [lo, hi) through the encode ∥ decode pipeline.

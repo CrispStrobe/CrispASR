@@ -24,10 +24,21 @@
 // the covering segment is now split at the recovered range so the output is
 // monotone: head words, recovery, tail words.
 
+//
+// Issue #605: on noisy audio (a game stream) most empty spans are pauses,
+// music and sound effects, and refilling them made the decoder invent words
+// that each became a short subtitle cue. A recovery is now kept only if its
+// mean token confidence clears core_gap_fill::min_run_confidence(), and a
+// recovered word that repeats the first-pass word at the hole's edge is
+// dropped. Whether the pass runs at all is the backend's call
+// (gap_fill_by_default(); Haas-ja shows no #89 drop and defaults off), with
+// CRISPASR_GAP_FILL forcing it either way. See src/core/gap_fill_policy.h.
+
 #pragma once
 
 #include "crispasr_backend.h"
 #include "crispasr_vad.h"
+#include "core/gap_fill_policy.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -190,6 +201,14 @@ inline void crispasr_gap_fill_resolve_overlaps(std::vector<crispasr_segment>& se
     }
 }
 
+// Whether the #89 gap-fill pass runs for this backend: it needs bounded VAD
+// slices, and then follows CRISPASR_GAP_FILL or, unset, the backend's default.
+// One predicate for every call site (CLI slice loop, split-pipeline gate,
+// server), so they cannot disagree.
+inline bool crispasr_gap_fill_active(const CrispasrBackend& be) {
+    return be.vad_slice_cap_seconds() > 0 && core_gap_fill::enabled(be.gap_fill_by_default());
+}
+
 inline void crispasr_gap_fill_slice(CrispasrBackend& be, const whisper_params& params, const float* samples,
                                     int n_samples_total, int sample_rate, const crispasr_audio_slice& sl,
                                     std::vector<crispasr_segment>& segs) {
@@ -198,19 +217,24 @@ inline void crispasr_gap_fill_slice(CrispasrBackend& be, const whisper_params& p
         min_gap_cs = std::max((int64_t)30, (int64_t)atoi(e));
     constexpr int64_t kEdgePadCs = 20;   // extend the refill window slightly
     constexpr int64_t kCoverSlopCs = 30; // words this close bridge a gap
+    const float min_conf = core_gap_fill::min_run_confidence();
 
     const int max_rounds = 2;
     for (int round = 0; round < max_rounds; round++) {
-        // Covered intervals from emitted words (fallback: segment spans).
+        // Covered intervals from emitted words (fallback: segment spans), and
+        // the comparison form of every kept word for the #605 seam guard.
         std::vector<std::pair<int64_t, int64_t>> covered;
+        std::vector<std::pair<int64_t, std::string>> seam;
         for (const auto& seg : segs) {
             if (seg.words.empty()) {
                 if (seg.t1 > seg.t0)
                     covered.push_back({seg.t0, seg.t1});
                 continue;
             }
-            for (const auto& w : seg.words)
+            for (const auto& w : seg.words) {
                 covered.push_back({w.t0, std::max(w.t1, w.t0 + 1)});
+                seam.push_back({w.t0, core_gap_fill::norm_word(w.text)});
+            }
         }
         std::sort(covered.begin(), covered.end());
         std::vector<std::pair<int64_t, int64_t>> merged;
@@ -259,8 +283,13 @@ inline void crispasr_gap_fill_slice(CrispasrBackend& be, const whisper_params& p
                 const size_t first_kept = rec.words.size();
                 for (auto& w : fseg.words) {
                     const int64_t mid = (w.t0 + w.t1) / 2;
-                    if (mid >= g.first - kCoverSlopCs && mid < g.second + kCoverSlopCs && !mid_is_covered(mid))
-                        rec.words.push_back(std::move(w));
+                    if (mid < g.first - kCoverSlopCs || mid >= g.second + kCoverSlopCs || mid_is_covered(mid))
+                        continue;
+                    // #605: the refill re-heard the first-pass word at the
+                    // hole's edge and timed it inside the hole.
+                    if (core_gap_fill::is_seam_duplicate(w.t0, core_gap_fill::norm_word(w.text), seam))
+                        continue;
+                    rec.words.push_back(std::move(w));
                 }
                 // The fill's tokens ride along with the kept words — the
                 // token-level outputs (JSON full, karaoke) read seg.tokens and
@@ -279,9 +308,23 @@ inline void crispasr_gap_fill_slice(CrispasrBackend& be, const whisper_params& p
             }
             if (rec.words.empty())
                 continue;
+            // #605: keep the recovery only if the decoder was sure of it. A
+            // refill of a pause or of game noise decodes at low confidence; a
+            // real #89 drop decodes verbatim. Judged over the whole run, so one
+            // hesitant token does not discard a confident recovery.
+            {
+                std::vector<float> conf;
+                for (const auto& tk : rec.tokens)
+                    if (!core_gap_fill::is_blank(tk.text))
+                        conf.push_back(tk.confidence);
+                if (!core_gap_fill::run_is_confident(conf, min_conf))
+                    continue;
+            }
             rec.text = crispasr_rebuild_text_from_words(rec.words);
             if (rec.text.empty())
                 continue;
+            for (const auto& w : rec.words)
+                seam.push_back({w.t0, core_gap_fill::norm_word(w.text)});
             rec.t0 = rec.words.front().t0;
             rec.t1 = rec.words.back().t1;
             segs.push_back(std::move(rec));

@@ -48,6 +48,13 @@ class WindowMetadataTest(unittest.TestCase):
 '''
         if (ROOT / 'src/core/parakeet_word_ranges.h').exists():
             code += '#include "core/parakeet_word_ranges.h"\n'
+        # #605: the session gap-fill reads its policy from a shared header and
+        # asks the model whether its predictor is KDA (Haas-ja). The fixture has
+        # no model, so it is never KDA.
+        if (ROOT / 'src/core/gap_fill_policy.h').exists():
+            code += '#include "core/gap_fill_policy.h"\n'
+        if 'parakeet_predictor_is_kda' in api:
+            code += 'extern "C" bool parakeet_predictor_is_kda(const struct parakeet_context*) { return false; }\n'
         code += definition(native, 'static bool parakeet_group_words(') + '\n'
         baseline = ROOT / 'tests/fixtures/parakeet-group-08aea3537.inc'
         actual_hash = hashlib.sha256(baseline.read_bytes()).hexdigest()
@@ -235,7 +242,11 @@ extern "C" int compare_grouping() {
         cls.tmp.cleanup()
 
     def read(self, scenario):
-        with patch.dict(os.environ, {'CRISPASR_GAP_FILL': '1', 'CRISPASR_GAP_FILL_MIN_CS': '100'}):
+        # The fixtures pin token bookkeeping, not the #605 confidence gate: their
+        # recovered tokens carry arbitrary probabilities (0.6/0.7), so the gate
+        # is switched off here. test-issue-605-gap-fill-junk covers the gate.
+        with patch.dict(os.environ, {'CRISPASR_GAP_FILL': '1', 'CRISPASR_GAP_FILL_MIN_CS': '100',
+                                     'CRISPASR_GAP_FILL_MIN_CONF': '0'}):
             handle = self.lib.inject(scenario)
         try:
             return self.session._read_result(handle)[0]

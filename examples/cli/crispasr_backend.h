@@ -380,6 +380,13 @@ public:
     // the VAD path when the user didn't pass an explicit --chunk-seconds.
     virtual int vad_slice_cap_seconds() const { return 0; }
 
+    // Whether the issue #89 gap-fill second pass runs by default on the capped
+    // VAD slices (crispasr_gap_fill.h). It exists for parakeet-ja's encoder,
+    // which blanks utterances inside a slice; a bounded-window model without
+    // that defect only gains noise from it (#605). CRISPASR_GAP_FILL overrides
+    // the default either way.
+    virtual bool gap_fill_by_default() const { return vad_slice_cap_seconds() > 0; }
+
     // ISO-639-1 code of the ONLY language this backend can produce, or nullptr
     // if it is multilingual / language-agnostic (the default). A monolingual
     // backend (e.g. moonshine, English-only) returns its code so the CLI can

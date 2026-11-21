@@ -173,7 +173,7 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | `CRISPASR_STREAM_TIMING` | `1` prints one stderr line per streaming step: audio taken in, total step cost, VAD cost, recogniser cost and seconds decoded. A step that costs more than the audio it took in is a stream falling behind. |
 | `CRISPASR_TRANSLATE_SYNC` | Live translation: run the translator on the streaming thread instead of its own. Deterministic event order for tests and debugging; the recogniser then waits for every translation. |
 | `CRISPASR_TRANSLATE_CPU` | Live translation: keep the translator off the GPU the recogniser is using (an A/B switch for GPU contention). |
-| `CRISPASR_GAP_FILL` / `_GAP_FILL_MIN_CS` | Re-transcribe spans a first pass left empty (long audio); on by default for parakeet, threshold non-JA 300 cs / JA 100 cs. |
+| `CRISPASR_GAP_FILL` / `_GAP_FILL_MIN_CS` / `_GAP_FILL_MIN_CONF` | Re-transcribe spans a first pass left empty (long audio); on by default for parakeet except Haas-ja (`1` forces it), threshold non-JA 300 cs / JA 100 cs. JA recoveries are kept only above mean token confidence 0.85 (`_MIN_CONF`, `0` keeps all) (#605). |
 
 ### G2P / phonemizer
 

@@ -3263,6 +3263,32 @@ catch_discover_tests(test-issue-356-gap-fill-overlap
     PROPERTIES LABELS "unit;gap-fill;issue-356"
 )
 
+# ─── test-issue-605-gap-fill-junk — issue #605 regression guard
+#
+# Pins the gap-fill confidence gate and seam guard: a refill of a pause or of
+# game noise decodes at low token confidence and must not come back as a
+# subtitle; a confident #89 recovery still must; a refill that repeats the
+# first-pass word at the hole's edge is a duplicate. Scripted fake backend with
+# preset confidences; pure CPU, no model load.
+add_executable(test-issue-605-gap-fill-junk
+    test-issue-605-gap-fill-junk.cpp
+)
+target_include_directories(test-issue-605-gap-fill-junk PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/examples
+    ${PROJECT_SOURCE_DIR}/examples/cli
+)
+target_link_libraries(test-issue-605-gap-fill-junk PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+)
+catch_discover_tests(test-issue-605-gap-fill-junk
+    TEST_SPEC "[issue-605]"
+    PROPERTIES LABELS "unit;gap-fill;issue-605"
+)
+
 # ─── test-issue-356-order-guard — issue #356 time-order guard
 #
 # Pins crispasr_first_backward_segment, the check merge_segments and the server
@@ -6323,6 +6349,19 @@ target_include_directories(test-core-env-gate PRIVATE ${PROJECT_SOURCE_DIR}/src 
 target_link_libraries(test-core-env-gate PRIVATE Catch2::Catch2WithMain)
 catch_discover_tests(test-core-env-gate
     TEST_SPEC "[env-gate]"
+    PROPERTIES
+        LABELS unit
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
+# ─── test-core-gap-fill-policy — src/core/gap_fill_policy.h, the #89 gap-fill
+# decisions shared by the CLI/server pass and the session C ABI (#605): the
+# CRISPASR_GAP_FILL tri-state, the confidence gate and the seam-duplicate rule.
+add_executable(test-core-gap-fill-policy test-core-gap-fill-policy.cpp)
+target_include_directories(test-core-gap-fill-policy PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test-core-gap-fill-policy PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-gap-fill-policy
+    TEST_SPEC "[gap-fill-policy]"
     PROPERTIES
         LABELS unit
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"

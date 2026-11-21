@@ -848,11 +848,8 @@ static transcription_result do_transcribe(const form_part& audio_file, CrispasrB
 
             // Issue #89 gap-fill second pass (bounded-window backends only) —
             // same policy as the CLI dispatcher (crispasr_gap_fill.h).
-            if (vad_cap > 0) {
-                const char* gf = getenv("CRISPASR_GAP_FILL");
-                if (!gf || atoi(gf) != 0)
-                    crispasr_gap_fill_slice(*backend, rp, pcmf32.data(), n_samples, SR, sl, segs);
-            }
+            if (vad_cap > 0 && crispasr_gap_fill_active(*backend))
+                crispasr_gap_fill_slice(*backend, rp, pcmf32.data(), n_samples, SR, sl, segs);
 
             if (want_align) {
                 for (auto& seg : segs) {

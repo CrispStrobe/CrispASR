@@ -31,3 +31,16 @@ are supported explicit aliases. Automatic backend detection uses GGUF
 architecture metadata; the alias entrypoint and registry are covered by
 `tests/test_haas_dispatch.py` and `tests/test-registry.cpp`. These are dispatch
 tests, not a general accuracy benchmark for every audio domain or quantization.
+
+## Long audio and gap-fill
+
+Haas-ja uses the same Japanese long-audio path as parakeet-ja: VAD slices
+capped at 12 s, each decoded in one pass. The gap-fill second pass, which
+re-transcribes spans a slice left empty, is **off by default** for Haas-ja.
+That pass exists because parakeet-ja's encoder blanks utterances inside a
+slice (#89). Haas-ja does not: on the #89 podcast it reaches 97 % content
+recall without gap-fill, and the pass adds nothing there. On noisy audio such
+as a game stream, the pass only re-transcribed pauses and sound effects into
+short, wrong subtitles (#605). Set `CRISPASR_GAP_FILL=1` to run it anyway; it
+then keeps only recoveries that clear the confidence gate
+(`CRISPASR_GAP_FILL_MIN_CONF`, default 0.85).

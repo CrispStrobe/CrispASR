@@ -3844,6 +3844,10 @@ extern "C" bool parakeet_has_ctc(struct parakeet_context* ctx) {
     return ctx && ctx->model.has_ctc;
 }
 
+extern "C" bool parakeet_predictor_is_kda(const struct parakeet_context* ctx) {
+    return ctx && ctx->model.is_kda;
+}
+
 // Issue #257: switch the FastConformer encoder to local (windowed) attention at
 // inference time — the equivalent of NeMo's
 // `model.change_attention_model("rel_pos_local_attn", [left, right])`. Bounds

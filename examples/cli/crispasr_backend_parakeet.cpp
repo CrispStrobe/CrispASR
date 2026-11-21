@@ -354,6 +354,14 @@ public:
         return cap;
     }
 
+    bool gap_fill_by_default() const override {
+        // Issue #605: Haas-ja (KDA predictor) shares parakeet-ja's JA slice
+        // path but not its #89 defect — 97 % recall on the #89 podcast without
+        // gap-fill, nothing gained with it, and only invented words on noisy
+        // audio. CRISPASR_GAP_FILL=1 still forces the pass.
+        return vad_slice_cap_seconds() > 0 && !(ctx_ && parakeet_predictor_is_kda(ctx_));
+    }
+
     void shutdown() override {
         if (ctx_) {
             parakeet_free(ctx_);

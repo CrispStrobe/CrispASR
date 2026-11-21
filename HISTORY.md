@@ -1,3 +1,17 @@
+## 2026-11-21 — Gap-fill stops inventing subtitles on noisy JA audio (#605)
+
+- **Report:** Haas-ja on a 3-minute game stream (`--vad`, FireRed VAD) gave 45 cues with gap-fill against 19 without. Many were short and wrong: "隠しのように" in a pause, a 9 s "ーーっ。っ。" over game audio, "はい" doubled as "はい。".
+- **Cause:** the #89 gap-fill re-transcribes every >= 1 s empty span in a slice. On parakeet-ja that recovers speech its encoder blanked; on this audio the spans were pauses and sound effects, and a short window of noise makes the TDT decoder invent words. The CLI pass also lacked the seam guard the library's non-JA repair already had.
+- **Fix** (shared `src/core/gap_fill_policy.h`, used by the CLI/server pass and the session C ABI):
+  - Haas-ja (KDA predictor, new `parakeet_predictor_is_kda()`) defaults gap-fill off. `CRISPASR_GAP_FILL=1` forces it.
+  - A recovered run is kept only if its mean token confidence reaches 0.85 (`CRISPASR_GAP_FILL_MIN_CONF`). First-pass words sit at median 0.997, the junk at 0.1-0.6.
+  - A recovered word repeating a kept word within 0.5 s (punctuation-insensitive) is dropped.
+- **Evidence** (bigram recall / precision vs whisper-large-v3-turbo, `tools/asr_coverage_score.py --strip-latin --reading`, M1):
+  - #605 clip, CLI: Haas-ja default = the reporter's `GAP_FILL=0` output byte for byte (75.7 / 85.0, 19 cues; was 77.7 / 75.0, 49 cues). Forced on: 76.8 / 84.9, 21 cues. parakeet-ja: 76.0 / 75.0 → 75.5 / 77.8.
+  - #605 clip, session ABI: Haas-ja 79.0 / 67.1 → 78.2 / 83.7; parakeet-ja 78.7 / 59.6 → 77.4 / 68.8.
+  - #89 podcast (60 s / 120 s): parakeet-ja keeps every recovery (95.7 / 93.4 and 96.0 / 92.6, unchanged). Haas-ja without gap-fill 96.9 / 89.7 and 96.8 / 90.5, the same as with it.
+- **Tests:** `test-issue-605-gap-fill-junk` (scripted backend; failed before the fix on the pause junk and the seam duplicate) and `test-core-gap-fill-policy`.
+
 ## 2026-11-20 — `--punc-model pcs` downloads the mixed-precision PCS file
 
 - **Change:** `pcs` now resolves to `pcs-xlmr-base-q4_k-mixed.gguf`, pinned to `cstr/pcs-xlmr-base-GGUF@a685c2ea` (SHA-256 `341c26b8…2839`, 167 MB). The file is Q4_K + imatrix with encoder layer 0 and the truecase head at Q8_0. The previous plain-Q4_K default stays selectable as `pcs-q4k`; the Q4_K + imatrix file is `pcs-q4k-imatrix`.

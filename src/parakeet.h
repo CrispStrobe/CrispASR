@@ -149,6 +149,10 @@ void parakeet_set_ctc_mode(struct parakeet_context* ctx, bool ctc);
 // next transcribe.
 void parakeet_set_att_context(struct parakeet_context* ctx, int left, int right);
 bool parakeet_has_ctc(struct parakeet_context* ctx);
+// True for a model whose prediction network is the Kimi Delta Attention stack
+// (Haas-ja) rather than the NeMo LSTM. Used to keep parakeet-ja-specific
+// repairs (#89 gap-fill) off models that do not share its encoder defect.
+bool parakeet_predictor_is_kda(const struct parakeet_context* ctx);
 
 // CTC-WS hotword phrase boost (PLAN #98). Builds an Aho-Corasick trie
 // from the hotword strings; during CTC/TDT decode, tokens that continue
