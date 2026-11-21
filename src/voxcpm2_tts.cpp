@@ -378,6 +378,11 @@ struct voxcpm2_context {
     ggml_backend_buffer_t gpu_weight_buf = nullptr;
     std::map<std::string, ggml_tensor*> gpu_tensors;
     bool has_gpu_weights = false;
+    // Discrete GPU: the transformer block tensors (".blk.") live only in
+    // gpu_tensors; ctx->tensors maps them to the GPU copies, so their ->data
+    // is not host memory. Saves a full host copy of the LMs (~RAM = VRAM).
+    // CRISPASR_VOXCPM2_HOST_WEIGHTS=1 restores the full host copy.
+    bool host_blk_dropped = false;
 
     // Runtime params
     int n_threads = 4;
@@ -872,7 +877,17 @@ static void bidir_attn_full(const float* x_in, int T, int d, ggml_tensor* q_w, g
 // TSLM layer — single-token causal decode with KV cache
 // ---------------------------------------------------------------------------
 
+static void vox_abort_no_host_blk(const char* fn) {
+    fprintf(stderr,
+            "voxcpm2: %s needs host copies of the block weights, which are GPU-only; "
+            "rerun with CRISPASR_VOXCPM2_HOST_WEIGHTS=1\n",
+            fn);
+    abort();
+}
+
 static void tslm_layer_step(voxcpm2_context* ctx, int layer, float* hidden, int pos, ggml_backend_t cpu_be) {
+    if (ctx->host_blk_dropped)
+        vox_abort_no_host_blk(__func__);
     const vox_hparams& hp = ctx->hp;
     const vox_lm_layer& L = ctx->weights.tslm_layers[layer];
     int d = (int)hp.tslm_d_model;
@@ -912,6 +927,8 @@ static void tslm_layer_step(voxcpm2_context* ctx, int layer, float* hidden, int 
 // ---------------------------------------------------------------------------
 
 static void ralm_layer_step(voxcpm2_context* ctx, int layer, float* hidden, ggml_backend_t cpu_be) {
+    if (ctx->host_blk_dropped)
+        vox_abort_no_host_blk(__func__);
     const vox_hparams& hp = ctx->hp;
     const vox_lm_layer& L = ctx->weights.ralm_layers[layer];
     int d = (int)hp.ralm_d_model;
@@ -2041,6 +2058,8 @@ static std::vector<float> fsq_forward(voxcpm2_context* ctx, const float* x, ggml
 // ---------------------------------------------------------------------------
 
 static std::vector<float> locenc_forward(voxcpm2_context* ctx, const float* patch, ggml_backend_t cpu_be) {
+    if (ctx->host_blk_dropped)
+        vox_abort_no_host_blk(__func__);
     const vox_hparams& hp = ctx->hp;
     const vox_weights& W = ctx->weights;
     int d = (int)hp.locenc_d_model; // 1024
@@ -2421,6 +2440,8 @@ static std::vector<float> sinusoidal_time_emb(float t_scalar, int dim) {
 
 static std::vector<float> locdit_forward(voxcpm2_context* ctx, const float* x_raw, const float* mu, float t_scalar,
                                          const float* cond_raw, float dt_scalar, ggml_backend_t cpu_be) {
+    if (ctx->host_blk_dropped)
+        vox_abort_no_host_blk(__func__);
     const vox_hparams& hp = ctx->hp;
     const vox_weights& W = ctx->weights;
     int d = (int)hp.locdit_d_model; // 1024
@@ -6127,6 +6148,10 @@ static std::vector<int32_t> vox_tokenize(const vox_tokenizer& tok, const std::st
 // Model loading — two-pass GGUF
 // ---------------------------------------------------------------------------
 
+static bool vox_is_host_tensor(const char* name, void*) {
+    return strstr(name, ".blk.") == nullptr;
+}
+
 static bool vox_is_vae_tensor(const char* name, void*) {
     return name && std::strncmp(name, "vae.", 4) == 0;
 }
@@ -6362,16 +6387,44 @@ static bool vox_load_weights(voxcpm2_context* ctx, const char* path) {
             weight_backend = ctx->backend_cpu;
         }
     }
+    // Discrete GPU: load every tensor straight to the GPU, and only the
+    // non-block tensors (embeddings, norms, projections, heads, VAE) to the
+    // host for the CPU-side paths.
+    const char* host_env = getenv("CRISPASR_VOXCPM2_HOST_WEIGHTS");
+    bool split_host =
+        !ctx->vae_only && ctx->backend && weight_backend != ctx->backend && !(host_env && host_env[0] == '1');
+    if (split_host) {
+        WeightLoad gl;
+        if (load_weights(path, ctx->backend, "voxcpm2", gl)) {
+            ctx->gpu_ggml_ctx = gl.ctx;
+            ctx->gpu_weight_buf = gl.buf;
+            ctx->gpu_tensors = std::move(gl.tensors);
+        } else {
+            fprintf(stderr, "voxcpm2: GPU weight load failed — keeping a full host copy\n");
+            split_host = false;
+        }
+    }
     WeightLoad wl;
-    const bool loaded = ctx->vae_only
-                            ? load_weights_filtered(path, weight_backend, vox_is_vae_tensor, nullptr, "voxcpm2-vae", wl)
-                            : load_weights(path, weight_backend, "voxcpm2", wl);
+    bool loaded;
+    if (ctx->vae_only)
+        loaded = load_weights_filtered(path, weight_backend, vox_is_vae_tensor, nullptr, "voxcpm2-vae", wl);
+    else if (split_host)
+        loaded = load_weights_filtered(path, weight_backend, vox_is_host_tensor, nullptr, "voxcpm2", wl);
+    else
+        loaded = load_weights(path, weight_backend, "voxcpm2", wl);
     if (!loaded)
         return false;
 
     ctx->ggml_ctx = wl.ctx;
     ctx->weight_buf = wl.buf;
     ctx->tensors = std::move(wl.tensors);
+
+    if (split_host) {
+        for (const auto& [name, t] : ctx->gpu_tensors)
+            if (!ctx->tensors.count(name))
+                ctx->tensors[name] = t;
+        ctx->host_blk_dropped = true;
+    }
 
     auto& T = ctx->tensors;
     vox_weights& W = ctx->weights;
@@ -7329,24 +7382,30 @@ static struct voxcpm2_context* voxcpm2_init_internal(const char* path_model, str
     if (needs_gpu_mirror) {
         ggml_backend_buffer_type_t gpu_buft = ggml_backend_get_default_buffer_type(ctx->backend);
 
+        // vox_load_weights normally loads the GPU copy directly (preloaded);
+        // otherwise mirror the full host copy.
+        const bool preloaded = ctx->gpu_weight_buf != nullptr;
+
         // 1. Allocate a GPU ggml context with mirror tensors.
-        size_t ctx_size = ctx->tensors.size() * ggml_tensor_overhead() + 1024;
-        ggml_init_params ip = {ctx_size, nullptr, /*no_alloc=*/true};
-        ctx->gpu_ggml_ctx = ggml_init(ip);
-        if (!ctx->gpu_ggml_ctx) {
-            fprintf(stderr, "voxcpm2: failed to create GPU mirror context\n");
-            voxcpm2_free(ctx);
-            return nullptr;
-        }
+        if (!preloaded) {
+            size_t ctx_size = ctx->tensors.size() * ggml_tensor_overhead() + 1024;
+            ggml_init_params ip = {ctx_size, nullptr, /*no_alloc=*/true};
+            ctx->gpu_ggml_ctx = ggml_init(ip);
+            if (!ctx->gpu_ggml_ctx) {
+                fprintf(stderr, "voxcpm2: failed to create GPU mirror context\n");
+                voxcpm2_free(ctx);
+                return nullptr;
+            }
 
-        for (auto& [name, cpu_t] : ctx->tensors) {
-            ggml_tensor* gpu_t = ggml_dup_tensor(ctx->gpu_ggml_ctx, cpu_t);
-            ggml_set_name(gpu_t, name.c_str());
-            ctx->gpu_tensors[name] = gpu_t;
-        }
+            for (auto& [name, cpu_t] : ctx->tensors) {
+                ggml_tensor* gpu_t = ggml_dup_tensor(ctx->gpu_ggml_ctx, cpu_t);
+                ggml_set_name(gpu_t, name.c_str());
+                ctx->gpu_tensors[name] = gpu_t;
+            }
 
-        // 2. Allocate GPU buffer for all mirror tensors.
-        ctx->gpu_weight_buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx->gpu_ggml_ctx, gpu_buft);
+            // 2. Allocate GPU buffer for all mirror tensors.
+            ctx->gpu_weight_buf = ggml_backend_alloc_ctx_tensors_from_buft(ctx->gpu_ggml_ctx, gpu_buft);
+        }
         if (!ctx->gpu_weight_buf) {
             fprintf(stderr, "voxcpm2: failed to allocate GPU weight buffer — "
                             "falling back to CPU\n");
@@ -7358,7 +7417,7 @@ static struct voxcpm2_context* voxcpm2_init_internal(const char* path_model, str
             // 3. Copy data CPU → GPU.
             for (auto& [name, cpu_t] : ctx->tensors) {
                 auto it = ctx->gpu_tensors.find(name);
-                if (it != ctx->gpu_tensors.end()) {
+                if (!preloaded && it != ctx->gpu_tensors.end()) {
                     ggml_backend_tensor_copy(cpu_t, it->second);
                 }
             }

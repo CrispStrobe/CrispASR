@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REF = "diag/voxcpm2-bench"
+REF = "diag/voxcpm2-ram"
 REPO = Path("/tmp/CrispASR")
 OUT = Path("/kaggle/working/out")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -32,8 +32,11 @@ gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,compute_cap", "--format=cs
                      capture_output=True, text=True).stdout.strip()
 (OUT / "gpu.txt").write_text(f"{gpu} arch={arch}\n")
 print("GPU", gpu, "arch", arch, flush=True)
-env = dict(os.environ, HEAVY_OUT=str(OUT), HEAVY_SCRATCH="/tmp/scr")
-with kh.build_heartbeat("voxcpm2-impl-bench"):
-    r = subprocess.run([sys.executable, str(REPO / "tools/ci-heavy/voxcpm2_impl_bench.py"),
-                        "device=cuda", "runs=5", f"cuda_arch={arch}"], env=env)
-print("bench rc", r.returncode, flush=True)
+# crispasr only: default (block weights GPU-only) vs CRISPASR_VOXCPM2_HOST_WEIGHTS=1 (old full host copy)
+for tag, extra in [("gpu-only", {}), ("host-copy", {"CRISPASR_VOXCPM2_HOST_WEIGHTS": "1"})]:
+    (OUT / tag).mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, HEAVY_OUT=str(OUT / tag), HEAVY_SCRATCH="/tmp/scr", **extra)
+    with kh.build_heartbeat("voxcpm2-impl-bench"):
+        r = subprocess.run([sys.executable, str(REPO / "tools/ci-heavy/voxcpm2_impl_bench.py"),
+                            "device=cuda", "runs=3", "impls=crispasr", f"cuda_arch={arch}"], env=env)
+    print(tag, "bench rc", r.returncode, flush=True)
