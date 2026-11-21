@@ -22,7 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sweep_controls_common as C  # noqa: E402
 
 TEXT = "Hello, this is a short test sentence."
-SEEDS = list(range(1, 11))
+# args: "seeds=A-B" and "arms=0,2,4" (indices into ARMS) select a subset.
+_ARG = dict(a.split("=", 1) for a in sys.argv[1:] if "=" in a)
+_lo, _hi = (int(x) for x in _ARG.get("seeds", "1-10").split("-"))
+SEEDS = list(range(_lo, _hi + 1))
 ACOUSTIC_F16 = [r"^(locenc|locdit|ralm|fsq|stop|proj)\.=f16"]
 ARMS = {
     "f16": None,
@@ -33,6 +36,9 @@ ARMS = {
     "q4_k tslm only": ("q4_k", ACOUSTIC_F16),
     "q8_0 tslm only (omni)": ("q8_0", ACOUSTIC_F16),
 }
+if "arms" in _ARG:
+    _keep = {int(i) for i in _ARG["arms"].split(",")}
+    ARMS = {k: v for i, (k, v) in enumerate(ARMS.items()) if i in _keep}
 
 
 def norm(s):
