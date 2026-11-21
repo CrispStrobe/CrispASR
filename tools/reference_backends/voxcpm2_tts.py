@@ -151,6 +151,10 @@ def dump(
     model = VoxCPM2Model.from_local(str(model_dir), optimize=False, device=device)
     if use_f32:
         model = model.float()
+        # voxcpm casts inputs and KV caches to config.dtype, so .float() alone
+        # leaves bf16 activations meeting f32 weights ("mat1 and mat2 must have
+        # the same dtype").
+        model.config.dtype = "float32"
         print("  forced F32 inference mode (VOXCPM2_F32=1)")
     model.eval()
 

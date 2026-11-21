@@ -38,6 +38,9 @@ seeds = [int(s) for s in sys.argv[5].split(",")]
 m = VoxCPM2Model.from_local(model_dir, optimize=False, device="cpu")
 if mode == "f32":
     m = m.float()
+    m.config.dtype = "float32"
+    m.base_lm.setup_cache(1, m.config.max_length, "cpu", torch.float32)
+    m.residual_lm.setup_cache(1, m.config.max_length, "cpu", torch.float32)
 m.eval()
 sr = getattr(m, "sample_rate", None) or getattr(m.audio_vae, "sample_rate", 48000)
 res = {"dtype": str(next(m.parameters()).dtype), "sr": sr}
@@ -69,9 +72,9 @@ def main():
     wm = C.hf("ggerganov/whisper.cpp", "ggml-base.en.bin", None)
     ggufs = {q: C.hf(GGUF_REPO, f"voxcpm2-{q}.gguf", None) for q in ("f16", "q4_k")}
 
-    # 3. C++ CLI arms
+    # 3. C++ CLI arms (args "ref-only" skips them on a rerun)
     cpp = {}
-    for q, g in ggufs.items():
+    for q, g in ([] if "ref-only" in sys.argv[1:] else ggufs.items()):
         for s in SEEDS:
             wav = C.SCRATCH / f"cpp-{q}-s{s}.wav"
             r = C.run([b, "--backend", "voxcpm2", "-m", g, "--tts", TEXT, "--tts-output", wav, "--seed", str(s),
@@ -89,7 +92,7 @@ def main():
                 ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match"])
     (C.SCRATCH / "bp.py").write_text(BLUEPRINT)
     bp = {}
-    for mode in ("f32", "native"):
+    for mode in (("f32",) if "ref-only" in sys.argv[1:] else ("f32", "native")):
         r = C.run([py, C.SCRATCH / "bp.py", md, TEXT, C.SCRATCH, mode, ",".join(map(str, SEEDS))],
                   C.OUT / f"blueprint-{mode}.log", check=False, timeout=7200)
         m = re.search(r"^@@(.*)$", r.stdout, re.M)
