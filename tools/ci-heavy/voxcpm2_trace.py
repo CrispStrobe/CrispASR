@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import sweep_controls_common as C  # noqa: E402
 
 TEXT = "Hello, this is a short test sentence."
-SEEDS = [2, 42, 7]
+SEEDS = list(range(1, 11)) if "seeds10" in sys.argv[1:] else [2, 42, 7]
 HF_REV = "7936080b41163874f38610f46f438e2c0757f9fd"
 GGUF_REPO = "cstr/voxcpm2-GGUF"
 
@@ -74,7 +74,7 @@ def main():
 
     # 3. C++ CLI arms (args "ref-only" skips them on a rerun)
     cpp = {}
-    for q, g in ([] if "ref-only" in sys.argv[1:] else ggufs.items()):
+    for q, g in ([] if {"ref-only", "seeds10"} & set(sys.argv[1:]) else ggufs.items()):
         for s in SEEDS:
             wav = C.SCRATCH / f"cpp-{q}-s{s}.wav"
             r = C.run([b, "--backend", "voxcpm2", "-m", g, "--tts", TEXT, "--tts-output", wav, "--seed", str(s),
@@ -92,7 +92,8 @@ def main():
                 ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match"])
     (C.SCRATCH / "bp.py").write_text(BLUEPRINT)
     bp = {}
-    for mode in (("f32",) if "ref-only" in sys.argv[1:] else ("f32", "native")):
+    modes = ("f32", "native") if "seeds10" in sys.argv[1:] else (("f32",) if "ref-only" in sys.argv[1:] else ("f32", "native"))
+    for mode in modes:
         r = C.run([py, C.SCRATCH / "bp.py", md, TEXT, C.SCRATCH, mode, ",".join(map(str, SEEDS))],
                   C.OUT / f"blueprint-{mode}.log", check=False, timeout=7200)
         m = re.search(r"^@@(.*)$", r.stdout, re.M)
@@ -105,6 +106,17 @@ def main():
         bp[mode] = d
         res["blueprint"] = bp
         C.save(res)
+
+    if "seeds10" in sys.argv[1:]:
+        lines = ["## VoxCPM2 blueprint, seeds 1-10", ""]
+        for mode, d in bp.items():
+            ok = sum(re.sub(r"[^a-z ]", "", (d[str(s)]["asr"] or "").lower()).split()
+                     == re.sub(r"[^a-z ]", "", TEXT.lower()).split() for s in SEEDS if str(s) in d)
+            lines.append(f"- {mode} ({d.get('dtype')}): exact {ok}/{len(SEEDS)}")
+            lines += [f"  - s{s}: {d[str(s)]['seconds']} s `{d[str(s)]['asr']}`" for s in SEEDS if str(s) in d]
+        C.summary(lines)
+        print("\n".join(lines))
+        return 0
 
     # 2. Stage diff (reference archive in F32, seed 42)
     ref = C.SCRATCH / "voxcpm2-ref.gguf"
