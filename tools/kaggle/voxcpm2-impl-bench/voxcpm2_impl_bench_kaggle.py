@@ -27,6 +27,7 @@ if tok:
     os.environ["HF_TOKEN"] = tok
 kh.install_build_toolchain()
 arch = kh.detect_cuda_arch()
+kh.cuda_build_flags(arch)  # puts the CUDA stubs on LIBRARY_PATH for all three builds
 gpu = subprocess.run(["nvidia-smi", "--query-gpu=name,compute_cap", "--format=csv,noheader"],
                      capture_output=True, text=True).stdout.strip()
 (OUT / "gpu.txt").write_text(f"{gpu} arch={arch}\n")

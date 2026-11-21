@@ -68,7 +68,7 @@ def hf(repo, f):
 def cmake_build(src, bdir, flags, targets, tag):
     gen = ["-G", "Ninja"] if subprocess.run(["which", "ninja"], capture_output=True).returncode == 0 else []
     run(["cmake", "-S", src, "-B", bdir, *gen, "-DCMAKE_BUILD_TYPE=Release", *flags], OUT / f"cmake-{tag}.log")
-    run(["cmake", "--build", bdir, "-j", NT, "--target", *targets], OUT / f"build-{tag}.log", timeout=7200)
+    run(["cmake", "--build", bdir, "-j", "2" if DEVICE == "cuda" else NT, "--target", *targets], OUT / f"build-{tag}.log", timeout=7200)
 
 
 def clone(url, d):
@@ -81,6 +81,11 @@ def cuda_flags(key):
     if DEVICE != "cuda":
         return []
     f = {"crispasr": ["-DGGML_CUDA=ON"], "omni": ["-DGGML_CUDA=ON"], "vcpp": ["-DVOXCPM_CUDA=ON"]}[key]
+    # Same as kaggle_harness.cuda_build_flags: no-VMM (no CUDA::cuda_driver link,
+    # which Kaggle's CUDA 13 toolkit cannot resolve), explicit nvcc, pinned arch.
+    f += ["-DGGML_CUDA_NO_VMM=ON"]
+    if Path("/usr/local/cuda/bin/nvcc").is_file():
+        f += ["-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc"]
     return f + ([f"-DCMAKE_CUDA_ARCHITECTURES={CUDA_ARCH}"] if CUDA_ARCH else [])
 
 
