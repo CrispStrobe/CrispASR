@@ -1,3 +1,8 @@
+## 2026-11-21 — Haas-ja: subtitle-sized segments within a 30 s chunk (#605)
+
+- **Regression caught before release:** with the upstream long-form recipe (`ba4aec81`), each 30 s chunk came back as one segment, so `--output-srt` wrote 24-29 s cues (7 on the #605 file). With `--vad` the 30 s slices did the same (up to 25 s). The 12 s VAD slices used to double as cue boundaries.
+- **Fix:** `parakeet_cue_starts` cuts a chunk's words into segments at pauses of >= 0.6 s and before 12 s. Each segment's text is its own tokens concatenated, as the decoder builds the full text, so Japanese gets no spaces and the transcript is byte-identical. #605 file: 27 cues, median 1.4 s, max 9.7 s without VAD; 29 cues, max 8.9 s with `--vad`. Session C ABI: same 27 segments.
+
 ## 2026-11-21 — Haas-ja: byte-fallback kanji restored; accuracy verified against the original model (#605)
 
 - **Bug:** Haas-ja's SentencePiece vocabulary spells kanji outside its 3,072 pieces as `<0xHH>` byte pieces (256 of them; parakeet-ja has none). `spiece_to_text` treated every `<...>` piece as a control token, so those characters vanished: 骨董品 → 骨品, and 娯, 徘徊, 焉, 竣, 踵, 癌, 塵 were lost. The new `core_spm::piece_to_text` (`src/core/spm_piece.h`) decodes byte pieces to their raw byte; consecutive tokens reassemble the character. `test-core-spm-piece` failed on the old behaviour.

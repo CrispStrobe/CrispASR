@@ -66,6 +66,11 @@ each cut moved to the quietest 0.1 s within 2 s of its target, and every chunk
 is decoded in one pass. No VAD is applied unless you pass `--vad`; then VAD
 slices are capped at 30 s, the longest utterance the model was trained on.
 
+Each chunk is decoded as a whole, but its transcript is split into output
+segments (subtitle cues) at pauses of 0.6 s or more between words, and before
+a segment would run past 12 s. On the #605 recording that gives 27 cues with
+a median of 1.4 s and none longer than 9.7 s.
+
 parakeet-ja's workarounds (VAD forced on, 12 s slices, the gap-fill second
 pass) were built for an encoder defect Haas-ja does not have (#89). On a noisy
 3-minute game stream (#605) they cost about 5 points of content recall, because

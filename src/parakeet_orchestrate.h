@@ -97,6 +97,34 @@ inline std::vector<std::pair<int, int>> parakeet_quiet_point_bounds(const float*
     return bounds;
 }
 
+// Haas-ja output segments (#605). A 30 s chunk decodes as one result, which
+// would make one 30 s subtitle cue. Cues are cut at pauses between words of
+// at least kHaasCuePauseCs, and before a cue would run past kHaasCueMaxCs (the
+// length the old 12 s VAD slices gave). Pure boundary computation over
+// ascending word times (centiseconds): returns the index of each cue's first
+// word; every cue holds at least one word.
+inline constexpr int64_t kHaasCuePauseCs = 60;
+inline constexpr int64_t kHaasCueMaxCs = 1200;
+
+inline std::vector<int> parakeet_cue_starts(const std::vector<int64_t>& word_t0, const std::vector<int64_t>& word_t1,
+                                            int64_t pause_cs = kHaasCuePauseCs, int64_t max_cs = kHaasCueMaxCs) {
+    std::vector<int> starts;
+    const size_t n = std::min(word_t0.size(), word_t1.size());
+    if (n == 0)
+        return starts;
+    starts.push_back(0);
+    int64_t cue_t0 = word_t0[0];
+    for (size_t i = 1; i < n; ++i) {
+        const bool pause = word_t0[i] - word_t1[i - 1] >= pause_cs;
+        const bool too_long = word_t1[i] - cue_t0 > max_cs;
+        if (pause || too_long) {
+            starts.push_back((int)i);
+            cue_t0 = word_t0[i];
+        }
+    }
+    return starts;
+}
+
 // Neutral, surface-agnostic segment (subset both crispasr_segment and
 // crispasr_session_seg can be built from).
 struct parakeet_seg {

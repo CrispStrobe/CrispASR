@@ -93,3 +93,28 @@ TEST_CASE("haas split: long audio is covered without gaps", "[unit][haas-split]"
                                                   {2306400, 2755200},
                                                   {2755200, 2896000}});
 }
+
+// Subtitle cues inside a chunk (#605): split at a pause of >= 0.6 s, and before
+// a cue would run past 12 s; never an empty cue.
+TEST_CASE("haas cues: split at pauses and at the length cap", "[unit][haas-split]") {
+    // words: 0-50, 55-100 | pause 70 cs | 170-220
+    REQUIRE(parakeet_cue_starts({0, 55, 170}, {50, 100, 220}) == std::vector<int>{0, 2});
+    // a 59 cs gap is not a pause
+    REQUIRE(parakeet_cue_starts({0, 109}, {50, 150}) == std::vector<int>{0});
+    // continuous speech: cut before the cue would pass 12 s
+    std::vector<int64_t> t0, t1;
+    for (int i = 0; i < 40; ++i) {
+        t0.push_back(i * 100);
+        t1.push_back(i * 100 + 90);
+    }
+    const auto s = parakeet_cue_starts(t0, t1);
+    REQUIRE(s.front() == 0);
+    for (size_t k = 0; k < s.size(); ++k) {
+        const int last = k + 1 < s.size() ? s[k + 1] - 1 : 39;
+        REQUIRE(t1[(size_t)last] - t0[(size_t)s[k]] <= kHaasCueMaxCs);
+        REQUIRE(last >= s[k]);
+    }
+    // one word longer than the cap still gets its own cue
+    REQUIRE(parakeet_cue_starts({0, 10}, {5, 2000}) == std::vector<int>{0, 1});
+    REQUIRE(parakeet_cue_starts({}, {}).empty());
+}
