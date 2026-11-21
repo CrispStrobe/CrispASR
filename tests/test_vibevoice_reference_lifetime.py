@@ -15,6 +15,9 @@ def source():
     helpers = adapter[adapter.index('static bool ends_with_ci'):adapter.index('static std::vector<float> resample')]
     method = adapter[adapter.index('    std::vector<float> synthesize('):adapter.index('    void shutdown() override')]
     init = adapter[adapter.index('    bool init('):adapter.index('    std::vector<crispasr_segment> transcribe(')]
+    # #589: the checkpoint, not the alias, decides whether a voice is required.
+    start = adapter.index('    bool generic_voice_ok() const {')
+    generic = adapter[start:adapter.index('\n    }', start) + 6] + '\n'
     runtime = (ROOT / 'src/vibevoice.cpp').read_text()
     start = runtime.index('extern "C" void vibevoice_set_reference_wav(')
     setter = runtime[start:runtime.index('\n}', start) + 2]
@@ -40,9 +43,12 @@ struct whisper_params {
     bool max_new_tokens_explicit = false, no_prints = true;
     float tts_cfg_scale = 1.3;
     bool tts_force_neutral_voice = false;
+    std::string tts_text;
+    bool server = false;
 };
-struct vibevoice_context { bool asr = false; bool reference_wav_selected = false; std::string reference_wav; };
+struct vibevoice_context { bool asr = false; bool realtime = false; bool reference_wav_selected = false; std::string reference_wav; };
 bool vibevoice_has_asr(vibevoice_context* ctx) { return ctx && ctx->asr; }
+bool vibevoice_is_realtime_tts(vibevoice_context* ctx) { return ctx && !ctx->asr && ctx->realtime; }
 struct vibevoice_context_params {
     int n_threads = 1, max_new_tokens = 0, verbosity = 0, tts_steps = 10;
     bool use_gpu = false;
@@ -84,7 +90,7 @@ struct Adapter : CrispasrBackend {
     vibevoice_context* ctx_ = &state;
     std::string last_voice_key_, backend_name_ = "vibevoice-1.5b";
     bool allow_generic_no_voice_ = true;
-''' + init + method + r'''
+''' + init + method + generic + r'''
 };
 ''' + disclaimer + r'''
 void require(bool value, const char* message) {
@@ -103,9 +109,30 @@ int main() {
     require(!a.init(p) && a.ctx_ == nullptr && freed == 2, "CLI streaming ASR alias rejects TTS checkpoint");
     next_context.asr = true;
     require(a.init(p), "CLI ASR alias retains genuine ASR checkpoint");
+    // #589: every VibeVoice GGUF auto-detects as "vibevoice"; a TTS run
+    // (--tts) or a server keeps the TTS checkpoint instead of failing.
+    a.backend_name_ = "vibevoice";
+    next_context.asr = false;
+    p.tts_text = "hello";
+    require(a.init(p), "#589: auto-detected alias keeps a TTS checkpoint for --tts");
+    p.tts_text.clear();
+    p.server = true;
+    require(a.init(p), "#589: auto-detected alias keeps a TTS checkpoint in server mode");
+    p.server = false;
     a.backend_name_ = "vibevoice-1.5b";
     next_context.asr = false;
     require(a.init(p), "CLI TTS alias retains TTS checkpoint");
+    // #589: base checkpoints (1.5B/7B) synthesize a generic voice; the realtime
+    // checkpoint needs a voice prompt, whatever alias loaded it.
+    a.ctx_ = &a.state;
+    a.state.asr = false;
+    a.state.realtime = false;
+    a.allow_generic_no_voice_ = false;
+    require(a.generic_voice_ok(), "#589: base checkpoint allows a generic voice under any alias");
+    a.state.realtime = true;
+    a.allow_generic_no_voice_ = true;
+    require(!a.generic_voice_ok(), "#589: realtime checkpoint requires a voice under any alias");
+    a.state.realtime = false;
     a.ctx_ = &a.state;
     a.state.asr = true;
     p.tts_voice = "unreadable.gguf";

@@ -1,3 +1,11 @@
+## 2026-11-21 — VibeVoice on AMD Vulkan: integer-dot matmul NaNs; CLI follows the checkpoint (#589)
+
+- **ASR and voice cloning on Vulkan** (`ggml` `ef9e36f6`, backport of llama.cpp `411d548515`): ggml-vulkan's integer-dot matmul (MMQ) skipped the A-side shared-memory write for k steps past the end but still read those slots, so a stale or uninitialized scale reached `A.dm * (q_sum * B.d - B.s)` and produced NaN. RADV takes this path by default when the GPU has integer dot product (the reporter's RX 6800). VibeVoice-ASR 7B decoded only token 0 ("!!!!"), and base TTS lost cloning. Reproduced on an M1 with MoltenVK and `GGML_VK_FORCE_INTEGER_DOT_PRODUCT=1`:
+  - `test-backend-ops -o MUL_MAT`: 10 / 1619 NaN, a different set each run → 1619 / 1619 three times.
+  - ASR JFK: "!!!!" → the correct transcript.
+  - 1.5B base TTS: silence → clone; speaker cosine 0.737 vs 0.566 for the no-reference baseline.
+- **CLI follows the checkpoint, not the alias:** every VibeVoice GGUF auto-detects as `vibevoice` by file name, and a TTS checkpoint there used to fail with "use --backend vibevoice-tts". Under that alias, the base 7B was then treated as the realtime model and asked for a voice pack. Now a TTS checkpoint is kept for `--tts` and in server mode. Base checkpoints (1.5B, 7B) synthesize a generic voice without one and clone from a WAV. Only the realtime 0.5B requires a voice prompt: without one it garbles text ("quick brown farts" in an ASR roundtrip). New `vibevoice_is_realtime_tts()`; the library warns once when a realtime model runs without a voice.
+
 ## 2026-11-21 — Haas-ja: subtitle-sized segments within a 30 s chunk (#605)
 
 - **Regression caught before release:** with the upstream long-form recipe (`ba4aec81`), each 30 s chunk came back as one segment, so `--output-srt` wrote 24-29 s cues (7 on the #605 file). With `--vad` the 30 s slices did the same (up to 25 s). The 12 s VAD slices used to double as cue boundaries.

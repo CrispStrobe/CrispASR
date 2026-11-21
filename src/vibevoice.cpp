@@ -3686,6 +3686,18 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
     if (!ctx || !text || !text[0])
         return nullptr;
 
+    // #589: the realtime model needs a voice prompt; without one it speaks an
+    // unconditioned voice and garbles text ("quick brown farts" for "quick brown
+    // fox" in an ASR roundtrip). Library callers keep working, but are told.
+    if (vibevoice_is_realtime_tts(ctx) && ctx->voice.tts_seq_len == 0) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            fprintf(stderr, "vibevoice: warning: VibeVoice-Realtime has no voice prompt loaded "
+                            "(vibevoice_load_voice / --voice <name>.gguf); output will be unreliable\n");
+        }
+    }
+
     auto& m = ctx->model;
     auto& hp = m.hp;
     auto G = [&](const std::string& name) -> ggml_tensor* {
@@ -6413,6 +6425,12 @@ extern "C" void vibevoice_result_free(struct vibevoice_result* r) {
     free(r->token_ids);
     free(r->token_probs);
     free(r);
+}
+
+extern "C" bool vibevoice_is_realtime_tts(const struct vibevoice_context* ctx) {
+    if (!ctx || ctx->model.hp.tts_n_layers == 0 || vibevoice_has_asr(ctx))
+        return false;
+    return ctx->model.tensors.count("tts_lm.tok_emb.weight") != 0;
 }
 
 extern "C" bool vibevoice_has_asr(const struct vibevoice_context* ctx) {

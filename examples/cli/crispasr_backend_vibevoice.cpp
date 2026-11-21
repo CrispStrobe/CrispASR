@@ -136,7 +136,7 @@ public:
         // until a loaded streaming checkpoint lets us narrow it.
         if (backend_name_ != "vibevoice-streaming" && !vibevoice_is_asr_streaming(ctx_))
             caps |= CAP_TTS;
-        if (allow_generic_no_voice_)
+        if (generic_voice_ok())
             caps |= CAP_VOICE_CLONING;
         if (backend_name_ == "vibevoice-streaming" || vibevoice_is_asr_streaming(ctx_))
             caps |= CAP_STREAMING;
@@ -164,17 +164,19 @@ public:
             fprintf(stderr, "crispasr[vibevoice]: failed to load model '%s'\n", p.model.c_str());
             return false;
         }
-        // For the ASR backend ("vibevoice"), verify checkpoint ASR capability
-        // immediately so the user gets a clear diagnostic before any audio is
-        // processed.  TTS-only aliases ("vibevoice-tts", "vibevoice-1.5b")
-        // legitimately synthesize without ASR and must not fail here.
-        if ((backend_name_ == "vibevoice" || backend_name_ == "vibevoice-streaming") && !vibevoice_has_asr(ctx_)) {
-            fprintf(
-                stderr,
-                "crispasr[vibevoice]: error: '%s' is not an ASR checkpoint (TTS task or missing tokenizer encoders).\n"
-                "  Use --backend vibevoice-tts for this model, or download the ASR model:\n"
-                "  crispasr -m auto --backend vibevoice --auto-download\n",
-                p.model.c_str());
+        // #589: the checkpoint, not the alias, decides what this context can
+        // do. Every VibeVoice GGUF auto-detects (by file name) as "vibevoice",
+        // so a TTS checkpoint reaching the ASR alias is the normal case for
+        // `crispasr -m vibevoice-7b.gguf --tts "..."`, as it is for the
+        // library. Fail early only when the run asks this TTS checkpoint to
+        // transcribe.
+        if ((backend_name_ == "vibevoice" || backend_name_ == "vibevoice-streaming") && !vibevoice_has_asr(ctx_) &&
+            p.tts_text.empty() && !p.server) {
+            fprintf(stderr,
+                    "crispasr[vibevoice]: error: '%s' is a VibeVoice TTS checkpoint, not an ASR one.\n"
+                    "  Synthesize with --tts \"text\", or transcribe with the ASR model:\n"
+                    "  crispasr -m auto --backend vibevoice --auto-download\n",
+                    p.model.c_str());
             vibevoice_free(ctx_);
             ctx_ = nullptr;
             return false;
@@ -356,7 +358,7 @@ public:
         // The realtime model wants a prompt voice. The 1.5B base model can
         // synthesize a generic voice without one, so keep the fallback only for
         // the realtime path.
-        if (!allow_generic_no_voice_ && voice_path.empty() && wav_ref_path.empty()) {
+        if (!generic_voice_ok() && voice_path.empty() && wav_ref_path.empty()) {
             auto slash = params.model.find_last_of("/\\");
             std::string dir = (slash == std::string::npos) ? "." : params.model.substr(0, slash);
             auto try_sibling = [&](const std::string& fname) -> std::string {
@@ -392,7 +394,7 @@ public:
 
         // Gate: the realtime model requires a prompt voice. The 1.5B base
         // model can run without one and generate its generic prior voice.
-        if (!allow_generic_no_voice_ && last_voice_key_.empty() && wav_ref_path.empty()) {
+        if (!generic_voice_ok() && last_voice_key_.empty() && wav_ref_path.empty()) {
             const char* voice_wav_env = crispasr_env::get("CRISPASR_VIBEVOICE_VOICE_AUDIO");
             if (!voice_wav_env || !voice_wav_env[0]) {
                 fprintf(stderr,
@@ -436,6 +438,16 @@ private:
     std::string last_voice_key_;
     std::string backend_name_ = "vibevoice";
     bool allow_generic_no_voice_ = false;
+
+    // #589: whether synthesis may run without a voice prompt. A loaded TTS
+    // checkpoint answers for itself: base models (1.5B, 7B) have a generic
+    // voice and clone from a WAV; the realtime model needs a voice prompt.
+    // The alias default only applies before a model is loaded.
+    bool generic_voice_ok() const {
+        if (ctx_ && !vibevoice_has_asr(ctx_))
+            return !vibevoice_is_realtime_tts(ctx_);
+        return allow_generic_no_voice_;
+    }
 };
 
 } // namespace

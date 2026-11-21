@@ -127,6 +127,12 @@ float* vibevoice_encode_speech(struct vibevoice_context* ctx, const float* sampl
 // explicit TTS task metadata disqualify them, including legacy mislabeled GGUFs.
 bool vibevoice_has_asr(const struct vibevoice_context* ctx);
 
+// True for a realtime TTS checkpoint (VibeVoice-Realtime-0.5B, its own TTS LM).
+// It needs a voice prompt (vibevoice_load_voice): without one it speaks an
+// unconditioned voice and garbles text (#589). Base TTS checkpoints (1.5B, 7B)
+// have a usable generic voice and clone from a reference WAV instead.
+bool vibevoice_is_realtime_tts(const struct vibevoice_context* ctx);
+
 // Native VibeVoice-ASR-Streaming session. Input is 24 kHz mono PCM. The
 // checkpoint-defined chunk and lookahead sizes are used; caller step/length
 // settings do not change the model's receptive field. Each callback contains
