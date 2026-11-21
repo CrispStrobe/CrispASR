@@ -6700,7 +6700,9 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // Keep JA on the established slice/gap-fill path until that path is
         // deliberately hoisted too; routing JA through the generic streamed
         // branch loses the interior-content guarantee from issue #89.
-        if (_unified && !is_ja) {
+        // Issue #605: Haas-ja takes its upstream long-form recipe, which lives
+        // in the shared orchestrator, not the parakeet-ja slice path below.
+        if (_unified && (!is_ja || parakeet_uses_haas_longform(s->parakeet_ctx))) {
             parakeet_orchestrate_opts oo;
             oo.chunk_seconds_explicit = s->parakeet_force_chunk_seconds > 0;
             oo.chunk_seconds = s->parakeet_force_chunk_seconds > 0 ? s->parakeet_force_chunk_seconds : 0;

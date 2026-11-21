@@ -1,3 +1,13 @@
+## 2026-11-21 — Haas-ja uses its upstream long-form recipe (#605)
+
+- **Change:** Haas-ja no longer inherits parakeet-ja's #89 long-audio workarounds (VAD forced on, 12 s slices). Like upstream `haas_asr.transcribe_longform`, it cuts 30 s chunks at the quietest 0.1 s within 2 s of each target and decodes each in one pass. `parakeet_quiet_point_bounds` is a sample-exact port of `split_at_quiet_points` (unit-tested against the upstream Python). An explicit `--vad` caps slices at 30 s. The session C ABI takes the same route. `CRISPASR_HAAS_LONGFORM=0` restores the old path.
+- **Original model check:** Kaggle kernel `tools/kaggle/haas-ja-blueprint-longform` ran the upstream code (NeMo 2.7.3, flash-linear-attention 0.5.2, T4) on the #605 file. bf16 and fp32 gave identical text. Our port on the same chunks is byte-identical in 6 of 7 chunks; the seventh differs by one character (数の子 / 数子).
+- **Evidence** (bigram recall / precision, `tools/asr_coverage_score.py --strip-latin --reading`):
+  - #605 file vs whisper-turbo: 75.7 / 85.0 → 80.7 / 83.9. The original model scores 80.4 / 83.6.
+  - #605 file vs whisper-large-v3: 62.9 / 77.4 → 70.4 / 80.2.
+  - The two whisper references agree with each other only 72.1 / 79.0 on this audio, which bounds what any score against them means.
+  - #89 podcast: 96.9 / 96.8 → 95.7 / 97.3 (no regression).
+
 ## 2026-11-21 — Gap-fill stops inventing subtitles on noisy JA audio (#605)
 
 - **Report:** Haas-ja on a 3-minute game stream (`--vad`, FireRed VAD) gave 45 cues with gap-fill against 19 without. Many were short and wrong: "隠しのように" in a pause, a 9 s "ーーっ。っ。" over game audio, "はい" doubled as "はい。".

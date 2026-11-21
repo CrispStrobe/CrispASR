@@ -53,7 +53,10 @@ public:
         // Override with CRISPASR_PARAKEET_INTERNAL_CHUNKING=0 to fall back to
         // the dispatcher's chunk-30 + overlap-save + LCS-merge path (e.g. for
         // A/B comparison), or =1 to force it on even for JA.
-        bool internal_chunking = !is_ja_model_;
+        // Issue #605: Haas-ja runs its own upstream long-form recipe inside
+        // transcribe() (parakeet_transcribe_segments' haas route), so it wants
+        // the whole clip like the non-JA models.
+        bool internal_chunking = !is_ja_model_ || haas_longform();
         if (const char* e = getenv("CRISPASR_PARAKEET_INTERNAL_CHUNKING"))
             internal_chunking = atoi(e) != 0;
         if (internal_chunking)
@@ -336,8 +339,10 @@ public:
     bool prefers_vad() const override {
         // Issue #89: parakeet-ja's encoder degenerates on arbitrary chunks
         // (repetition loops). VAD gives silence-bounded segments matching
-        // the ~10-15 s utterances the model was trained on.
-        return is_ja_model_;
+        // the ~10-15 s utterances the model was trained on. Haas-ja does not
+        // (#605): its upstream recipe uses no VAD, and on noisy audio VAD
+        // discarded speech the model decodes.
+        return is_ja_model_ && !haas_longform();
     }
 
     int vad_slice_cap_seconds() const override {
@@ -348,7 +353,9 @@ public:
         // (73-81 % vs whisper-large-v3 reference, NeMo's own long-form
         // paths score 15-46 % on the same audio). Non-JA models are exact
         // in single-pass and don't need a cap.
-        int cap = is_ja_model_ ? 12 : 0;
+        // Haas-ja (#605): an explicit --vad keeps slices within the model's
+        // 30 s training length instead of parakeet-ja's 12 s.
+        int cap = haas_longform() ? 30 : (is_ja_model_ ? 12 : 0);
         if (const char* e = getenv("CRISPASR_PARAKEET_VAD_SLICE_CAP"))
             cap = std::max(0, atoi(e));
         return cap;
@@ -370,6 +377,8 @@ public:
     }
 
 private:
+    bool haas_longform() const { return ctx_ && parakeet_uses_haas_longform(ctx_); }
+
     const char* backend_name_;
     parakeet_context* ctx_ = nullptr;
     bool is_ja_model_ = false;

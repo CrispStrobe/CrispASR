@@ -479,11 +479,12 @@ multilingual / v3 / EN models behave very differently:
 | Variable | Default | Meaning |
 |---|---|---|
 | `CRISPASR_PARAKEET_STREAM_THRESHOLD` | non-JA 300, JA 12 | Single-pass cap (seconds). Audio ≤ this gets one full-attention pass; `0` disables single-pass entirely (always streamed). |
-| `CRISPASR_PARAKEET_VAD_SLICE_CAP` | non-JA 0, JA 12 | Max VAD slice duration (seconds); longer slices are re-split at energy minima before decoding. `0` = no cap. |
+| `CRISPASR_PARAKEET_VAD_SLICE_CAP` | non-JA 0, parakeet-ja 12, Haas-ja 30 | Max VAD slice duration (seconds); longer slices are re-split at energy minima before decoding. `0` = no cap. |
 | `CRISPASR_PARAKEET_ATT_CONTEXT` | unset | `"L,R"` switches the encoder to rel_pos_local_attn with that window (encoder frames, 1 = 80 ms) — NeMo's `change_attention_model` equivalent. `"-1,-1"` forces full attention. |
 | `CRISPASR_GAP_FILL` | parakeet-ja and non-JA 1, Haas-ja 0 | Automatically re-transcribe any stretch of audio the transcript left empty and merge the recovered words back. `0` (or `false`/`off`/`no`) disables; `1` forces it on, also for Haas-ja, which does not drop speech the way parakeet-ja does and defaults off (#605). |
 | `CRISPASR_GAP_FILL_MIN_CS` | non-JA 300, JA 100 | Smallest empty stretch that triggers gap-fill, in centiseconds (300 = 3.0 s). Lower values catch shorter drops but may re-transcribe normal pauses, occasionally adding filler words. |
 | `CRISPASR_GAP_FILL_MIN_CONF` | 0.85 | JA gap-fill: keep a recovered stretch only if its mean token confidence reaches this value. Re-transcribed pauses, music and sound effects decode at low confidence; speech the first pass really dropped decodes at near 1.0. `0` keeps every recovery (pre-#605 behaviour). |
+| `CRISPASR_HAAS_LONGFORM` | 1 | Haas-ja: 30 s quiet-point chunks, one pass each, no forced VAD (the upstream `transcribe_longform` recipe, #605). `0` uses the parakeet-ja path (VAD, 12 s slices). |
 | `CRISPASR_PARAKEET_LONGFORM` | non-JA 1, JA 0 | `1` = silence-split single-pass above the cap; `0` = streamed fallback above the cap. |
 | `CRISPASR_PARAKEET_INTERNAL_CHUNKING` | non-JA on, JA off | `0` = revert to the dispatcher's chunk-30 + overlap-save + LCS-merge path (A/B). |
 | `CRISPASR_PARAKEET_STREAM_CHUNK` | 0 (auto: 8 JA / 30 non-JA) | Streamed-path encoder chunk size (seconds). |

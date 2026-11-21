@@ -25,6 +25,78 @@
 #include <utility>
 #include <vector>
 
+// Haas-ja long-form recipe (issue #605). Haas-ja shares parakeet-ja's Japanese
+// vocabulary but not its encoder defect (#89), and its own inference code
+// (third-intelligence/Haas-ASR, haas_asr.transcribe_longform) does not use VAD
+// or 12 s slices: it cuts the audio into 30 s chunks ("no training utterance
+// was longer"), moving each cut to the quietest 0.1 s window within 2 s of the
+// target, and decodes every chunk in one pass. On the #605 game stream that
+// recipe scores 80.4 % bigram recall vs whisper-turbo against 75.7 % for the
+// VAD + 12 s path, and our port then reproduces the upstream NeMo/bf16 output
+// byte for byte in 6 of 7 chunks (one character differs). On the #89 podcast
+// the two paths tie (95.7-97.3 %).
+//
+// True when this model takes that route: a KDA predictor (Haas) and
+// CRISPASR_HAAS_LONGFORM not set to an off spelling (0/false/off/no), which
+// restores the parakeet-ja path for A/B.
+bool parakeet_uses_haas_longform(const struct parakeet_context* ctx);
+
+inline constexpr double kHaasChunkSeconds = 30.0;
+inline constexpr double kHaasSearchSeconds = 2.0;
+inline constexpr double kHaasWindowSeconds = 0.1;
+
+// Sample-exact port of haas_asr.longform.split_at_quiet_points (Haas-ASR
+// acc614f): (start, end) sample ranges covering [0, n) without gaps. Each cut
+// lands at the centre of the lowest-energy `window_s` window within `search_s`
+// of its target and never earlier than half a chunk after the previous cut, so
+// no chunk is longer than chunk_s + search_s. Energy is accumulated in double
+// as a prefix sum and differenced, exactly like the numpy original, and the
+// first minimum wins (np.argmin), so ties break the same way.
+inline std::vector<std::pair<int, int>> parakeet_quiet_point_bounds(const float* audio, int n, int sample_rate = 16000,
+                                                                    double chunk_s = kHaasChunkSeconds,
+                                                                    double search_s = kHaasSearchSeconds,
+                                                                    double window_s = kHaasWindowSeconds) {
+    std::vector<std::pair<int, int>> bounds;
+    if (!audio || n <= 0)
+        return bounds;
+    const int step = (int)(chunk_s * sample_rate);
+    const int search = (int)(search_s * sample_rate);
+    const int window = (int)(window_s * sample_rate);
+    if (step <= 0 || window <= 0)
+        return {{0, n}};
+    std::vector<double> energy;
+    int start = 0;
+    while (n - start > step) {
+        const int target = start + step;
+        const int low = std::max(start + step / 2, target - search);
+        const int high = std::min(n - window, target + search);
+        int cut = target;
+        if (high > low) {
+            const int len = high + window - low; // audio[low : high + window]
+            energy.assign((size_t)len + 1, 0.0);
+            for (int i = 0; i < len; ++i) {
+                const double v = (double)audio[low + i];
+                energy[(size_t)i + 1] = energy[(size_t)i] + v * v;
+            }
+            int best_off = 0;
+            double best = energy[(size_t)window] - energy[0];
+            for (int o = 1; o + window <= len; ++o) {
+                const double e = energy[(size_t)o + (size_t)window] - energy[(size_t)o];
+                if (e < best) {
+                    best = e;
+                    best_off = o;
+                }
+            }
+            cut = low + best_off + window / 2;
+        }
+        bounds.push_back({start, cut});
+        start = cut;
+    }
+    if (start < n)
+        bounds.push_back({start, n});
+    return bounds;
+}
+
 // Neutral, surface-agnostic segment (subset both crispasr_segment and
 // crispasr_session_seg can be built from).
 struct parakeet_seg {

@@ -32,15 +32,26 @@ architecture metadata; the alias entrypoint and registry are covered by
 `tests/test_haas_dispatch.py` and `tests/test-registry.cpp`. These are dispatch
 tests, not a general accuracy benchmark for every audio domain or quantization.
 
-## Long audio and gap-fill
+## Long audio
 
-Haas-ja uses the same Japanese long-audio path as parakeet-ja: VAD slices
-capped at 12 s, each decoded in one pass. The gap-fill second pass, which
-re-transcribes spans a slice left empty, is **off by default** for Haas-ja.
-That pass exists because parakeet-ja's encoder blanks utterances inside a
-slice (#89). Haas-ja does not: on the #89 podcast it reaches 97 % content
-recall without gap-fill, and the pass adds nothing there. On noisy audio such
-as a game stream, the pass only re-transcribed pauses and sound effects into
-short, wrong subtitles (#605). Set `CRISPASR_GAP_FILL=1` to run it anyway; it
-then keeps only recoveries that clear the confidence gate
-(`CRISPASR_GAP_FILL_MIN_CONF`, default 0.85).
+Haas-ja follows its own upstream long-form recipe
+(`haas_asr.transcribe_longform` in
+[Haas-ASR](https://github.com/third-intelligence/Haas-ASR)), not the one
+CrispASR uses for parakeet-ja. Audio longer than 30 s is cut into 30 s chunks,
+each cut moved to the quietest 0.1 s within 2 s of its target, and every chunk
+is decoded in one pass. No VAD is applied unless you pass `--vad`; then VAD
+slices are capped at 30 s, the longest utterance the model was trained on.
+
+parakeet-ja's workarounds (VAD forced on, 12 s slices, the gap-fill second
+pass) were built for an encoder defect Haas-ja does not have (#89). On a noisy
+3-minute game stream (#605) they cost about 5 points of content recall, because
+VAD discarded speech the model decodes, and gap-fill turned pauses and sound
+effects into short, wrong subtitles. With the upstream recipe, CrispASR's
+output matches the original NeMo model run on the same chunks, apart from
+single characters.
+
+| Setting | Effect |
+|---|---|
+| `CRISPASR_HAAS_LONGFORM=0` | Use the parakeet-ja path again (VAD, 12 s slices), for comparison. |
+| `--chunk-seconds N` | Chunk length instead of 30 s. |
+| `CRISPASR_GAP_FILL=1` | Run the gap-fill pass anyway; it keeps only recoveries above `CRISPASR_GAP_FILL_MIN_CONF` (default 0.85). |

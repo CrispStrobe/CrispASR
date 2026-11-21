@@ -3263,6 +3263,26 @@ catch_discover_tests(test-issue-356-gap-fill-overlap
     PROPERTIES LABELS "unit;gap-fill;issue-356"
 )
 
+# ─── test-haas-quiet-point-split — #605: parakeet_quiet_point_bounds, the
+# sample-exact port of Haas-ASR's split_at_quiet_points (Haas-ja long-form).
+# Synthetic audio; expected values from the upstream Python. Pure CPU.
+add_executable(test-haas-quiet-point-split
+    test-haas-quiet-point-split.cpp
+)
+target_include_directories(test-haas-quiet-point-split PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-haas-quiet-point-split PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+)
+catch_discover_tests(test-haas-quiet-point-split
+    TEST_SPEC "[haas-split]"
+    PROPERTIES LABELS "unit;haas;issue-605"
+)
+
 # ─── test-issue-605-gap-fill-junk — issue #605 regression guard
 #
 # Pins the gap-fill confidence gate and seam guard: a refill of a pause or of
