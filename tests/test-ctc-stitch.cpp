@@ -5,6 +5,7 @@
 #include "crispasr_ctc_stitch.h"
 #include "core/ctc.h"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
@@ -127,6 +128,40 @@ TEST_CASE("prefix_beam_search: basic emissions and repeat collapsing", "[ctc][un
     CHECK(res.tokens[2] == 2);
 }
 
+namespace {
+std::vector<int32_t> beam_decode(const std::vector<int>& frames, int vocab = 4) {
+    // One-hot frames: token frames[t] has log-prob 0, everything else -100.
+    std::vector<float> lp(frames.size() * vocab, -100.0f);
+    for (size_t t = 0; t < frames.size(); t++)
+        lp[t * vocab + frames[t]] = 0.0f;
+    return core_ctc::prefix_beam_search(lp.data(), (int)frames.size(), vocab, /*blank=*/0, /*shift=*/0,
+                                        /*beam_size=*/4)
+        .tokens;
+}
+} // namespace
+
+TEST_CASE("prefix_beam_search: a repeated token without a blank collapses", "[ctc][unit]") {
+    // CTC: consecutive identical emissions are one token.
+    CHECK(beam_decode({1, 1}) == std::vector<int32_t>{1});
+    CHECK(beam_decode({1, 1, 1, 2, 2}) == std::vector<int32_t>{1, 2});
+}
+
+TEST_CASE("prefix_beam_search: a blank between identical tokens keeps both", "[ctc][unit]") {
+    CHECK(beam_decode({1, 0, 1}) == std::vector<int32_t>{1, 1});
+    CHECK(beam_decode({2, 0, 2, 0, 2}) == std::vector<int32_t>{2, 2, 2});
+}
+
+TEST_CASE("prefix_beam_search: prefix probability merges the paths of a collapsed repeat", "[ctc][unit]") {
+    // Two frames, two near-even tokens: P("1") = P(1,1)+P(1,_)+P(_,1) = 0.36+0.24+0.24 = 0.84
+    // beats P("2") and P("12"), so the beam must merge all three paths into "1".
+    const int vocab = 3;
+    std::vector<float> lp = {std::log(0.4f), std::log(0.6f), std::log(1e-6f),
+                             std::log(0.4f), std::log(0.6f), std::log(1e-6f)};
+    auto r = core_ctc::prefix_beam_search(lp.data(), 2, vocab, 0, 0, 4);
+    CHECK(r.tokens == std::vector<int32_t>{1});
+    CHECK(r.score == Catch::Approx(std::log(0.84)).epsilon(1e-4));
+}
+
 TEST_CASE("prefix_beam_search: performance benchmark on large vocabulary", "[ctc][perf]") {
     const int vocab = 1000;
     const int blank = 0;
@@ -142,13 +177,17 @@ TEST_CASE("prefix_beam_search: performance benchmark on large vocabulary", "[ctc
         }
     }
 
-    auto t0 = std::chrono::steady_clock::now();
-    for (int it = 0; it < 5; it++) {
+    // Best of N, not the mean: on a shared machine other processes only ever
+    // add time, so the minimum still catches an algorithmic regression (an
+    // O(beam*V) lookup) without failing on scheduler noise.
+    double ms = 1e30;
+    for (int it = 0; it < 11; it++) {
+        auto t0 = std::chrono::steady_clock::now();
         auto res = core_ctc::prefix_beam_search(logprobs.data(), T, vocab, blank, /*shift=*/0, /*beam_size=*/4);
+        auto t1 = std::chrono::steady_clock::now();
         CHECK(!res.tokens.empty());
+        ms = std::min(ms, std::chrono::duration<double, std::milli>(t1 - t0).count());
     }
-    auto t1 = std::chrono::steady_clock::now();
-    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count() / 5.0;
-    INFO("prefix_beam_search on T=" << T << ", V=" << vocab << " took " << ms << " ms");
+    INFO("prefix_beam_search on T=" << T << ", V=" << vocab << " took " << ms << " ms (best of 11)");
     CHECK(ms < 50.0); // comfortably fast with O(1) hash map
 }

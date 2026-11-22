@@ -161,168 +161,137 @@ struct BeamResult {
 
 static inline BeamResult prefix_beam_search(const float* logprobs, int T, int V, int blank_id, int shift,
                                             int beam_size = 4, float gamma = 0.0f) {
-    // Hypothesis: a prefix and its blank/non-blank log-probs.
-    // We use vectors as prefix keys (small — typically < 100 tokens).
-    struct Hyp {
-        std::vector<int32_t> prefix;
-        double p_b;  // log-prob of paths ending in blank
-        double p_nb; // log-prob of paths ending in non-blank
-        double score() const {
-            // log-sum-exp of p_b and p_nb
-            double m = (p_b > p_nb) ? p_b : p_nb;
-            return m + std::log(std::exp(p_b - m) + std::exp(p_nb - m));
-        }
+    // CTC prefix beam search (Hannun et al. 2014). For each hypothesis prefix
+    // we track p_b / p_nb: the log-probability of all paths that produce the
+    // prefix and end in a blank / in its last token. Extending with token c:
+    //   c == blank            -> same prefix, p_b  += total
+    //   c == last token       -> same prefix, p_nb += p_nb   (repeat collapses)
+    //                            prefix + c,  p_nb += p_b    (blank separates)
+    //   otherwise             -> prefix + c,  p_nb += total
+    //
+    // Prefixes are nodes of a trie (parent, token); a candidate is keyed by
+    // its (parent, token) pair, so the same prefix reached by different paths
+    // merges without copying or hashing token vectors. Only beam survivors
+    // become trie nodes, so the trie grows by at most beam_size per frame.
+    const double NEG_INF = -1e30;
+    auto logaddexp = [&](double a, double b) -> double {
+        if (a <= NEG_INF)
+            return b;
+        if (b <= NEG_INF)
+            return a;
+        const double m = (a > b) ? a : b;
+        return m + std::log(std::exp(a - m) + std::exp(b - m));
     };
 
-    const double NEG_INF = -1e30;
+    struct Node {
+        int parent;
+        int32_t token;
+    };
+    std::vector<Node> trie = {{-1, -1}}; // node 0: the empty prefix
+    std::unordered_map<uint64_t, int> children;
+    auto key_of = [](int parent, int32_t token) -> uint64_t {
+        return ((uint64_t)(uint32_t)(parent + 1) << 32) | (uint32_t)token;
+    };
 
-    // Initial state: empty prefix, blank prob = 1 (log = 0), non-blank = 0
-    std::vector<Hyp> beam(1);
-    beam[0].p_b = 0.0;
-    beam[0].p_nb = NEG_INF;
+    struct Hyp {
+        int node;
+        double p_b, p_nb;
+    };
+    struct Cand {
+        int parent; // trie node of the prefix without its last token (-1 for the empty prefix)
+        int32_t token;
+        double p_b, p_nb;
+    };
+    auto score = [&](double p_b, double p_nb) { return logaddexp(p_b, p_nb); };
+
+    std::vector<Hyp> beam = {{0, 0.0, NEG_INF}};
+    std::vector<Cand> next;
+    std::unordered_map<uint64_t, size_t> index;
 
     for (int t = 0; t < T; t++) {
-        const float* lp = logprobs + (size_t)t * V; // log-probs at frame t
+        const float* lp = logprobs + (size_t)t * V;
+        next.clear();
+        index.clear();
+        index.reserve(beam.size() * (size_t)V);
 
-        // Collect new hypotheses in a map keyed by prefix.
-        // Using a flat vector + linear search since beam is small.
-        struct NewHyp {
-            std::vector<int32_t> prefix;
-            double p_b;
-            double p_nb;
-            double score() const {
-                double m = (p_b > p_nb) ? p_b : p_nb;
-                return m + std::log(std::exp(p_b - m) + std::exp(p_nb - m));
-            }
-        };
-        std::vector<NewHyp> next;
-        next.reserve(beam.size() * 2); // rough estimate
-
-        struct VectorHash {
-            size_t operator()(const std::vector<int32_t>& v) const {
-                size_t seed = v.size();
-                for (int32_t x : v) {
-                    seed ^= (size_t)x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-                }
-                return seed;
-            }
-        };
-        std::unordered_map<std::vector<int32_t>, size_t, VectorHash> map;
-        map.reserve(beam.size() * 4);
-
-        auto find_or_insert = [&](const std::vector<int32_t>& pfx) -> NewHyp& {
-            auto it = map.find(pfx);
-            if (it != map.end())
+        auto cand = [&](int parent, int32_t token) -> Cand& {
+            const uint64_t k = key_of(parent, token);
+            auto it = index.find(k);
+            if (it != index.end())
                 return next[it->second];
-            size_t idx = next.size();
-            next.push_back({pfx, NEG_INF, NEG_INF});
-            map.emplace(pfx, idx);
+            index.emplace(k, next.size());
+            next.push_back({parent, token, NEG_INF, NEG_INF});
             return next.back();
         };
 
-        // log-sum-exp helper
-        auto logaddexp = [](double a, double b) -> double {
-            if (a == -1e30)
-                return b;
-            if (b == -1e30)
-                return a;
-            double m = (a > b) ? a : b;
-            return m + std::log(std::exp(a - m) + std::exp(b - m));
-        };
+        for (const Hyp& h : beam) {
+            const Node& n = trie[h.node];
+            const double total = score(h.p_b, h.p_nb);
 
-        for (auto& h : beam) {
-            double p_total = h.score();
+            Cand& same = cand(n.parent, n.token);
+            same.p_b = logaddexp(same.p_b, total + (double)lp[blank_id]);
+            if (h.node != 0)
+                same.p_nb = logaddexp(same.p_nb, h.p_nb + (double)lp[n.token]);
 
-            // 1. Extend with blank
-            {
-                auto& nh = find_or_insert(h.prefix);
-                nh.p_b = logaddexp(nh.p_b, p_total + (double)lp[blank_id]);
-            }
-
-            // 2. Extend with each non-blank token
-            // For efficiency, only consider top-k tokens at this frame
-            // when beam is small. For now, iterate all (V is typically
-            // 1K–8K which is fine for CPU).
             for (int c = 0; c < V; c++) {
                 if (c == blank_id)
                     continue;
-
-                double lp_c = (double)lp[c];
-
-                // Prefix extension
-                auto new_pfx = h.prefix;
-                bool is_repeat = (!h.prefix.empty() && h.prefix.back() == c);
-
-                if (is_repeat) {
-                    // Repeat of last char: only extend from blank-ending paths
-                    // (non-blank ending with same char would be a collapsed repeat)
-                    auto& nh = find_or_insert(new_pfx);
-                    nh.p_nb = logaddexp(nh.p_nb, h.p_b + lp_c);
-
-                    // Also allow extending from non-blank (which merges into same prefix)
-                    // This handles the case: "aa" where both a's are separate emissions
-                    new_pfx.push_back(c);
-                    auto& nh2 = find_or_insert(new_pfx);
-                    nh2.p_nb = logaddexp(nh2.p_nb, h.p_nb + lp_c);
-                } else {
-                    new_pfx.push_back(c);
-                    auto& nh = find_or_insert(new_pfx);
-                    nh.p_nb = logaddexp(nh.p_nb, p_total + lp_c);
-                }
+                const double from = (h.node != 0 && c == n.token) ? h.p_b : total;
+                if (from <= NEG_INF)
+                    continue;
+                Cand& ext = cand(h.node, c);
+                ext.p_nb = logaddexp(ext.p_nb, from + (double)lp[c]);
             }
         }
 
-        // Prune: sort by score, keep top beam_size
-        // Apply gamma pruning first if enabled
         if (gamma > 0.0f && !next.empty()) {
-            double best_score = NEG_INF;
-            for (auto& h : next) {
-                double s = h.score();
-                if (s > best_score)
-                    best_score = s;
-            }
-            double threshold = best_score - (double)gamma;
-            size_t write = 0;
-            for (size_t i = 0; i < next.size(); i++) {
-                if (next[i].score() >= threshold) {
-                    if (write != i)
-                        next[write] = std::move(next[i]);
-                    write++;
-                }
-            }
-            next.resize(write);
+            double best = NEG_INF;
+            for (const Cand& c : next)
+                best = std::max(best, score(c.p_b, c.p_nb));
+            const double threshold = best - (double)gamma;
+            next.erase(std::remove_if(next.begin(), next.end(),
+                                      [&](const Cand& c) { return score(c.p_b, c.p_nb) < threshold; }),
+                       next.end());
         }
-
-        // Keep top beam_size
         if ((int)next.size() > beam_size) {
-            std::partial_sort(next.begin(), next.begin() + beam_size, next.end(),
-                              [](const NewHyp& a, const NewHyp& b) { return a.score() > b.score(); });
+            std::partial_sort(next.begin(), next.begin() + beam_size, next.end(), [&](const Cand& a, const Cand& b) {
+                return score(a.p_b, a.p_nb) > score(b.p_b, b.p_nb);
+            });
             next.resize(beam_size);
         }
 
-        // Move to beam for next frame
-        beam.resize(next.size());
-        for (size_t i = 0; i < next.size(); i++) {
-            beam[i].prefix = std::move(next[i].prefix);
-            beam[i].p_b = next[i].p_b;
-            beam[i].p_nb = next[i].p_nb;
+        beam.clear();
+        for (const Cand& c : next) {
+            int node;
+            if (c.parent < 0) {
+                node = 0;
+            } else {
+                const uint64_t k = key_of(c.parent, c.token);
+                auto it = children.find(k);
+                if (it == children.end()) {
+                    node = (int)trie.size();
+                    trie.push_back({c.parent, c.token});
+                    children.emplace(k, node);
+                } else {
+                    node = it->second;
+                }
+            }
+            beam.push_back({node, c.p_b, c.p_nb});
         }
     }
 
-    // Return best hypothesis
     if (beam.empty())
         return {{}, NEG_INF};
-    int best = 0;
-    for (int i = 1; i < (int)beam.size(); i++)
-        if (beam[i].score() > beam[best].score())
+    size_t best = 0;
+    for (size_t i = 1; i < beam.size(); i++)
+        if (score(beam[i].p_b, beam[i].p_nb) > score(beam[best].p_b, beam[best].p_nb))
             best = i;
 
-    // Apply shift to token ids
     std::vector<int32_t> tokens;
-    tokens.reserve(beam[best].prefix.size());
-    for (int32_t id : beam[best].prefix)
-        tokens.push_back(id + shift);
-    return {std::move(tokens), beam[best].score()};
+    for (int node = beam[best].node; node > 0; node = trie[node].parent)
+        tokens.push_back(trie[node].token + shift);
+    std::reverse(tokens.begin(), tokens.end());
+    return {std::move(tokens), score(beam[best].p_b, beam[best].p_nb)};
 }
 
 } // namespace core_ctc
