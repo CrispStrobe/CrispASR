@@ -1,3 +1,9 @@
+## 2026-11-22 — Extended nightly: outetts repetition penalty, disclaimer strip, MinGW test build
+
+- **outetts** (`src/outetts.cpp`): the repetition penalty divided a token's logit once per previous OCCURRENCE (1.1^k). Upstream OuteTTS 0.3 samples through HF `generate(repetition_penalty)` / llama.cpp `repeat_penalty`, which penalise each distinct context token once. Now the same, over prompt + generated, through the shared `core/repetition_penalty.h` (moved from `breeze_cfg.h`, #594). The nightly roundtrip had failed on 11-17, 11-20 and 11-22 ("…over the le the crit doll the dou b…"); one seeded sample flipped with the runner CPU. Kaggle CPU A/B, 12 seeds, parakeet roundtrip: mean WER 0.176 → 0.019, exact 4/12 → 10/12, worst 0.89 → 0.11.
+- **Regression harness** (`tests/regression/run_one.py`): `strip_ai_disclaimer` compared words positionally, so ASR merging "This audio" into "Saudio" shifted every word and cosyvoice3-0.5b failed with a perfect phrase (WER 0.67). It now strips the best edit-distance-aligned prefix (n±3 words, ≤2 edits).
+- **msys2 build**: `test-core-gap-fill-policy` used POSIX `setenv`; now `_putenv_s` on Windows.
+
 ## 2026-11-21 — VibeVoice on AMD Vulkan: integer-dot matmul NaNs; CLI follows the checkpoint (#589)
 
 - **ASR and voice cloning on Vulkan** (`ggml` `ef9e36f6`, backport of llama.cpp `411d548515`): ggml-vulkan's integer-dot matmul (MMQ) skipped the A-side shared-memory write for k steps past the end but still read those slots, so a stale or uninitialized scale reached `A.dm * (q_sum * B.d - B.s)` and produced NaN. RADV takes this path by default when the GPU has integer dot product (the reporter's RX 6800). VibeVoice-ASR 7B decoded only token 0 ("!!!!"), and base TTS lost cloning. Reproduced on an M1 with MoltenVK and `GGML_VK_FORCE_INTEGER_DOT_PRODUCT=1`:
