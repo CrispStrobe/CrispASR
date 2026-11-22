@@ -661,7 +661,8 @@ jobs:
           $CUDART_VER = "11.8.89"
           $NVCC_VER   = "11.8.89"
           $NVRTC_VER  = "11.8.89"
-          $CUBLAS_VER = "11.8.1.74"
+          $CUBLAS_VER = "11.11.3.6"  # the cuBLAS that ships with CUDA 11.8 (FP8 cublasLt attrs)
+          $NVML_VER   = "11.8.86"
           $NVTX_VER   = "11.8.86"
           $VS_VER     = "11.8.86"
           $NVPROF_VER = "11.8.87"
@@ -682,6 +683,8 @@ jobs:
           curl -O "$CUDA_DOWNLOAD/visual_studio_integration/windows-x86_64/visual_studio_integration-windows-x86_64-${VS_VER}-archive.zip"
           curl -O "$CUDA_DOWNLOAD/cuda_nvprof/windows-x86_64/cuda_nvprof-windows-x86_64-${NVPROF_VER}-archive.zip"
           curl -O "$CUDA_DOWNLOAD/cuda_cccl/windows-x86_64/cuda_cccl-windows-x86_64-${CCCL_VER}-archive.zip"
+          # nvml.h: ggml-cuda dlopens nvml.dll but needs the header for its types
+          curl -O "$CUDA_DOWNLOAD/cuda_nvml_dev/windows-x86_64/cuda_nvml_dev-windows-x86_64-${NVML_VER}-archive.zip"
 
           # Extract all the downloaded files to the CUDA Toolkit directory
           unzip '*.zip' -d $CUDA_TOOLKIT_DIR
@@ -694,6 +697,7 @@ jobs:
           xcopy "$CUDA_TOOLKIT_DIR\cuda_nvtx-windows-x86_64-${NVTX_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\cuda_nvprof-windows-x86_64-${NVPROF_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\cuda_cccl-windows-x86_64-${CCCL_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_nvml_dev-windows-x86_64-${NVML_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\visual_studio_integration-windows-x86_64-${VS_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
 
           # Visual Studio integration
@@ -717,6 +721,7 @@ jobs:
           $NVCC_VER     = "12.4.131"
           $NVRTC_VER    = "12.4.127"
           $CUBLAS_VER   = "12.4.5.8"
+          $NVML_VER     = "12.4.99"
           $NVTX_VER     = "12.4.127"
           $PROFILER_VER = "12.4.127"
           $VS_VER       = "12.4.127"
@@ -739,6 +744,8 @@ jobs:
           curl -O "$CUDA_DOWNLOAD/visual_studio_integration/windows-x86_64/visual_studio_integration-windows-x86_64-${VS_VER}-archive.zip"
           curl -O "$CUDA_DOWNLOAD/cuda_nvprof/windows-x86_64/cuda_nvprof-windows-x86_64-${NVPROF_VER}-archive.zip"
           curl -O "$CUDA_DOWNLOAD/cuda_cccl/windows-x86_64/cuda_cccl-windows-x86_64-${CCCL_VER}-archive.zip"
+          # nvml.h: ggml-cuda dlopens nvml.dll but needs the header for its types
+          curl -O "$CUDA_DOWNLOAD/cuda_nvml_dev/windows-x86_64/cuda_nvml_dev-windows-x86_64-${NVML_VER}-archive.zip"
 
           # Extract all the downloaded files to the CUDA Toolkit directory
           unzip -q '*.zip' -d $CUDA_TOOLKIT_DIR
@@ -751,6 +758,7 @@ jobs:
           xcopy "$CUDA_TOOLKIT_DIR\cuda_nvtx-windows-x86_64-${NVTX_VER}-archive\*"     "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\cuda_nvprof-windows-x86_64-${NVPROF_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\cuda_cccl-windows-x86_64-${CCCL_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
+          xcopy "$CUDA_TOOLKIT_DIR\cuda_nvml_dev-windows-x86_64-${NVML_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\cuda_profiler_api-windows-x86_64-${PROFILER_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
           xcopy "$CUDA_TOOLKIT_DIR\visual_studio_integration-windows-x86_64-${VS_VER}-archive\*" "$CUDA_TOOLKIT_DIR" /E /I /H /Y
 
