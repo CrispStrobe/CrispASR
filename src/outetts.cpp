@@ -19,6 +19,7 @@
 #include "outetts.h"
 #include "core/attention.h"
 #include "core/bpe.h"
+#include "core/repetition_penalty.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
@@ -1216,19 +1217,15 @@ extern "C" int32_t* outetts_synthesize_codes(struct outetts_context* ctx, const 
     const int32_t ato = (int32_t)hp.audio_token_offset;
     const int32_t atc = (int32_t)hp.audio_token_count;
     int n_non_audio = 0;
-    std::vector<int32_t> all_generated; // for repetition penalty
+    // Repetition penalty history = prompt + generated, each distinct token
+    // penalised once: upstream generates through HF generate(repetition_penalty)
+    // / llama.cpp repeat_penalty, both of which do exactly that. The old loop
+    // divided once per OCCURRENCE (penalty^k), which pushed long outputs off
+    // the distribution (nightly roundtrip: "...over the le the crit doll...").
+    std::vector<int32_t> all_generated(prompt_ids.begin(), prompt_ids.end());
 
     for (int step = 0; step < max_audio; step++) {
-        // Apply repetition penalty: divide logits of previously generated tokens
-        for (int32_t prev : all_generated) {
-            if (prev >= 0 && prev < (int32_t)hp.vocab_size) {
-                if (logits[prev] > 0.0f) {
-                    logits[prev] /= rep_penalty;
-                } else {
-                    logits[prev] *= rep_penalty;
-                }
-            }
-        }
+        core_sampling::apply_repetition_penalty(logits, (int)hp.vocab_size, all_generated, rep_penalty);
         int tok = sample_logits(logits, (int)hp.vocab_size, ctx->params.temperature, top_k, &ctx->rng_state);
         free(logits);
         logits = nullptr;
