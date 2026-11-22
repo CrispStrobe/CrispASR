@@ -22,7 +22,7 @@ static bool emulated_support(ggml_backend_dev_t, const ggml_tensor* op) {
 }
 
 static bool expected_support(int k, int channels) {
-    return channels % 128 == 0 && (k == 3 || k == 4 || k == 5 || k == 9 || k == 15);
+    return channels % 128 == 0 && (k == 2 || k == 3 || k == 4 || k == 5 || k == 7 || k == 9 || k == 15);
 }
 
 static bool run_case(ggml_backend_t preferred, ggml_backend_t cpu, int k, int channels, int tokens) {

@@ -2019,7 +2019,7 @@ static ggml_tensor* causal_block1d(ggml_context* ctx, ggml_tensor* x, // (C, T)
 // (Metal: kernel_mul_mm_*_hp; CUDA cuBLAS path: CUBLAS_COMPUTE_32F).
 static ggml_tensor* mul_mat_hp(ggml_context* ctx, ggml_tensor* a, ggml_tensor* b) {
     ggml_tensor* r = ggml_mul_mat(ctx, a, b);
-    ggml_mul_mat_set_prec(r, GGML_PREC_F32);
+    ggml_prec_set_acc(r, GGML_PREC_F32);
     return r;
 }
 

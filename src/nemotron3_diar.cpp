@@ -555,7 +555,7 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
         if (flash) {
             ggml_tensor* Vp = ggml_permute(g, V, 0, 2, 1, 3); // [hd, N, H]
             o = ggml_flash_attn_ext(g, Q, K, Vp, kq_mask_fa, scale, 0.0f, 0.0f);
-            ggml_flash_attn_ext_set_prec(o, GGML_PREC_F32);
+            ggml_prec_set_acc(o, GGML_PREC_F32);
             o = ggml_reshape_2d(g, o, d, N); // result [hd, H, N]
         } else {
             ggml_tensor* Vt = ggml_cont(g, ggml_permute(g, V, 1, 2, 0, 3)); // [N, hd, H]

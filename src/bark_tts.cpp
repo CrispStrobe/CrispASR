@@ -647,7 +647,7 @@ static ggml_cgraph* build_gpt2_graph(bark_context* c, const bark_gpt_model& m, c
         // Flash attention
         ggml_tensor* attn =
             ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, (T == 1) ? nullptr : causal_mask, attn_scale, 0.0f, 0.0f);
-        ggml_flash_attn_ext_set_prec(attn, GGML_PREC_F32);
+        ggml_prec_set_acc(attn, GGML_PREC_F32);
         attn = ggml_reshape_2d(ctx0, attn, D, T);
 
         // Output projection + residual
@@ -861,7 +861,7 @@ static ggml_cgraph* build_fine_graph(bark_context* c, int n_tokens, int codebook
 
         // Bidirectional: no mask (nullptr)
         ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, K, V, nullptr, attn_scale, 0.0f, 0.0f);
-        ggml_flash_attn_ext_set_prec(attn, GGML_PREC_F32);
+        ggml_prec_set_acc(attn, GGML_PREC_F32);
         attn = ggml_reshape_2d(ctx0, attn, D, T);
 
         // Output projection + residual

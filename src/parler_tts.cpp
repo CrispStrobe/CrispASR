@@ -897,7 +897,7 @@ static ggml_cgraph* build_t5_encoder_graph(parler_tts_context* c, int T) {
 
         // KQ = K^T @ Q -> (T_k, T_q, nh) — ggml_mul_mat contracts ne[0]
         ggml_tensor* kq = ggml_mul_mat(ctx0, K, Q); // (T, T, nh)
-        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+        ggml_prec_set_acc(kq, GGML_PREC_F32);
 
         // Add position bias (bidirectional, no causal mask)
         kq = ggml_add(ctx0, kq, pos_bias);

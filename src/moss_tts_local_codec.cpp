@@ -671,7 +671,7 @@ std::vector<int32_t> encode(Codec* c, const float* interleaved, int64_t n_sample
         // call and avoids carrying a second copy on the device.
         ggml_tensor* cbn = ggml_l2_norm(g, to_f32(g, c->codebook[i]), 1e-12f);
         ggml_tensor* sim = ggml_mul_mat(g, cbn, z_n); // (1024, T)
-        ggml_mul_mat_set_prec(sim, GGML_PREC_F32);
+        ggml_prec_set_acc(sim, GGML_PREC_F32);
         ggml_tensor* idx = ggml_argmax(g, sim); // (T,) i32
         char nm[16];
         snprintf(nm, sizeof(nm), "eidx_%d", i);

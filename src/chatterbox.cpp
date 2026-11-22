@@ -1453,7 +1453,7 @@ static ggml_cgraph* build_graph_t3_kv(chatterbox_context* c, int n_past, int n_t
                 ggml_build_forward_expand(gf, W_K_dbg);
 
                 ggml_tensor* K_dbg = ggml_mul_mat(ctx0, b.attn_k_w, x);
-                ggml_mul_mat_set_prec(K_dbg, GGML_PREC_F32);
+                ggml_prec_set_acc(K_dbg, GGML_PREC_F32);
                 ggml_set_name(K_dbg, "L0_K_proj");
                 ggml_set_output(K_dbg);
                 ggml_build_forward_expand(gf, K_dbg);
@@ -1469,14 +1469,14 @@ static ggml_cgraph* build_graph_t3_kv(chatterbox_context* c, int n_past, int n_t
 
                 // Q projection diag — same shape & path as K_dbg.
                 ggml_tensor* Q_dbg = ggml_mul_mat(ctx0, b.attn_q_w, x);
-                ggml_mul_mat_set_prec(Q_dbg, GGML_PREC_F32);
+                ggml_prec_set_acc(Q_dbg, GGML_PREC_F32);
                 ggml_set_name(Q_dbg, "L0_Q_proj");
                 ggml_set_output(Q_dbg);
                 ggml_build_forward_expand(gf, Q_dbg);
 
                 // V projection diag.
                 ggml_tensor* V_dbg = ggml_mul_mat(ctx0, b.attn_v_w, x);
-                ggml_mul_mat_set_prec(V_dbg, GGML_PREC_F32);
+                ggml_prec_set_acc(V_dbg, GGML_PREC_F32);
                 ggml_set_name(V_dbg, "L0_V_proj");
                 ggml_set_output(V_dbg);
                 ggml_build_forward_expand(gf, V_dbg);
@@ -1537,9 +1537,9 @@ static ggml_cgraph* build_graph_t3_kv(chatterbox_context* c, int n_past, int n_t
     for (int i = 0; i < ggml_graph_n_nodes(gf); i++) {
         ggml_tensor* t = ggml_graph_node(gf, i);
         if (t->op == GGML_OP_MUL_MAT) {
-            ggml_mul_mat_set_prec(t, GGML_PREC_F32);
+            ggml_prec_set_acc(t, GGML_PREC_F32);
         } else if (t->op == GGML_OP_FLASH_ATTN_EXT) {
-            ggml_flash_attn_ext_set_prec(t, GGML_PREC_F32);
+            ggml_prec_set_acc(t, GGML_PREC_F32);
         }
     }
 
@@ -1833,9 +1833,9 @@ static ggml_cgraph* build_graph_t3_kv_b2(chatterbox_context* c, int n_past) {
     for (int i = 0; i < ggml_graph_n_nodes(gf); i++) {
         ggml_tensor* t = ggml_graph_node(gf, i);
         if (t->op == GGML_OP_MUL_MAT) {
-            ggml_mul_mat_set_prec(t, GGML_PREC_F32);
+            ggml_prec_set_acc(t, GGML_PREC_F32);
         } else if (t->op == GGML_OP_FLASH_ATTN_EXT) {
-            ggml_flash_attn_ext_set_prec(t, GGML_PREC_F32);
+            ggml_prec_set_acc(t, GGML_PREC_F32);
         }
     }
 
@@ -2754,9 +2754,9 @@ static ggml_cgraph* build_graph_t3_gpt2_kv(chatterbox_context* c, int n_past, in
     for (int i = 0; i < ggml_graph_n_nodes(gf); i++) {
         ggml_tensor* t = ggml_graph_node(gf, i);
         if (t->op == GGML_OP_MUL_MAT) {
-            ggml_mul_mat_set_prec(t, GGML_PREC_F32);
+            ggml_prec_set_acc(t, GGML_PREC_F32);
         } else if (t->op == GGML_OP_FLASH_ATTN_EXT) {
-            ggml_flash_attn_ext_set_prec(t, GGML_PREC_F32);
+            ggml_prec_set_acc(t, GGML_PREC_F32);
         }
     }
 

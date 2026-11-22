@@ -223,7 +223,7 @@ ggml_tensor* bt_attention(ggml_context* c, const bt_attn& a, ggml_tensor* x, ggm
                                            /*max_bias*/ 0.0f, /*logit_softcap*/ 0.0f);
     // Accumulate in F32: the default permits F16 accumulation, which is a
     // silent precision loss over a 1500-key softmax.
-    ggml_flash_attn_ext_set_prec(out, GGML_PREC_F32);
+    ggml_prec_set_acc(out, GGML_PREC_F32);
     // out ne = (D, H, N, B) — flash_attn_ext already emits the permuted layout
     // that "b h n d -> b n (h d)" wants, so no permute+cont is needed below.
 

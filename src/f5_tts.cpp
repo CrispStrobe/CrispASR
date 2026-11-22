@@ -1234,7 +1234,7 @@ static bool f5_dit_cache_build(f5_tts_context* ctx, int T, int B) {
             // sm_60), which is why manual SDPA is the default. Sibling backends
             // (bark_tts, beat_this, chatterbox) set this hint too.
             attn_out = ggml_flash_attn_ext(cache.gctx, q, k, v, nullptr, attn_scale, 0.0f, 0.0f);
-            ggml_flash_attn_ext_set_prec(attn_out, GGML_PREC_F32);
+            ggml_prec_set_acc(attn_out, GGML_PREC_F32);
         } else {
             // Manual SDPA, F32 throughout — correct on every backend (default).
             ggml_tensor* kq = ggml_mul_mat(cache.gctx, k, q); // (T_k, T_q, n_heads, B)

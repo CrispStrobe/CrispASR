@@ -1698,7 +1698,7 @@ static ggml_cgraph* vibevoice_build_asr_decoder_graph(vibevoice_context* ctx, in
             }();
             ggml_tensor* attn_out = ggml_flash_attn_ext(ctx0, Q, Kfull, Vfull, causal_mask, kvp.attn_scale, 0.0f, 0.0f);
             if (attn_prec_f32)
-                ggml_flash_attn_ext_set_prec(attn_out, GGML_PREC_F32);
+                ggml_prec_set_acc(attn_out, GGML_PREC_F32);
 
             attn_out = ggml_reshape_2d(ctx0, attn_out, hp.d_lm, T_cur);
             attn_out = ggml_mul_mat(ctx0, o_w, vibevoice_aq(ctx0, attn_out));

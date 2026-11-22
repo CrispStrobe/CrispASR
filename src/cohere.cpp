@@ -1710,11 +1710,9 @@ static struct ggml_cgraph* cohere_build_graph_decoder(struct cohere_context* ctx
             // Legacy path: explicit mul_mat attention (pre-v0.7).
             struct ggml_tensor* K_c = ggml_cont(ctx0, K);
             struct ggml_tensor* KQ = ggml_mul_mat(ctx0, K_c, Q); // [L, n_tok, n_heads]
-            KQ = ggml_scale_inplace(ctx0, KQ, 1.0f / sqrtf((float)head_dim));
-            if (n_tokens > 1) {
-                KQ = ggml_diag_mask_inf_inplace(ctx0, KQ, offset);
-            }
-            KQ = ggml_soft_max_inplace(ctx0, KQ);
+            // sa_mask is -inf exactly where diag_mask_inf(offset) masked (k > offset + q);
+            // upstream ggml removed DIAG_MASK_INF (2026-11), so mask inside soft_max_ext.
+            KQ = ggml_soft_max_ext(ctx0, KQ, sa_mask, 1.0f / sqrtf((float)head_dim), 0.0f);
 
             struct ggml_tensor* V_trans = ggml_cont(ctx0, ggml_permute(ctx0, V, 1, 0, 2, 3)); // [L, hd, n_heads]
             struct ggml_tensor* sa_out = ggml_mul_mat(ctx0, V_trans, KQ);                     // [hd, n_tok, n_heads]

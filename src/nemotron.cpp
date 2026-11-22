@@ -3217,12 +3217,12 @@ static bool nemotron_apply_prompt_gpu(nemotron_context* ctx, std::vector<float>&
     }
 
     ggml_tensor* mid_mm = ggml_mul_mat(ctx0, ctx->prompt_l0_w_f32, in);
-    ggml_mul_mat_set_prec(mid_mm, GGML_PREC_F32);
+    ggml_prec_set_acc(mid_mm, GGML_PREC_F32);
     ggml_tensor* mid = ggml_add(ctx0, mid_mm, pk.l0_b);
     mid = ggml_relu(ctx0, mid);
 
     ggml_tensor* out_mm = ggml_mul_mat(ctx0, ctx->prompt_l2_w_f32, mid);
-    ggml_mul_mat_set_prec(out_mm, GGML_PREC_F32);
+    ggml_prec_set_acc(out_mm, GGML_PREC_F32);
     ggml_tensor* out = ggml_add(ctx0, out_mm, pk.l2_b);
     ggml_set_name(out, "prompt_out");
     ggml_set_output(out);

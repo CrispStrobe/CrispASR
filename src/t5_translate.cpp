@@ -708,7 +708,7 @@ static ggml_cgraph* build_encoder_graph(t5_translate_context* c, int T) {
 
         // KQ = K^T @ Q → (T_k, T_q, nh) — ggml_mul_mat contracts ne[0]
         ggml_tensor* kq = ggml_mul_mat(ctx0, K, Q); // (T, T, nh)
-        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+        ggml_prec_set_acc(kq, GGML_PREC_F32);
 
         // Add position bias (no causal mask for encoder — bidirectional)
         kq = ggml_add(ctx0, kq, pos_bias);
@@ -897,7 +897,7 @@ static ggml_cgraph* build_decoder_graph(t5_translate_context* c, int n_tokens, i
 
         // Manual attention: KQ + pos_bias + causal_mask → softmax → V
         ggml_tensor* kq = ggml_mul_mat(ctx0, Kfull, Q); // (Lk, n_tokens, nh)
-        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+        ggml_prec_set_acc(kq, GGML_PREC_F32);
         kq = ggml_add(ctx0, kq, dec_pos_bias);
         if (causal_mask)
             kq = ggml_add(ctx0, kq, causal_mask); // broadcast across heads
@@ -922,7 +922,7 @@ static ggml_cgraph* build_decoder_graph(t5_translate_context* c, int n_tokens, i
         ggml_tensor* CV = c->cross_kv_v[il];
 
         ggml_tensor* ca_kq = ggml_mul_mat(ctx0, CK, CQ);
-        ggml_mul_mat_set_prec(ca_kq, GGML_PREC_F32);
+        ggml_prec_set_acc(ca_kq, GGML_PREC_F32);
         ca_kq = ggml_soft_max(ctx0, ca_kq);
 
         ggml_tensor* cv_t = ggml_cont(ctx0, ggml_transpose(ctx0, CV));

@@ -189,7 +189,7 @@ static inline ggml_tensor* cross_attn_step_manual(ggml_context* ctx, ggml_tensor
     // QK^T: (head_dim, T_dec, n_heads) @ (head_dim, T_enc, n_kv_heads)^T
     //     = (T_enc, T_dec, n_heads) — ggml_mul_mat transposes the first arg.
     ggml_tensor* qk = ggml_mul_mat(ctx, cross_K, Q);
-    ggml_mul_mat_set_prec(qk, GGML_PREC_F32);
+    ggml_prec_set_acc(qk, GGML_PREC_F32);
 
     // Scale — OFF by default (T5 folds the scale into its weights; see
     // t5_translate.cpp:823-825, which has no ggml_scale here).

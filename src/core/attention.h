@@ -977,7 +977,7 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     // (online) softmax, it computes the whole score row before normalizing, so at a
     // near-degenerate (attention-sink) softmax it can land on a different side of a
     // sub-ε tie — the candidate mechanism for the MOSS-TTS-Local 4B layer-10
-    // divergence (#249). ggml_mul_mat_set_prec(F32) additionally forces F32 score
+    // divergence (#249). ggml_prec_set_acc(F32) additionally forces F32 score
     // accumulation on CUDA/Metal (a no-op on CPU, which is already F32). ----
     // env overrides the per-call param: unset -> use p.eager_f32_attn; 0/1 forces.
     static const int s_eager_env = []() {
@@ -990,7 +990,7 @@ static inline ggml_tensor* kv_self_attn(ggml_context* ctx0, ggml_cgraph* gf, ggm
     ggml_tensor* attn;
     if (use_eager) {
         ggml_tensor* scores = ggml_mul_mat(ctx0, Kfull, Q); // (Lk, T, n_q)
-        ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+        ggml_prec_set_acc(scores, GGML_PREC_F32);
         scores = ggml_soft_max_ext(ctx0, scores, causal_mask, p.attn_scale, 0.0f);
         ggml_tensor* Vt = ggml_cont(ctx0, ggml_transpose(ctx0, Vfull)); // (Lk, hd, n_q)
         attn = ggml_mul_mat(ctx0, Vt, scores);                          // (hd, T, n_q) = [d, query, head]

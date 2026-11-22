@@ -627,7 +627,7 @@ std::vector<int32_t> encode(Codec* c, const float* waveform, int64_t n_samples, 
         z_e = ggml_add(g, z_e, to_f32(g, c->q_iproj_b[i]));
         ggml_tensor* z_n = ggml_l2_norm(g, z_e, 1e-12f);
         ggml_tensor* sim = ggml_mul_mat(g, c->codebook_normed[i], z_n); // (1024, T)
-        ggml_mul_mat_set_prec(sim, GGML_PREC_F32);
+        ggml_prec_set_acc(sim, GGML_PREC_F32);
         ggml_tensor* idx = ggml_argmax(g, sim); // (T,) i32
         char nm[16];
         snprintf(nm, sizeof(nm), "idx_%d", i);

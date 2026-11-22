@@ -734,7 +734,7 @@ static ggml_cgraph* mimo_tok_build_encoder_graph(mimo_tokenizer_context* ctx, in
 
             // argmin ||x-e||^2 = argmax (2*x*e - ||e||^2).
             ggml_tensor* scores = ggml_mul_mat(ctx0, cb.embed, residual);
-            ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+            ggml_prec_set_acc(scores, GGML_PREC_F32);
             scores = ggml_scale(ctx0, scores, 2.0f);
             scores = ggml_sub(ctx0, scores, ggml_repeat(ctx0, norms, scores));
 

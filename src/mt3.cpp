@@ -743,7 +743,7 @@ static ggml_cgraph* mt3_build_encoder_graph(mt3_context* c, int T) {
         V = ggml_permute(ctx0, ggml_reshape_3d(ctx0, V, hd, nh, T), 0, 2, 1, 3);
 
         ggml_tensor* kq = ggml_mul_mat(ctx0, K, Q); // (T_k, T_q, nh)
-        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+        ggml_prec_set_acc(kq, GGML_PREC_F32);
         // The encoder padding mask is all-ones (network.py:286-289): the
         // zero-padded tail of a short final segment is DELIBERATELY attended to.
         kq = mt3_softmax(ctx0, kq, nullptr, hp.attn_logit_scale);
@@ -939,7 +939,7 @@ static ggml_cgraph* mt3_build_decoder_graph(mt3_context* c, int n_tokens, int of
             GGML_TYPE_F32);
 
         ggml_tensor* kq = ggml_mul_mat(ctx0, Kfull, Q);
-        ggml_mul_mat_set_prec(kq, GGML_PREC_F32);
+        ggml_prec_set_acc(kq, GGML_PREC_F32);
         kq = mt3_softmax(ctx0, kq, causal_mask, hp.attn_logit_scale);
 
         ggml_tensor* v_t = ggml_cont(ctx0, ggml_transpose(ctx0, Vfull));
@@ -958,7 +958,7 @@ static ggml_cgraph* mt3_build_decoder_graph(mt3_context* c, int n_tokens, int of
         CQ = ggml_permute(ctx0, ggml_reshape_3d(ctx0, CQ, hd, nh, n_tokens), 0, 2, 1, 3);
 
         ggml_tensor* ca_kq = ggml_mul_mat(ctx0, c->cross_kv_k[il], CQ);
-        ggml_mul_mat_set_prec(ca_kq, GGML_PREC_F32);
+        ggml_prec_set_acc(ca_kq, GGML_PREC_F32);
         ca_kq = mt3_softmax(ctx0, ca_kq, nullptr, hp.attn_logit_scale);
 
         ggml_tensor* cv_t = ggml_cont(ctx0, ggml_transpose(ctx0, c->cross_kv_v[il]));

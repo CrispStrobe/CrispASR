@@ -53,7 +53,7 @@ inline ggml_tensor* attn(ggml_context* ctx, ggml_tensor* Q, ggml_tensor* K, ggml
             m = ggml_cast(ctx, m, GGML_TYPE_F16);
         }
         ggml_tensor* out = ggml_flash_attn_ext(ctx, Q, K, V, m, scale, 0.0f, 0.0f);
-        ggml_flash_attn_ext_set_prec(out, GGML_PREC_F32); // honoured only on some devices; harmless elsewhere
+        ggml_prec_set_acc(out, GGML_PREC_F32); // honoured only on some devices; harmless elsewhere
         return ggml_reshape_2d(ctx, out, d, T_q);
     }
     // Manual F32 SDPA. cont the (possibly permuted) Q/K so mul_mat is safe on
@@ -62,7 +62,7 @@ inline ggml_tensor* attn(ggml_context* ctx, ggml_tensor* Q, ggml_tensor* K, ggml
     ggml_tensor* Kc = ggml_cont(ctx, K);
     ggml_tensor* Qc = ggml_cont(ctx, Q);
     ggml_tensor* scores = ggml_mul_mat(ctx, Kc, Qc); // (T_kv, T_q, n_heads) = QKᵀ per head
-    ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+    ggml_prec_set_acc(scores, GGML_PREC_F32);
     scores = ggml_scale(ctx, scores, scale); // scale·QKᵀ
     if (mask) {
         // soft_max wants an F32 additive term for the correctness path; a
@@ -74,7 +74,7 @@ inline ggml_tensor* attn(ggml_context* ctx, ggml_tensor* Q, ggml_tensor* K, ggml
     scores = ggml_soft_max(ctx, scores);                                    // F32 softmax over the key axis
     ggml_tensor* V_perm = ggml_cont(ctx, ggml_permute(ctx, V, 1, 0, 2, 3)); // (T_kv, head_dim, n_heads)
     ggml_tensor* attn = ggml_mul_mat(ctx, V_perm, scores);                  // (head_dim, T_q, n_heads)
-    ggml_mul_mat_set_prec(attn, GGML_PREC_F32);
+    ggml_prec_set_acc(attn, GGML_PREC_F32);
     attn = ggml_cont(ctx, ggml_permute(ctx, attn, 0, 2, 1, 3)); // (head_dim, n_heads, T_q)
     return ggml_reshape_2d(ctx, attn, d, T_q);
 }
