@@ -1,17 +1,21 @@
 # Inbound ggml sync
 
-**Current audit: 2026-09-07.** The maintained fork was based on v0.17; upstream
-is now `e91ded11` / v0.23.0. The consolidation merged as
-[CrispStrobe/ggml#3](https://github.com/CrispStrobe/ggml/pull/3); default branch
-`crispstrobe-ops` is now 0 commits behind upstream at `2dd13edd`.
+**Current audit: 2026-11-22.** Branch `sync/upstream-2026-11` of the fork merges
+upstream ggml master `d9fe7bff` (llama.cpp `5676dfbe`) and then the 118 later
+ggml commits of llama.cpp up to `1014775c` (`scripts/sync-llama.last`).
 
-The merged fork takes upstream as the owner of CUDA im2col limits, CUDA cpy grid
-limits, quantized GET_ROWS, CUDA conv-transpose loop bounds, Metal shared copies,
-and `col2im_1d`. It keeps the fork features still absent upstream: NORM_AFFINE,
-AA_SNAKE_BETA, SiGLU, the CPU F16 safeguard, CUDA per-head masks and F16
-conv-transpose weights, Metal profiling/cache/correctness controls, the scheduler
-reuse fix, Metal im2col occupancy, WebGPU's remaining OCR ops, and batched
-conv1d/depthwise support.
+Now upstream-owned, our copies dropped: the #38 F16×F32 CPU dot and F32 conv
+im2col patches, CUDA per-head FA masks (option `GGML_CUDA_CRISPASR_FA_PERHEAD_MASK`
+removed), WebGPU ARANGE and POOL_2D, the Vulkan MMQ A-side zero fill (#589), and
+the batched conv_1d layout. Upstream pruned `ggml_mul_mat_set_prec` /
+`ggml_flash_attn_ext_set_prec` (use `ggml_prec_set_acc`), ADD1 and
+DIAG_MASK_INF/ZERO; CrispASR was ported. Still carried: NORM_AFFINE,
+AA_SNAKE_BETA, SIGLU (now in the BF16 Vulkan GLU table), the scheduler rewire
+log, lazy UE4M3/FP8 tables, the Vulkan FA mask stride, Metal hp/Q8 kernels, CANN
+310P, WebGPU CONV_TRANSPOSE_2D, the conv_1d N==1 zero-copy path, and a new Metal
+fusion alias guard (README row 25). `ci/crispasr-patches.txt` lists them.
+
+Earlier audit (2026-09-07): v0.17 → v0.23 consolidation, CrispStrobe/ggml#3.
 
 ## Merge discipline
 

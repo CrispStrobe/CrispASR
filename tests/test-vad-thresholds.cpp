@@ -5,6 +5,7 @@
 #include <vector>
 #include <iostream>
 #include <cassert>
+#include <cstdio>
 #include <cmath>
 #include <cstdlib>
 
@@ -13,9 +14,36 @@ static const char* env_or(const char* name, const char* fallback) {
     return (v && *v) ? v : fallback;
 }
 
+
+// Exit code ctest treats as SKIPPED (SKIP_RETURN_CODE 77): these tests need a
+// real whisper model that is not part of the repository.
+static bool file_exists(const char* path) {
+    FILE* f = std::fopen(path, "rb");
+    if (!f)
+        return false;
+    std::fclose(f);
+    return true;
+}
+
+#define VAD_CHECK(cond)                                                          \
+    do {                                                                         \
+        if (!(cond)) {                                                           \
+            std::fprintf(stderr, "%s:%d: check failed: %s\n", __FILE__, __LINE__, #cond); \
+            return 1;                                                            \
+        }                                                                        \
+    } while (0)
+
 int main() {
     std::string sample_path = env_or("CRISPASR_AUDIO_EN", SAMPLE_PATH);
     std::string vad_model_path = env_or("CRISPASR_VAD_MODEL", VAD_MODEL_PATH);
+    const std::string whisper_model_path = env_or("CRISPASR_MODEL_WHISPER", CRISPASR_MODEL_PATH);
+    for (const std::string& path : {whisper_model_path, vad_model_path}) {
+        if (!file_exists(path.c_str())) {
+            std::fprintf(stderr, "SKIP: model not found: %s (set CRISPASR_MODEL_WHISPER / CRISPASR_VAD_MODEL)\n",
+                         path.c_str());
+            return 77;
+        }
+    }
 
     std::vector<float> pcmf32;
     std::vector<std::vector<float>> pcmf32s;
@@ -25,9 +53,8 @@ int main() {
     }
 
     struct whisper_context_params cparams = whisper_context_default_params();
-    const char* whisper_model = env_or("CRISPASR_MODEL_WHISPER", CRISPASR_MODEL_PATH);
-    struct whisper_context* wctx = whisper_init_from_file_with_params(whisper_model, cparams);
-    assert(wctx != nullptr);
+    struct whisper_context* wctx = whisper_init_from_file_with_params(whisper_model_path.c_str(), cparams);
+    VAD_CHECK(wctx != nullptr);
 
     float thresholds[] = {0.1f, 0.5f, 0.9f};
     for (float thold : thresholds) {
@@ -38,7 +65,7 @@ int main() {
 
         std::cout << "Testing VAD threshold: " << thold << std::endl;
         int ret = whisper_full_parallel(wctx, wparams, pcmf32.data(), pcmf32.size(), 1);
-        assert(ret == 0);
+        VAD_CHECK(ret == 0);
 
         int n_segments = whisper_full_n_segments(wctx);
         std::cout << "  n_segments: " << n_segments << std::endl;

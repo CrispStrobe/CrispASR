@@ -1844,6 +1844,15 @@ target_include_directories(zonos3_tts PUBLIC .)
 target_include_directories(zonos3_tts PRIVATE zonos3 zonos3/vendor)
 target_compile_features   (zonos3_tts PUBLIC cxx_std_17)
 target_link_libraries     (zonos3_tts PUBLIC ggml ggml-base crispasr_link_ggml_cpu)
+# zac.cpp calls Accelerate (cblas_sgemm, vvexpf) on Apple; link it here so every
+# consumer links, not only those that pull Accelerate in through another library
+# (test-zonos3-live failed to link without it).
+if(APPLE)
+    if(NOT ACCELERATE_LIB)
+        find_library(ACCELERATE_LIB Accelerate REQUIRED)
+    endif()
+    target_link_libraries(zonos3_tts PUBLIC ${ACCELERATE_LIB})
+endif()
 if(NOT MSVC)
     target_compile_options(zonos3_tts PRIVATE -O3)
 endif()

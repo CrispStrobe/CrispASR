@@ -46,7 +46,7 @@ fi
 }
 python -c "import numpy" 2>/dev/null || { echo "SKIP: python numpy missing"; exit 0; }
 
-OUT_DIR="$(mktemp -d "${TMPDIR:-/mnt/volume1/tmp-overflow}/f5-voice-rate.XXXXXX")"
+OUT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/f5-voice-rate.XXXXXX")"
 CLI_PID=""
 cleanup() {
     [ -n "$CLI_PID" ] && kill "$CLI_PID" 2>/dev/null

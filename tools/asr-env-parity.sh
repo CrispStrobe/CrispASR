@@ -169,7 +169,7 @@ shell_join() {
     out+=("$x")
   done
   local IFS=' '
-  printf '%s' "${out[*]}"
+  printf '%s' ${out[*]+"${out[*]}"}
 }
 
 while (($#)); do
@@ -230,14 +230,14 @@ CMD[0]=$command_path
 # variant order-dependent, and using the same name as a base env means it is
 # already enabled in the baseline. Reject both cases.
 TEST_NAMES=()
-for spec in "${TEST_ENVS[@]}"; do
+for spec in ${TEST_ENVS[@]+"${TEST_ENVS[@]}"}; do
   name=$(spec_name "$spec")
-  ! array_contains "$name" "${TEST_NAMES[@]}" || die "duplicate test env name: $name"
+  ! array_contains "$name" ${TEST_NAMES[@]+"${TEST_NAMES[@]}"} || die "duplicate test env name: $name"
   TEST_NAMES+=("$name")
 done
-for spec in "${BASE_ENVS[@]}"; do
+for spec in ${BASE_ENVS[@]+"${BASE_ENVS[@]}"}; do
   name=$(spec_name "$spec")
-  ! array_contains "$name" "${TEST_NAMES[@]}" ||
+  ! array_contains "$name" ${TEST_NAMES[@]+"${TEST_NAMES[@]}"} ||
     die "env cannot be both --base-env and --env: $name"
 done
 
@@ -283,7 +283,7 @@ done
 # labels so long ENV=VALUE names never run into the status column.
 LABEL_WIDTH=${#RUN_LABEL}
 (( LABEL_WIDTH < 8 )) && LABEL_WIDTH=8
-for spec in "${TEST_ENVS[@]}"; do
+for spec in ${TEST_ENVS[@]+"${TEST_ENVS[@]}"}; do
   label=$(variant_label "$spec")
   ((${#label} > LABEL_WIDTH)) && LABEL_WIDTH=${#label}
 done
@@ -295,14 +295,14 @@ fi
 # caller environment before baseline and each variant. Explicit -u entries are
 # for aggregate/related controls that the generic harness cannot know about.
 ALL_UNSETS=()
-for spec in "${TEST_ENVS[@]}"; do
+for spec in ${TEST_ENVS[@]+"${TEST_ENVS[@]}"}; do
   name=$(spec_name "$spec")
-  if ! array_contains "$name" "${ALL_UNSETS[@]}"; then
+  if ! array_contains "$name" ${ALL_UNSETS[@]+"${ALL_UNSETS[@]}"}; then
     ALL_UNSETS+=("$name")
   fi
 done
-for name in "${UNSET_ENVS[@]}"; do
-  if ! array_contains "$name" "${ALL_UNSETS[@]}"; then
+for name in ${UNSET_ENVS[@]+"${UNSET_ENVS[@]}"}; do
+  if ! array_contains "$name" ${ALL_UNSETS[@]+"${ALL_UNSETS[@]}"}; then
     ALL_UNSETS+=("$name")
   fi
 done
@@ -312,10 +312,10 @@ done
   printf 'samples=%s\n' "$SAMPLES"
   printf 'pattern=%s\n' "$PATTERN"
   printf 'file_count=%d\n' "${#FILES[@]}"
-  printf 'command='; shell_join "${CMD[@]}"; printf '\n'
-  printf 'test_envs='; shell_join "${TEST_ENVS[@]}"; printf '\n'
-  printf 'base_envs='; shell_join "${BASE_ENVS[@]}"; printf '\n'
-  printf 'unset_envs='; shell_join "${ALL_UNSETS[@]}"; printf '\n'
+  printf 'command='; shell_join ${CMD[@]+"${CMD[@]}"}; printf '\n'
+  printf 'test_envs='; shell_join ${TEST_ENVS[@]+"${TEST_ENVS[@]}"}; printf '\n'
+  printf 'base_envs='; shell_join ${BASE_ENVS[@]+"${BASE_ENVS[@]}"}; printf '\n'
+  printf 'unset_envs='; shell_join ${ALL_UNSETS[@]+"${ALL_UNSETS[@]}"}; printf '\n'
   printf 'cli_version='; "${CMD[0]}" --version 2>&1 | head -n 1 || true
 } > "$OUT/meta.txt"
 
@@ -341,13 +341,13 @@ run_one() {
 
   local env_cmd=(env)
   local name
-  for name in "${ALL_UNSETS[@]}"; do
+  for name in ${ALL_UNSETS[@]+"${ALL_UNSETS[@]}"}; do
     env_cmd+=(-u "$name")
   done
-  env_cmd+=("${BASE_ENVS[@]}")
-  env_cmd+=("${variant_envs[@]}")
+  env_cmd+=(${BASE_ENVS[@]+"${BASE_ENVS[@]}"})
+  env_cmd+=(${variant_envs[@]+"${variant_envs[@]}"})
 
-  if "${env_cmd[@]}" "${CMD[@]}" -f "$audio" >"$stdout" 2>"$stderr"; then
+  if ${env_cmd[@]+"${env_cmd[@]}"} ${CMD[@]+"${CMD[@]}"} -f "$audio" >"$stdout" 2>"$stderr"; then
     rc=0
   else
     rc=$?
@@ -362,7 +362,7 @@ run_one() {
 }
 
 file_index=0
-for audio in "${FILES[@]}"; do
+for audio in ${FILES[@]+"${FILES[@]}"}; do
   file_index=$((file_index + 1))
   sample=$(basename "$audio")
   printf -v sample_key '%04d-%s' "$file_index" "$(safe_name "$sample")"
@@ -380,7 +380,7 @@ for audio in "${FILES[@]}"; do
   printf '  %-*s  %-5s  transcribe=%ss\n' "$LABEL_WIDTH" baseline REF "$RUN_TSEC"
 
   variant_index=0
-  for spec in "${TEST_ENVS[@]}"; do
+  for spec in ${TEST_ENVS[@]+"${TEST_ENVS[@]}"}; do
     variant_index=$((variant_index + 1))
     label=$(variant_label "$spec")
     printf -v artifact_key 'variant-%04d' "$variant_index"
@@ -411,7 +411,7 @@ for audio in "${FILES[@]}"; do
   # independent test dimensions. With a single -e it would duplicate that
   # variant exactly and waste time.
   if ((${#TEST_ENVS[@]} > 1)); then
-    run_one "$audio" "$sample_key" all "${TEST_ENVS[@]}"
+    run_one "$audio" "$sample_key" all ${TEST_ENVS[@]+"${TEST_ENVS[@]}"}
     if ((RUN_RC != 0)); then
       status=ERROR
       diff_path=-

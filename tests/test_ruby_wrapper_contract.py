@@ -71,8 +71,10 @@ void Init_wrapper_probe(void) {
  rb_define_singleton_method(m,"ultra_frees",frees,0);
 }
 ''')
-            lib = tmp/'wrapper_probe.so'
-            subprocess.run(['cc','-shared',*flags,str(obj),str(probe),str(metadata),str(audio),str(chat),str(aux),str(parakeet),str(titanet),str(db),str(speaker),str(stream),str(text),str(mic),str(vad),str(stub),str(init),'-lpthread','-o',str(lib)],check=True)
+            lib = tmp/('wrapper_probe.bundle' if sys.platform=='darwin' else 'wrapper_probe.so')  # Ruby's DLEXT
+            subprocess.run(['cc','-shared',*flags,str(obj),str(probe),str(metadata),str(audio),str(chat),str(aux),str(parakeet),str(titanet),str(db),str(speaker),str(stream),str(text),str(mic),str(vad),str(stub),str(init),'-lpthread',
+                *(['-undefined','dynamic_lookup'] if sys.platform=='darwin' else []),  # Ruby symbols come from the host interpreter (RbConfig LDSHARED does the same)
+                '-o',str(lib)],check=True)
             program = tmp/'probe.rb';program.write_text(PROGRAM)
             result = subprocess.run([RUBY,str(program),str(lib)],text=True,capture_output=True,env=env,timeout=60,
                 preexec_fn=(lambda: __import__('resource').setrlimit(__import__('resource').RLIMIT_CORE,(0,0))) if os.name=='posix' else None)

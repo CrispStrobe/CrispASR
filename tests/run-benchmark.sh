@@ -53,6 +53,14 @@ echo "Audio:  $AUDIO"
 
 # Run the benchmark driver
 export CRISPASR_BIN="$CRISPASR"
+# The driver appends to $CRISPASR_BENCH_RESULTS_DIR/runs.jsonl. Use a fresh
+# directory unless the caller chose one, so the check below reads exactly what
+# this run wrote (it used to look at a VPS-only path).
+if [ -z "${CRISPASR_BENCH_RESULTS_DIR:-}" ]; then
+    CRISPASR_BENCH_RESULTS_DIR="$(mktemp -d "${TMPDIR:-/tmp}/crispasr-bench.XXXXXX")"
+    trap 'rm -rf "$CRISPASR_BENCH_RESULTS_DIR"' EXIT
+fi
+export CRISPASR_BENCH_RESULTS_DIR
 python3 tests/benchmark_asr.py \
     --audio "$AUDIO" \
     --model "$MODEL" \
@@ -67,7 +75,7 @@ if [ $rc -ne 0 ]; then
 fi
 
 # Verify results file was created
-RESULTS="/mnt/storage/benchmark-results/runs.jsonl"
+RESULTS="$CRISPASR_BENCH_RESULTS_DIR/runs.jsonl"
 if [ ! -f "$RESULTS" ]; then
     echo "FAIL: $RESULTS not created"
     exit 1

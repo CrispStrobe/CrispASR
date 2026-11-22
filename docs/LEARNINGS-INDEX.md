@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (340 lessons)
+## Index by topic (343 lessons)
 
 **Security & untrusted input** (2)
 
@@ -389,7 +389,7 @@ cross-reference when you already know which model you are touching.
 - L19786 — M1 OmniVoice attention copies and warm shader-cache controls
 - L19883 — OpenVoice2 — zero input is not absent conditioning; ordered flow and final activation defaults
 
-**Uncategorised** (12)
+**Uncategorised** (15)
 
 - L201 — A stage timer can hide per-process setup — two very different GPUs showing the same time is the tell (2026-09-29, #461)
 - L219 — Keeping the old path "for safety" and re-running it can double the cost (2026-09-30, #478)
@@ -403,6 +403,9 @@ cross-reference when you already know which model you are touching.
 - L19637 — 2026-10-06 — Lining up a new hypothesis with committed text needs an alignment, and word lists need the same attribution as the text
 - L19672 — 2026-10-06 — A diagnosis is a prediction: test the prediction before shipping the fix (moonshine-de, and a loaded box)
 - L19716 — 2026-10-06 — A revision pin can be 12 real characters and 28 invented ones
+- L19905 — 2026-11-22 — ggml sync: a fusion that is safe for weights is not safe for activations; read upstream's sync tooling before trusting it
+- L19935 — 2026-11-22 — CTC prefix beam search had the two repeat rules swapped
+- L19947 — 2026-11-22 — test infrastructure that only worked on the VPS
 
 ## Cross-reference by model / family
 

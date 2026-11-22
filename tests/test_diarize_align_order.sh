@@ -30,7 +30,7 @@ TEST_WAV="${CRISPASR_TEST_DIARIZE_WAV:-samples/multispeaker.wav}"
 WHISPER="${CRISPASR_MODEL_WHISPER:-/mnt/storage/gguf-models/ggml-base.en.bin}"
 PARAFORMER="${CRISPASR_PARAFORMER_MODEL:-/mnt/storage/gguf-models/paraformer-large-q4_k.gguf}"
 JFK_WAV="samples/jfk.wav"
-TMPOUT="/mnt/volume1/tmp-overflow/test267"
+TMPOUT="${TMPDIR:-/tmp}/test267"
 
 PASS=0
 FAIL=0

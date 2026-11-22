@@ -50,7 +50,7 @@ fi
 
 echo "Model: $MODEL"
 echo "Audio: $AUDIO"
-LOG=$(mktemp /mnt/volume1/tmp-overflow/crispasr-diarized.XXXXXX)
+LOG=$(mktemp "${TMPDIR:-/tmp}/crispasr-diarized.XXXXXX")
 trap 'kill "$SV" 2>/dev/null; rm -f "$LOG"' EXIT
 "$CRISPASR" --server -m "$MODEL" --host 127.0.0.1 --port "$PORT" > "$LOG" 2>&1 &
 SV=$!

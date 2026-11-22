@@ -256,9 +256,11 @@ else
     # chunk length to mismatch), and the re-chunk must match a fresh run.
     OUT5="$($CRISPASR --vad --vad-import "$RAW" -f "$JFK_WAV" --chunk-seconds 5 -m "$MODEL" 2>&1)"; RC5=$?
     OUT2="$($CRISPASR --vad --vad-import "$RAW" -f "$JFK_WAV" --chunk-seconds 2 -m "$MODEL" 2>&1)"; RC2=$?
-    # A fresh chunk export at 5 s, to compare slice counts.
-    FRESH5="$TMPDIR/fresh5.json"
-    $CRISPASR --vad --vad-export "$FRESH5" -f "$JFK_WAV" --chunk-seconds 5 >/dev/null 2>&1
+    # A fresh VAD transcription at 5 s with the SAME model: the re-chunk must
+    # reproduce what that run slices. (Not a backend-less --vad-export: a
+    # backend that chunks internally, like whisper, takes the whole speech
+    # segment on an explicit --chunk-seconds (#257), and export cannot know.)
+    FRESH5_OUT="$($CRISPASR --vad -f "$JFK_WAV" --chunk-seconds 5 -m "$MODEL" 2>&1)"
     set -e
 
     check "raw import @5 succeeds" test "$RC5" -eq 0
@@ -267,8 +269,10 @@ else
     check "raw import @2 does not warn" bash -c "! echo \"$OUT2\" | grep -qi warning"
 
     N_RAW5=$(echo "$OUT5" | grep -oi 'imported [0-9]*' | grep -o '[0-9]*')
-    N_FRESH5=$(grep -o '"start"' "$FRESH5" | wc -l | tr -d ' ')
-    check "raw@5 re-chunk equals a fresh chunk export @5 ($N_RAW5 == $N_FRESH5)" test "$N_RAW5" = "$N_FRESH5"
+    # The CLI prints "processing N slice(s)" only when N > 1.
+    N_FRESH5=$(echo "$FRESH5_OUT" | grep -o 'processing [0-9]* slice' | grep -o '[0-9]*' || true)
+    N_FRESH5=${N_FRESH5:-1}
+    check "raw@5 re-chunk equals a fresh VAD run @5 ($N_RAW5 == $N_FRESH5)" test "$N_RAW5" = "$N_FRESH5"
 fi
 
 

@@ -100,6 +100,25 @@ static inline void irfft_hermitian(const float* spec_re, const float* spec_im, i
     }
 }
 
+// One frame of the scalar path: polar spectrum -> time samples. Kept out of
+// line so the serial loop and the parallel tiles execute the SAME machine code;
+// inlined separately at two call sites the compiler vectorized / FMA-fused them
+// differently and the tiled result drifted by 1 ulp from the serial one.
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#elif defined(_MSC_VER)
+__declspec(noinline)
+#endif
+static void istft_scalar_frame(const float* m_row, const float* p_row, int n_fft, float* frame_re, float* frame_im,
+                               float* out) {
+    const int n_freq = n_fft / 2 + 1;
+    for (int f = 0; f < n_freq; f++) {
+        frame_re[f] = m_row[f] * std::cos(p_row[f]);
+        frame_im[f] = m_row[f] * std::sin(p_row[f]);
+    }
+    irfft_hermitian(frame_re, frame_im, n_fft, out);
+}
+
 // Build a periodic Hann window of length N:
 //   w[n] = 0.5 * (1 - cos(2*pi*n / N))
 // (periodic = divide by N, not N-1; matches torch.hann_window(N, periodic=True)).
@@ -280,13 +299,8 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
             std::vector<float> frame_im(n_freq);
             std::vector<float> frame(n_fft);
             for (int t = 0; t < T_frames; t++) {
-                const float* m_row = mag + (size_t)t * n_freq;
-                const float* p_row = phase + (size_t)t * n_freq;
-                for (int f = 0; f < n_freq; f++) {
-                    frame_re[f] = m_row[f] * std::cos(p_row[f]);
-                    frame_im[f] = m_row[f] * std::sin(p_row[f]);
-                }
-                irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, frame.data());
+                istft_scalar_frame(mag + (size_t)t * n_freq, phase + (size_t)t * n_freq, n_fft, frame_re.data(),
+                                   frame_im.data(), frame.data());
                 overlap_add(t, frame.data());
             }
         } else {
@@ -300,13 +314,8 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
                     std::vector<float> frame_im(n_freq);
                     for (int local = begin; local < end; local++) {
                         const int t = first + local;
-                        const float* m_row = mag + (size_t)t * n_freq;
-                        const float* p_row = phase + (size_t)t * n_freq;
-                        for (int f = 0; f < n_freq; f++) {
-                            frame_re[f] = m_row[f] * std::cos(p_row[f]);
-                            frame_im[f] = m_row[f] * std::sin(p_row[f]);
-                        }
-                        irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, frames.data() + (size_t)local * n_fft);
+                        istft_scalar_frame(mag + (size_t)t * n_freq, phase + (size_t)t * n_freq, n_fft,
+                                           frame_re.data(), frame_im.data(), frames.data() + (size_t)local * n_fft);
                     }
                 });
                 // Only independent transforms run concurrently. Keep the

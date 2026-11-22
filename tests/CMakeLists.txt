@@ -15,6 +15,57 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 include(Catch)
+
+# Catch2's discovery script writes PROPERTIES as one flattened word list, so a
+# list-valued LABELS "live;miotts" reached ctest as `LABELS live miotts ...`:
+# the second label was read as a property name and every property after it
+# shifted by one. Catch appends SKIP_RETURN_CODE 4 last, so with an even
+# number of labels a test that SKIPPED (model not present) was reported as
+# FAILED. The arguments arrive here already flattened; labels are lowercase and
+# every keyword / property name is uppercase, so the words after LABELS up to
+# the next uppercase word are the labels. They are applied after discovery by
+# a per-call include file that sets the list with correct quoting.
+function(catch_discover_tests TARGET)
+    set(_out)
+    set(_labels)
+    set(_in_labels FALSE)
+    set(_in_props FALSE)
+    set(_test_list "${TARGET}_TESTS")
+    set(_want_list FALSE)
+    foreach(_a IN LISTS ARGN)
+        if(_want_list)
+            set(_test_list "${_a}")
+            set(_want_list FALSE)
+        endif()
+        if(_in_labels)
+            if(_a MATCHES "^[A-Z][A-Z0-9_]*$")
+                set(_in_labels FALSE)
+            else()
+                list(APPEND _labels "${_a}")
+                continue()
+            endif()
+        endif()
+        if(_a STREQUAL "TEST_LIST")
+            set(_want_list TRUE)
+        elseif(_a STREQUAL "PROPERTIES")
+            set(_in_props TRUE)
+        elseif(_in_props AND _a STREQUAL "LABELS")
+            set(_in_labels TRUE)
+            continue()
+        endif()
+        list(APPEND _out "${_a}")
+    endforeach()
+    _catch_discover_tests(${TARGET} ${_out})
+    if(_labels)
+        string(MAKE_C_IDENTIFIER "${TARGET}_${_test_list}" _id)
+        set(_fix "${CMAKE_CURRENT_BINARY_DIR}/${_id}_labels.cmake")
+        file(WRITE "${_fix}"
+             "foreach(_t IN LISTS ${_test_list})\n"
+             "  set_tests_properties(\"\${_t}\" PROPERTIES LABELS \"${_labels}\")\n"
+             "endforeach()\n")
+        set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES "${_fix}")
+    endif()
+endfunction()
 find_package(OpenMP QUIET)
 get_target_property(CRISPASR_CPU_BLAS_AVAILABLE crispasr-cpu-blas CRISPASR_CPU_BLAS_AVAILABLE)
 
@@ -268,11 +319,12 @@ set_tests_properties(${TEST_TARGET} PROPERTIES
 # paraformer exercises the CIF predictor read (read_f32 → core_cpu::to_f32).
 set(TEST_TARGET test-paraformer-jfk-live)
 add_test(NAME ${TEST_TARGET}
-    COMMAND $<TARGET_FILE:crispasr-cli>
+    COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/run-licensed-live.sh funasr-v1.1 $<TARGET_FILE:crispasr-cli>
     --backend paraformer --auto-download -f ${PROJECT_SOURCE_DIR}/samples/jfk.mp3)
 set_tests_properties(${TEST_TARGET} PROPERTIES
     LABELS "live;asr;weight-read"
     TIMEOUT 600
+    SKIP_RETURN_CODE 77
     PASS_REGULAR_EXPRESSION "do for your country")
 
 # kyutai-stt (Mimi codec) — default causal+sliding-window attention.
@@ -360,7 +412,7 @@ target_compile_definitions(${VAD_TEST} PRIVATE
     VAD_MODEL_PATH="${PROJECT_SOURCE_DIR}/models/for-tests-silero-v6.2.0-ggml.bin"
     SAMPLE_PATH="${PROJECT_SOURCE_DIR}/samples/jfk.wav")
 add_test(NAME ${VAD_TEST} COMMAND ${VAD_TEST})
-set_tests_properties(${VAD_TEST} PROPERTIES LABELS "base;en")
+set_tests_properties(${VAD_TEST} PROPERTIES LABELS "base;en" SKIP_RETURN_CODE 77)
 
 # ─── test - vad - thresholds — Verify VAD behavior with different thresholds ────────
 set(VAD_TH_TEST test-vad-thresholds)
@@ -372,7 +424,7 @@ target_compile_definitions(${VAD_TH_TEST} PRIVATE
     VAD_MODEL_PATH="${PROJECT_SOURCE_DIR}/models/for-tests-silero-v6.2.0-ggml.bin"
     SAMPLE_PATH="${PROJECT_SOURCE_DIR}/samples/jfk.wav")
 add_test(NAME ${VAD_TH_TEST} COMMAND ${VAD_TH_TEST})
-set_tests_properties(${VAD_TH_TEST} PROPERTIES LABELS "base;en")
+set_tests_properties(${VAD_TH_TEST} PROPERTIES LABELS "base;en" SKIP_RETURN_CODE 77)
 
 # ─── test - crispasr - cache — Catch2 unit tests for download / cache helpers ───────
 #
@@ -5605,6 +5657,7 @@ add_test(NAME benchmark-quick
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 set_tests_properties(benchmark-quick PROPERTIES
     LABELS "benchmark"
+    SKIP_RETURN_CODE 2
     TIMEOUT 600)
 
 # ─── test-htdemucs-smoke — HTDemucs separation smoke test. This file existed

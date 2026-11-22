@@ -56,9 +56,10 @@ test_backend() {
         return
     fi
 
-    # Normalize: lowercase, remove punctuation
+    # Normalize: lowercase, hyphens separate words ("fellow-american" from
+    # moonshine), then drop the remaining punctuation
     local normalized
-    normalized=$(echo "$output" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z ]//g' | tr -s ' ')
+    normalized=$(echo "$output" | tr '[:upper:]' '[:lower:]' | tr -- '-' ' ' | sed 's/[^a-z ]//g' | tr -s ' ')
 
     # Check for key phrase (allow variants: american/americans/americas)
     if echo "$normalized" | grep -q "fellow america"; then
