@@ -13,6 +13,22 @@
 
 namespace {
 
+// MinGW/MSVC have no POSIX setenv/unsetenv; _putenv_s(k, "") removes k.
+void test_setenv(const char* k, const char* v) {
+#if defined(_WIN32)
+    _putenv_s(k, v);
+#else
+    ::setenv(k, v, 1);
+#endif
+}
+void test_unsetenv(const char* k) {
+#if defined(_WIN32)
+    _putenv_s(k, "");
+#else
+    ::unsetenv(k);
+#endif
+}
+
 struct scoped_env {
     const char* name;
     std::string old;
@@ -23,15 +39,15 @@ struct scoped_env {
         if (had)
             old = o;
         if (v)
-            setenv(n, v, 1);
+            test_setenv(n, v);
         else
-            unsetenv(n);
+            test_unsetenv(n);
     }
     ~scoped_env() {
         if (had)
-            setenv(name, old.c_str(), 1);
+            test_setenv(name, old.c_str());
         else
-            unsetenv(name);
+            test_unsetenv(name);
     }
 };
 
