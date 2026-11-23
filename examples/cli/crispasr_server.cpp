@@ -3061,8 +3061,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             rp.seed = body["seed"].get<uint64_t>();
         if (body.contains("temperature") && body["temperature"].is_number())
             rp.temperature = body["temperature"].get<float>();
-        if (body.contains("max_new_tokens") && body["max_new_tokens"].is_number_integer())
+        if (body.contains("max_new_tokens") && body["max_new_tokens"].is_number_integer()) {
             rp.max_new_tokens = body["max_new_tokens"].get<int>();
+            // Backends that only honour a cap the caller chose (bt2-tts, #609)
+            // tell it from the 512 default by this flag.
+            rp.max_new_tokens_explicit = true;
+        }
         if (body.contains("frequency_penalty") && body["frequency_penalty"].is_number())
             rp.frequency_penalty = body["frequency_penalty"].get<float>();
 

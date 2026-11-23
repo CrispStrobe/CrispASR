@@ -1842,8 +1842,13 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
             break;
         out_frames.push_back(frame);
 
-        if (*std::max_element(n_past.begin(), n_past.end()) + 1 > c->bb_kv_max_ctx)
+        if (*std::max_element(n_past.begin(), n_past.end()) + 1 > c->bb_kv_max_ctx) {
+            // A per-request max_new_tokens above the startup one is not given a
+            // bigger cache; say so instead of ending as if EOS had come.
+            fprintf(stderr, "breeze_tts_2: stopped after %zu frames: backbone cache (%d) full\n", out_frames.size(),
+                    c->bb_kv_max_ctx);
             break;
+        }
 
         // Feed the frame back and step every branch's backbone once.
         std::vector<float> emb;
