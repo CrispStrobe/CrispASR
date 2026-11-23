@@ -29,12 +29,12 @@ static bool file_exists(const char* path) {
     return true;
 }
 
-#define VAD_CHECK(cond)                                                          \
-    do {                                                                         \
-        if (!(cond)) {                                                           \
-            std::fprintf(stderr, "%s:%d: check failed: %s\n", __FILE__, __LINE__, #cond); \
-            return 1;                                                            \
-        }                                                                        \
+#define VAD_CHECK(cond)                                                                                                \
+    do {                                                                                                               \
+        if (!(cond)) {                                                                                                 \
+            std::fprintf(stderr, "%s:%d: check failed: %s\n", __FILE__, __LINE__, #cond);                              \
+            return 1;                                                                                                  \
+        }                                                                                                              \
     } while (0)
 
 int main() {

@@ -109,8 +109,8 @@ __attribute__((noinline))
 #elif defined(_MSC_VER)
 __declspec(noinline)
 #endif
-static void istft_scalar_frame(const float* m_row, const float* p_row, int n_fft, float* frame_re, float* frame_im,
-                               float* out) {
+static void
+istft_scalar_frame(const float* m_row, const float* p_row, int n_fft, float* frame_re, float* frame_im, float* out) {
     const int n_freq = n_fft / 2 + 1;
     for (int f = 0; f < n_freq; f++) {
         frame_re[f] = m_row[f] * std::cos(p_row[f]);
@@ -314,8 +314,8 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
                     std::vector<float> frame_im(n_freq);
                     for (int local = begin; local < end; local++) {
                         const int t = first + local;
-                        istft_scalar_frame(mag + (size_t)t * n_freq, phase + (size_t)t * n_freq, n_fft,
-                                           frame_re.data(), frame_im.data(), frames.data() + (size_t)local * n_fft);
+                        istft_scalar_frame(mag + (size_t)t * n_freq, phase + (size_t)t * n_freq, n_fft, frame_re.data(),
+                                           frame_im.data(), frames.data() + (size_t)local * n_fft);
                     }
                 });
                 // Only independent transforms run concurrently. Keep the
