@@ -964,7 +964,17 @@ jobs:
 
       - name: Build
         run: |
-          cmake -S . -B build -DCRISPASR_C2PA_FETCH=ON -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_OPENBLAS=ON \
+          # #607: GGML_NATIVE used to default ON here, so ggml-cpu was compiled for
+          # the runner (Neoverse N2: SVE2, i8mm) and a Raspberry Pi 5 (Cortex-A76,
+          # no SVE) died with SIGILL on `cntb` in ggml_cpu_init. Same fix as the
+          # x86_64 GPU legs (#405): ship every ggml ARM CPU variant as a dlopen'd
+          # module (armv8.0 for a Pi 4 ... armv9.2 SME) and let ggml pick the best
+          # one the host supports at runtime.
+          cmake -S . -B build -DCRISPASR_C2PA_FETCH=ON -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON -DGGML_BACKEND_DL=ON \
+            -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON \
+            -DGGML_OPENBLAS=ON \
+            -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_OPUS_FETCH=ON
           cmake --build build --target crispasr-cli crispasr-quantize -j $(nproc)
 
@@ -973,6 +983,14 @@ jobs:
           mkdir -p release/crispasr-linux-arm64
           cp build/bin/crispasr release/crispasr-linux-arm64/
           cp build/bin/crispasr-quantize release/crispasr-linux-arm64/
+          # Backend modules (libggml-cpu-<variant>.so, libggml-blas.so) and the
+          # shared libs, dlopen'd / resolved from $ORIGIN at runtime.
+          for so in build/bin/libggml*.so* build/bin/libcrispasr*.so*; do
+            [ -f "$so" ] && cp -P "$so" release/crispasr-linux-arm64/
+          done
+          # The armv8.0 baseline is what makes ANY aarch64 host work (#405, #607).
+          test -f release/crispasr-linux-arm64/libggml-cpu-armv8.0_1.so || {
+            echo "::error::libggml-cpu-armv8.0_1.so (baseline CPU variant) missing from the arm64 package (#607)"; exit 1; }
           bash scripts/bundle-c2pa.sh release/crispasr-linux-arm64 || true
           # Self-contained: rewrite RUNPATH to $ORIGIN (v0.8.25 shipped a leaked
           # /home/runner/... path, and crispasr-quantize had no $ORIGIN at all, so it
@@ -998,6 +1016,27 @@ jobs:
           # require the notice to travel with them.
           cp LICENSE release/crispasr-linux-arm64/
           cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-arm64/
+
+      - name: Runs on CPUs without SVE / dotprod (Pi 5, Pi 4) — #607
+        run: |
+          # The runner has SVE2, so a natively-compiled binary passes here and
+          # dies on a Raspberry Pi. QEMU user mode takes those features away:
+          # "max,sve=off" keeps dotprod/fp16/i8mm but no SVE, the Pi 5 case
+          # (22.04's QEMU 6.2 has no cortex-a76 model); cortex-a72 is the Pi 4
+          # (plain ARMv8.0). The v0.8.55 binary dies with SIGILL under both.
+          sudo apt-get install -y qemu-user
+          curl -fsSL --retry 3 -o ggml-tiny.en.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+          for cpu in max,sve=off cortex-a72; do
+            echo "== $cpu"
+            qemu-aarch64 -cpu "$cpu" release/crispasr-linux-arm64/crispasr --version
+            out=$(qemu-aarch64 -cpu "$cpu" release/crispasr-linux-arm64/crispasr \
+                    -m ggml-tiny.en.bin -f samples/jfk.wav -nt -t 4 2>"stderr-$cpu.log") || {
+              tail -30 "stderr-$cpu.log"; echo "::error::crispasr failed under qemu -cpu $cpu"; exit 1; }
+            grep -E "loaded CPU backend" "stderr-$cpu.log" | head -2 || true
+            echo "$out"
+            echo "$out" | grep -qi "country" || { echo "::error::wrong transcript under -cpu $cpu"; exit 1; }
+          done
           cd release && tar czf crispasr-linux-arm64.tar.gz crispasr-linux-arm64/
 
       - uses: actions/upload-artifact@v4
@@ -1113,9 +1152,11 @@ jobs:
 
       - name: Build shared libraries
         run: |
+          # #607: portable ARM floor, not the runner's SVE2.
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PLATFORM_NO_VERSIONED_SONAME=ON \
+            -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 \
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_OPUS_FETCH=ON
@@ -1658,10 +1699,15 @@ jobs:
 
       - name: Build (shared libs, CPU + OpenBLAS)
         run: |
+          # #607: not -mcpu=native (the runner has SVE2; a Pi 5 / Ampere Altra
+          # does not). ARMv8.2 + dotprod + fp16 is the floor of every 64-bit ARM
+          # host we target except the Pi 4, which the CLI tarball covers with
+          # runtime CPU variants.
           cmake -S . -B build-libs \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_OPENBLAS=ON \
+            -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 \
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
             -DCRISPASR_BUILD_SERVER=OFF \
@@ -1672,6 +1718,11 @@ jobs:
         run: |
           set -euo pipefail
           OUT=release/libcrispasr-linux-arm64
+          # #607 gate: no SVE instruction may reach the portable CPU backend.
+          sve=$(find build-libs -name 'libggml-cpu*.so*' -type f -exec objdump -d {} \; \
+                | grep -cE '\s(cntb|cntw|cnth|cntd|ptrue|whilelo)\s' || true)
+          echo "SVE instructions in libggml-cpu: $sve"
+          [ "$sve" = 0 ] || { echo "::error::libggml-cpu contains SVE instructions; it would SIGILL on non-SVE hosts (#607)"; exit 1; }
           mkdir -p "$OUT/src" "$OUT/ggml/src" "$OUT/include" "$OUT/ggml/include"
           # Core libs — preserve symlinks so SOVERSION-1 alias works.
           cp -P build-libs/src/libcrispasr*.so* "$OUT/src/"
@@ -1747,11 +1798,13 @@ jobs:
 
       - name: Build (shared libs, CUDA)
         run: |
+          # #607: portable ARM floor, not the runner's SVE2 (Ampere Altra has none).
           cmake -S . -B build-libs \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DGGML_CUDA=ON \
             -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.8/bin/nvcc \
+            -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 \
             -DCMAKE_CUDA_ARCHITECTURES="80-real;86-real;89-real;90-real;90-virtual;120-real;120-virtual" \
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=OFF \
