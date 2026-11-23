@@ -25,6 +25,9 @@ OUT = TMP / "wav"; OUT.mkdir(exist_ok=True)
 BRANCH = os.environ.get("CRISPASR_BRANCH", "test/609")
 N_SEEDS = int(os.environ.get("N_SEEDS", "12"))
 CAP = 1500  # frames (120 s) - long enough to see a runaway, bounded
+# CPU-only variant (bt2-609-guard-cpu): no CUDA build, payloads_r1 only, and
+# the extra two CPU cases are already in the matrix.
+CPU_ONLY = os.environ.get("BT2_CPU_ONLY") == "1"
 T_END = time.time() + 10.5 * 3600
 
 CR = TMP / "CrispASR"
@@ -65,13 +68,13 @@ def find(pattern):
 # ---- build ----
 B = TMP / "b"
 flags = ["-G Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DGGML_NATIVE=ON", "-DCRISPASR_OPUS_FETCH=ON"] + \
-    kh.cuda_build_flags() + kh.cache_and_link_flags()
+    ([] if CPU_ONLY else kh.cuda_build_flags()) + kh.cache_and_link_flags()
 r = sh(f"cmake -S {CR} -B {B} " + " ".join(flags), timeout=1800)
 if r.returncode:
     res["configure_error"] = r.stderr[-3000:]; save(); raise SystemExit(1)
 t0 = time.time()
 with kh.build_heartbeat("build", interval_s=120):
-    kh.sh_with_progress(f"cmake --build {B} -j{kh.safe_build_jobs(gpu=True)} --target crispasr-cli")
+    kh.sh_with_progress(f"cmake --build {B} -j{kh.safe_build_jobs(gpu=not CPU_ONLY)} --target crispasr-cli")
 res["build_s"] = round(time.time() - t0); save()
 CLI = str(B / "bin" / "crispasr")
 
@@ -164,15 +167,17 @@ def run(tag, payload, voice, seed, gpu=True):
 
 
 kh.step("runs")
-for pay_dir in ["payloads_r1", "payloads_r4"]:
+for pay_dir in ["payloads_r1"] if CPU_ONLY else ["payloads_r1", "payloads_r4"]:
     pays = sorted((DATA).rglob(f"{pay_dir}/*.json")) or sorted(DATA.rglob(f"{pay_dir}*/**/*.json"))
     seeds = [87, 42] + list(range(N_SEEDS)) if pay_dir == "payloads_r1" else [87, 42]
     for pay in pays:
         for voice in ["Piedmont", "mixed"]:
             for s in seeds:
-                run(f"{pay_dir}_{pay.stem}_{voice}_s{s}", pay, voice, s)
+                run(f"{pay_dir}_{pay.stem}_{voice}_s{s}", pay, voice, s, gpu=not CPU_ONLY)
 
 kh.step("cpu")
+if CPU_ONLY:
+    res["finished"] = time.strftime("%F %T"); save(); kh.step("done"); raise SystemExit(0)
 p384 = next((p for p in DATA.rglob("payloads_r1/000384.json")), None) or next(DATA.rglob("**/000384.json"))
 run("cpu_000384_mixed_s87", p384, "mixed", 87, gpu=False)
 p206 = next(DATA.rglob("**/payloads_r1/000206.json"), None) or next(DATA.rglob("**/000206.json"))
