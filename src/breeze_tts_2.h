@@ -150,6 +150,12 @@ void breeze_tts_2_set_seed(struct breeze_tts_2_context* ctx, uint64_t seed);
 void breeze_tts_2_set_n_threads(struct breeze_tts_2_context* ctx, int n);
 // n <= 0 restores the checkpoint's generation limit.
 void breeze_tts_2_set_max_new_tokens(struct breeze_tts_2_context* ctx, int n);
+// Text-length guard for sampled synthesis (#609), on by default. An attempt
+// that runs past ~40 + 10 frames per text token without EOS is a runaway (the
+// model recites its instruction or babbles); it is resampled up to three times,
+// then given the full max_new_tokens. 0 turns it off. The environment variable
+// CRISPASR_BT2_LENGTH_GUARD=0 turns it off at init.
+void breeze_tts_2_set_length_guard(struct breeze_tts_2_context* ctx, int enable);
 
 // ---------------------------------------------------------------------------
 // Diff-harness entry points (crispasr-diff bt2-tts).

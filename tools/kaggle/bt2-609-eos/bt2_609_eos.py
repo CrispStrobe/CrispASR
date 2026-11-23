@@ -132,7 +132,18 @@ def run(tag, payload, voice, seed, gpu=True):
     t0 = time.time()
     r = sh(cmd, timeout=3600, env=env)
     el = time.time() - t0
-    frames = [l.split() for l in trace.read_text().splitlines() if l and l != "end"] if trace.exists() else []
+    # One block per generate_codes call, each closed by "end": with the length
+    # guard a runaway attempt is followed by a resample, so count attempts and
+    # keep the frames of the last one (the audio that was written).
+    blocks, cur = [], []
+    for l in (trace.read_text().splitlines() if trace.exists() else []):
+        if l == "end":
+            blocks.append(cur); cur = []
+        elif l:
+            cur.append(l.split())
+    if cur:
+        blocks.append(cur)
+    frames = blocks[-1] if blocks else []
     dur = None
     if os.path.exists(wav):
         import wave
@@ -145,7 +156,8 @@ def run(tag, payload, voice, seed, gpu=True):
            "gpu": gpu, "rc": r.returncode, "s": round(el, 1), "dur": dur, "frames": len(frames),
            "hit_cap": len(frames) >= CAP, "ref": p["input"], "asr": text, "words": words,
            "extra_words": max(0, len(hyp) - len(ref)), "err": r.stderr[-800:] if r.returncode else "",
-           "asr_err": aerr}
+           "asr_err": aerr, "attempts": len(blocks), "all_frames": sum(len(b) for b in blocks),
+           "guard_hits": r.stderr.count("frame budget without ending")}
     res["runs"].append(rec)
     save()
     return rec
