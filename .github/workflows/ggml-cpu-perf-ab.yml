@@ -14,10 +14,10 @@ on:
   workflow_dispatch:
     inputs:
       old_rev:
-        description: "ggml fork revision A (old)"
-        default: "ef9e36f6"
+        description: "ggml fork revision A (old), full SHA or branch"
+        default: "ef9e36f69c3a79b713824f5a1e22b9836b4690c5"
       new_rev:
-        description: "ggml fork revision B (new); empty = this commit's submodule"
+        description: "ggml fork revision B (new), full SHA or branch; empty = this commit's submodule"
         default: ""
       types:
         description: "regex on test params"
