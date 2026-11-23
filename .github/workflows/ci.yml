@@ -152,6 +152,27 @@ jobs:
           find build-dl \( -type f -o -type l \) -name '*.so*' -exec cp -L {} "$stage/" \;
           python3 tests/test_packaged_backend_discovery.py --library "$stage/libcrispasr.so"
 
+      - name: A GPU plugin that cannot load is explained, not silently skipped (#606)
+        run: |
+          # The CUDA 13 package on a host with only the driver: libggml-cuda.so is
+          # there, libcublas.so.13 is not, and the CLI used to fall back to the CPU
+          # without a word. Fake that plugin: link it against a stub
+          # libcublas.so.13, then delete the stub.
+          t="$RUNNER_TEMP/gpu606"; mkdir -p "$t/stub"
+          cp build-dl/bin/crispasr "$t/"
+          find build-dl \( -type f -o -type l \) -name '*.so*' -exec cp -P {} "$t/" \;
+          echo 'int cublasCreate_v2(void){return 0;}' > "$t/stub/c.c"
+          gcc -shared -fPIC -Wl,-soname,libcublas.so.13 -o "$t/stub/libcublas.so.13" "$t/stub/c.c"
+          echo 'int cublasCreate_v2(void); int ggml_backend_init(void){return cublasCreate_v2();}' > "$t/stub/g.c"
+          gcc -shared -fPIC -o "$t/libggml-cuda.so" "$t/stub/g.c" -L"$t/stub" -l:libcublas.so.13
+          rm -rf "$t/stub"
+          "$t/crispasr" --diag > "$t/diag.txt" 2>&1 || true
+          sed -n '/did not register/,$p' "$t/diag.txt"
+          grep -q 'libcublas.so.13' "$t/diag.txt"
+          grep -q 'apt install cuda-cudart-13-0 libcublas-13-0' "$t/diag.txt"
+          "$t/crispasr" -m /nonexistent.bin -f samples/jfk.wav > /dev/null 2> "$t/run.txt" || true
+          grep 'CUDA backend not available' "$t/run.txt"
+
   # ====================================================================
   # Linux x86_64 (CPU)
   # ====================================================================

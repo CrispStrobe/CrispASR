@@ -39,8 +39,23 @@ model load with `GGML_ASSERT(backend)` / `GGML_ASSERT(device)`. If no CPU
 module can load, crispasr now exits with a clear "no CPU ggml backend" error
 pointing at the `-cpu-legacy` artifact instead of aborting.
 
-For GPU acceleration, the NVIDIA driver and CUDA toolkit must be installed on
-the host (or injected into the container via `--gpus` / `runtime: nvidia`).
+For GPU acceleration the host needs the NVIDIA driver **and the CUDA runtime
+libraries of the package's major version**: `libcudart` and `libcublas`
+(`.so.12` for `crispasr-linux-x86_64-cuda`, `.so.13` for `-cuda13`). The driver
+alone does not ship them, and the distro's `nvidia-cuda-toolkit` package is
+usually an older CUDA (11.5 on Ubuntu 22.04, 12.0 on 24.04), so installing it
+does not help the CUDA 13 package (#606). Add NVIDIA's CUDA repository
+(developer.nvidia.com/cuda-downloads, "deb (network)") and install only the two
+runtime libraries, e.g. for CUDA 13:
+
+```bash
+sudo apt install cuda-cudart-13-0 libcublas-13-0
+```
+
+(`cuda-cudart-12-8 libcublas-12-8` for the CUDA 12 package). A container gets
+the driver through `--gpus all` / `runtime: nvidia`. `crispasr --diag` names the
+exact library that is missing when the CUDA backend does not load, and a normal
+run prints a one-line warning instead of switching to the CPU silently.
 
 > **Installing via `mise` (or another GitHub-release installer)?** Those tools
 > pick ONE asset per OS/arch — for Linux that is the plain

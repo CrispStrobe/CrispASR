@@ -31,6 +31,15 @@ void crispasr_print_build_info(FILE* out);
 void crispasr_print_runtime_env(FILE* out);
 void crispasr_print_devices(FILE* out);
 
+// #606: a GPU backend plugin (libggml-cuda.so, ggml-hip.dll, ...) that sits next
+// to the executable but did not register after ggml_backend_load_all() failed to
+// load, and ggml's loader drops the reason. Re-dlopen each such plugin and print
+// the loader's own error (e.g. "libcublas.so.13: cannot open shared object
+// file") plus how to provide the missing runtime. Returns the number of plugins
+// that failed. `compact` prints one warning line per plugin (normal runs);
+// otherwise a --diagnostics section.
+int crispasr_report_unloaded_gpu_plugins(FILE* out, bool compact);
+
 // Convenience wrapper used at startup when --verbose / --diagnostics is set.
 // Calls all three printers above with a header in between.
 void crispasr_print_full_diagnostics(FILE* out);

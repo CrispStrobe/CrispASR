@@ -7,7 +7,19 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__linux__)
+#include <dlfcn.h>
+#include <unistd.h>
+#endif
 
 // The CMake macros below are defined in examples/cli/CMakeLists.txt.
 // They are wrapped in `defined(...) ? ... : "?"` rather than fall-through
@@ -277,6 +289,155 @@ void crispasr_print_runtime_env(FILE* out) {
     std::fprintf(out, "\n");
 }
 
+// ── #606: why did a GPU plugin not load? ─────────────────────────────────────
+namespace {
+
+struct gpu_plugin_kind {
+    const char* stem;     // file stem after the lib prefix: ggml-<stem>
+    const char* reg_name; // ggml_backend_reg_name() once registered
+};
+
+const gpu_plugin_kind k_gpu_plugins[] = {
+    {"cuda", "CUDA"}, {"hip", "ROCm"},  {"vulkan", "Vulkan"}, {"sycl", "SYCL"},
+    {"musa", "MUSA"}, {"cann", "CANN"}, {"opencl", "OpenCL"},
+};
+
+std::filesystem::path executable_dir() {
+#if defined(_WIN32)
+    std::vector<wchar_t> buf(32768);
+    const DWORD n = GetModuleFileNameW(nullptr, buf.data(), (DWORD)buf.size());
+    if (n == 0 || n >= buf.size())
+        return {};
+    return std::filesystem::path(std::wstring(buf.data(), n)).parent_path();
+#elif defined(__linux__)
+    std::vector<char> buf(4096);
+    const ssize_t n = readlink("/proc/self/exe", buf.data(), buf.size() - 1);
+    if (n <= 0)
+        return {};
+    return std::filesystem::path(std::string(buf.data(), (size_t)n)).parent_path();
+#else
+    return {}; // macOS builds link Metal statically; no GPU plugins to explain
+#endif
+}
+
+bool reg_present(const char* name) {
+    for (size_t i = 0; i < ggml_backend_reg_count(); ++i) {
+        const char* n = ggml_backend_reg_name(ggml_backend_reg_get(i));
+        if (n && std::strcmp(n, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+// Try to load the plugin the way ggml does; return "" on success, else the
+// loader's error text.
+std::string try_load(const std::filesystem::path& p) {
+#if defined(_WIN32)
+    HMODULE h = LoadLibraryExW(p.wstring().c_str(), nullptr,
+                               LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+    if (h) {
+        FreeLibrary(h);
+        return "";
+    }
+    const DWORD err = GetLastError();
+    char msg[512] = {0};
+    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, err, 0, msg, sizeof(msg),
+                   nullptr);
+    std::string s = "Windows error " + std::to_string((unsigned long)err) + ": " + msg;
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r'))
+        s.pop_back();
+    if (err == ERROR_MOD_NOT_FOUND)
+        s += " (a DLL it depends on is missing)";
+    return s;
+#elif defined(__linux__)
+    void* h = dlopen(p.string().c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (h) {
+        dlclose(h);
+        return "";
+    }
+    const char* e = dlerror();
+    return e ? e : "unknown dlopen error";
+#else
+    (void)p;
+    return "";
+#endif
+}
+
+std::string hint_for(const char* stem, const std::string& err) {
+    const bool cuda = std::strcmp(stem, "cuda") == 0;
+    const bool hip = std::strcmp(stem, "hip") == 0;
+    std::string h;
+    if (cuda && err.find("libcuda.so") != std::string::npos)
+        return "the NVIDIA driver library is not visible (in a container: run with --gpus all / the NVIDIA runtime)";
+    if (cuda && (err.find("cudart") != std::string::npos || err.find("cublas") != std::string::npos)) {
+        const bool v13 = err.find(".so.13") != std::string::npos || err.find("64_13") != std::string::npos;
+        const bool v12 = err.find(".so.12") != std::string::npos || err.find("64_12") != std::string::npos;
+        const char* major = v13 ? "13" : v12 ? "12" : "";
+        h = std::string("this package needs the CUDA ") + (major[0] ? major : "") +
+            " runtime libraries (libcudart + libcublas" + (major[0] ? std::string(" .so.") + major : "") +
+            "). The NVIDIA driver alone does not ship them, and the distro 'nvidia-cuda-toolkit' "
+            "package is usually an older CUDA. Install them from NVIDIA's repository";
+        if (major[0])
+            h += std::string(", e.g. `sudo apt install cuda-cudart-") + major + "-0 libcublas-" + major + "-0`";
+        h += ", or use the CrispASR CUDA package that matches the CUDA major you have";
+        return h;
+    }
+    if (hip && err.find("lib") != std::string::npos)
+        return "this package needs the ROCm runtime with hipBLAS/rocBLAS of the matching major version "
+               "(ROCm 6: crispasr-linux-x86_64-hip, ROCm 7: crispasr-linux-x86_64-hip7)";
+    return "";
+}
+
+} // namespace
+
+int crispasr_report_unloaded_gpu_plugins(FILE* out, bool compact) {
+    const std::filesystem::path dir = executable_dir();
+    if (dir.empty())
+        return 0;
+    std::error_code ec;
+    int failed = 0;
+    bool header = false;
+    for (const auto& kind : k_gpu_plugins) {
+        if (reg_present(kind.reg_name))
+            continue;
+        const std::string base = std::string("ggml-") + kind.stem;
+#if defined(_WIN32)
+        const std::vector<std::string> names = {base + ".dll"};
+#else
+        const std::vector<std::string> names = {"lib" + base + ".so", base + ".so"};
+#endif
+        for (const auto& name : names) {
+            const std::filesystem::path p = dir / name;
+            if (!std::filesystem::exists(p, ec))
+                continue;
+            std::string err = try_load(p);
+            if (!compact && !header) {
+                std::fprintf(out, "=== GPU backend plugins that did not register ===\n");
+                header = true;
+            }
+            ++failed;
+            if (err.empty())
+                err = "the library loads, but its backend registered no device (driver too old for this "
+                      "runtime, no supported GPU, or the device is hidden by *_VISIBLE_DEVICES)";
+            const std::string hint = hint_for(kind.stem, err);
+            if (compact) {
+                std::fprintf(out, "crispasr: warning: %s backend not available, running on CPU: %s\n", kind.reg_name,
+                             err.c_str());
+                if (!hint.empty())
+                    std::fprintf(out, "crispasr:          %s\n", hint.c_str());
+            } else {
+                std::fprintf(out, "  %s: %s\n", p.string().c_str(), err.c_str());
+                if (!hint.empty())
+                    std::fprintf(out, "    hint: %s\n", hint.c_str());
+            }
+            break;
+        }
+    }
+    if (header)
+        std::fprintf(out, "\n");
+    return failed;
+}
+
 void crispasr_print_devices(FILE* out) {
     std::fprintf(out, "=== ggml backends + devices ===\n");
 
@@ -325,6 +486,7 @@ void crispasr_print_devices(FILE* out) {
                      (size_t)(p.memory_total / (1024 * 1024)), p.device_id ? p.device_id : "?");
     }
     std::fprintf(out, "\n");
+    crispasr_report_unloaded_gpu_plugins(out, /*compact=*/false);
 }
 
 void crispasr_print_full_diagnostics(FILE* out) {

@@ -2667,6 +2667,9 @@ int main(int argc, char** argv) {
     if (params.use_gpu) {
         if (params.gpu_backend != "cpu") {
             ggml_backend_load_all();
+            // #606: say why a shipped GPU plugin did not load instead of
+            // silently running on the CPU.
+            crispasr_report_unloaded_gpu_plugins(stderr, /*compact=*/true);
         }
         // Issue #214 — propagate --gpu-backend preference so every
         // backend's init picks the right GPU device instead of the
