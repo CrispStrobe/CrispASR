@@ -95,6 +95,7 @@ public:
             cp.temperature = p.temperature;
         cp.seed = (uint64_t)p.seed;
         cp.max_new_tokens = p.max_new_tokens_explicit ? p.max_new_tokens : 0;
+        applied_cap_ = cp.max_new_tokens;
         cp.codec_path = codec_path.c_str();
 
         ctx_ = breeze_tts_2_init_from_file(p.model.c_str(), cp);
@@ -127,6 +128,14 @@ public:
             return {};
         if (p.seed != 0)
             breeze_tts_2_set_seed(ctx_, (uint64_t)p.seed);
+        // Per call (#609): the server maps a request's max_new_tokens onto the
+        // params it passes here; init only saw the startup value. 0 restores
+        // the checkpoint default (breeze.sampling.max_new_tokens).
+        const int cap = p.max_new_tokens_explicit ? p.max_new_tokens : 0;
+        if (cap != applied_cap_) {
+            breeze_tts_2_set_max_new_tokens(ctx_, cap);
+            applied_cap_ = cap;
+        }
         int n = 0;
         // Read per call, not at init: the server maps a request's
         // `instructions` field onto params.tts_instruct.
@@ -203,6 +212,7 @@ private:
     std::vector<float> ref_pcm_;
     std::string ref_text_;
     std::string voice_key_; // identity of the loaded reference, "" when none
+    int applied_cap_ = 0;   // max_new_tokens last passed to the context (0 = checkpoint default)
 };
 
 } // namespace
