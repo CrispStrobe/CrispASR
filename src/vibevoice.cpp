@@ -3840,10 +3840,10 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                         std::vector<uint8_t> buf((size_t)fsize);
                         const size_t rd = fread(buf.data(), 1, buf.size(), fv);
                         uint32_t wav_sr = 0;
-                        if (rd != buf.size() ||
-                            !vibevoice_parse_mono_pcm16_wav(buf.data(), buf.size(), ref_pcm, &wav_sr)) {
+                        if (rd != buf.size() || !vibevoice_parse_wav_mono(buf.data(), buf.size(), ref_pcm, &wav_sr)) {
                             fprintf(stderr,
-                                    "vibevoice TTS: voice WAV '%s' must be mono PCM16 with a RIFF/WAVE header\n",
+                                    "vibevoice TTS: cannot read voice WAV '%s' (need a RIFF/WAVE file with PCM "
+                                    "8/16/24/32-bit or float samples)\n",
                                     voice_wav);
                         }
                         // Resample to 24 kHz if needed (σ-VAE encoders expect 24 kHz input).
@@ -3862,6 +3862,13 @@ extern "C" float* vibevoice_synthesize(struct vibevoice_context* ctx, const char
                 }
 
                 int n_samples_ref = ref_pcm.size();
+                if (n_samples_ref == 0) {
+                    // An explicitly requested reference that cannot be used must not
+                    // silently fall back to the generic voice (#589).
+                    fprintf(stderr, "vibevoice TTS: voice reference '%s' unusable (%s); not synthesizing\n", voice_wav,
+                            fv ? "unreadable or empty audio" : "cannot open file");
+                    return nullptr;
+                }
                 if (n_samples_ref > 0) {
                     // Normalize to -25 dB FS (matches Microsoft's default).
                     vibevoice_normalize_ref_pcm(ref_pcm);
