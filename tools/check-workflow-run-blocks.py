@@ -27,6 +27,7 @@ get wrong, so the cheap static checks belong in CI rather than in a tag push.
 """
 
 import re
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -67,6 +68,12 @@ def main() -> int:
 
         for jname, sname, body, shell, runs_on in steps_of(doc):
             where = f"{wf.name} / {jname} / {sname}"
+            # A custom shell is a command template ("python3 {0}", "bash -e {0}"):
+            # judge it by its interpreter, so python3/python3.12 count as python.
+            interp = os.path.basename(shell.split()[0]) if shell.strip() else ""
+            interp = "python" if interp.startswith("python") else interp
+            if interp in ("python", "node"):
+                continue  # not shell at all: none of the checks below apply
 
             # (1) a literal backslash-n is never intentional in SHELL, but it is
             # entirely normal inside an embedded heredoc (a python/node script
@@ -122,7 +129,7 @@ def main() -> int:
                     problems += 1
 
             # (3) the shell must at least parse
-            if shell in NON_BASH or (not shell and "windows" in runs_on):
+            if interp in NON_BASH or (not shell and "windows" in runs_on):
                 continue
             checked += 1
             r = subprocess.run(["bash", "-n"], input=body, capture_output=True, text=True)
