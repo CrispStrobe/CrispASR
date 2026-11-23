@@ -1971,6 +1971,7 @@ struct crispasr_session {
     crispasr_voice::SpeakerIdentity voice_pack_identity = crispasr_voice::SpeakerIdentity::Unknown;
     crispasr_voice::SpeakerIdentity speaker_identity_override = crispasr_voice::SpeakerIdentity::Unknown;
     std::string voice_path;
+    std::filesystem::path last_voice_samples_tmp_wav;
     // Cached disclosure PCM. The disclaimer is a fixed sentence in the session's
     // neutral voice, so it is identical for every clip — but the documented
     // recipe (fetch -> set_voice -> synthesize -> prepend) is per-clip, which
@@ -9960,7 +9961,11 @@ CA_EXPORT int crispasr_session_set_voice_samples(crispasr_session* s, const floa
     }
 
     const int rc = crispasr_session_set_voice(s, tmp.string().c_str(), ref_text_or_null);
-    std::filesystem::remove(tmp, ec); // best effort; the reference is already loaded
+    if (!s->last_voice_samples_tmp_wav.empty()) {
+        // remove previous tmp file
+        std::filesystem::remove(s->last_voice_samples_tmp_wav, ec); // best effort
+    }
+    s->last_voice_samples_tmp_wav = tmp;
     return rc;
 }
 
@@ -13061,6 +13066,11 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
         std::lock_guard<std::mutex> reg(g_stream_session_mtx);
         if (g_stream_session == s)
             g_stream_session = nullptr;
+    }
+
+    if (!s->last_voice_samples_tmp_wav.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(s->last_voice_samples_tmp_wav, ec); // best effort
     }
 #ifdef CA_HAVE_FIREREDPUNC
     if (s->punc_ctx)
