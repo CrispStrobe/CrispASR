@@ -1,0 +1,110 @@
+# CPU matmul speed, old vs new ggml, on clean runners — the sync gate's
+# "ARM F16 / quant matmul did not regress" item.
+#
+# Why CI: the dev Mac and the VPS carry load averages of 20-70 from parallel
+# agent builds, which makes test-backend-ops perf numbers swing by >2x.
+#
+# Both ggml revisions are checked out from the fork, test-backend-ops is built
+# for each (CPU only), and `perf -o MUL_MAT` runs alternate old/new N times;
+# the fastest run per case is kept. Case names are normalised (newer ggml
+# appends ",offset_a=0") so the sets line up.
+name: ggml CPU perf A/B
+
+on:
+  workflow_dispatch:
+    inputs:
+      old_rev:
+        description: "ggml fork revision A (old)"
+        default: "ef9e36f6"
+      new_rev:
+        description: "ggml fork revision B (new); empty = this commit's submodule"
+        default: ""
+      types:
+        description: "regex on test params"
+        default: "type_a=(f16|q4_0|q8_0|q4_K),type_b=f32"
+      repeats:
+        description: "alternating repeats per arm"
+        default: "3"
+
+permissions:
+  contents: read
+
+jobs:
+  perf:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-24.04-arm, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 1
+
+      - name: Machine
+        run: |
+          uname -a
+          if [ "$(uname)" = Darwin ]; then sysctl -n machdep.cpu.brand_string hw.ncpu; sysctl hw.optional | grep -E "dotprod|i8mm|fp16|bf16" || true
+          else lscpu | grep -E "Model name|^CPU\(s\)|Flags" | cut -c1-400; fi
+
+      - name: Checkout old ggml
+        run: |
+          git -C ggml fetch -q origin "${{ inputs.old_rev }}"
+          git -C ggml worktree add "$RUNNER_TEMP/ggml-old" FETCH_HEAD
+          if [ -n "${{ inputs.new_rev }}" ]; then
+            git -C ggml fetch -q origin "${{ inputs.new_rev }}" && git -C ggml checkout -q FETCH_HEAD
+          fi
+          echo "old: $(git -C "$RUNNER_TEMP/ggml-old" log --oneline -1)"
+          echo "new: $(git -C ggml log --oneline -1)"
+
+      - name: Build
+        run: |
+          for v in old new; do
+            src="$RUNNER_TEMP/ggml-old"; [ $v = new ] && src="$PWD/ggml"
+            cmake -S "$src" -B "$RUNNER_TEMP/b-$v" -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=ON \
+              -DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_BUILD_TESTS=ON >/dev/null
+            cmake --build "$RUNNER_TEMP/b-$v" --target test-backend-ops -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)" 2>&1 | tail -1
+          done
+
+      - name: Perf (alternating)
+        run: |
+          for i in $(seq 1 "${{ inputs.repeats }}"); do
+            for v in old new; do
+              "$RUNNER_TEMP/b-$v/bin/test-backend-ops" perf -b CPU -o MUL_MAT -p "${{ inputs.types }}" \
+                > "$RUNNER_TEMP/perf-$v-$i.log" 2>&1 || echo "rc=$? ($v $i)"
+            done
+          done
+
+      - name: Compare
+        shell: python3 {0}
+        run: |
+          import glob, math, os, re
+          T = os.environ["RUNNER_TEMP"]
+          P = re.compile(r"^\s*(\S.*?):\s+(\d+) runs -\s+([\d.]+) us/run")
+          def load(v):
+              best = {}
+              for f in glob.glob(f"{T}/perf-{v}-*.log"):
+                  for l in open(f, errors="replace"):
+                      m = P.match(l)
+                      if m:
+                          k = m.group(1).replace(",offset_a=0", "")
+                          best[k] = min(float(m.group(3)), best.get(k, 1e18))
+              return best
+          o, n = load("old"), load("new")
+          c = sorted(set(o) & set(n))
+          r = sorted((n[k] / o[k], k) for k in c)
+          out = [f"cases {len(c)}  only_old {len(set(o)-set(n))}  only_new {len(set(n)-set(o))}"]
+          for t in ["f16", "q4_0", "q8_0", "q4_K"]:
+              rr = [x for x, k in r if f"type_a={t}," in k]
+              if rr:
+                  out.append(f"{t:5s} n={len(rr):3d} geomean new/old {2 ** (sum(map(math.log2, rr)) / len(rr)):.3f}  worst {max(rr):.2f}  best {min(rr):.2f}")
+          out.append("slowest 15 (new/old):")
+          out += [f"  {x:.2f} {o[k]:10.1f} -> {n[k]:10.1f} us  {k[:170]}" for x, k in r[-15:]]
+          out.append("fastest 8:")
+          out += [f"  {x:.2f} {o[k]:10.1f} -> {n[k]:10.1f} us  {k[:170]}" for x, k in r[:8]]
+          s = "\n".join(out)
+          print(s)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("```\n" + s + "\n```\n")
