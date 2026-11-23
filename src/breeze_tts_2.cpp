@@ -1785,6 +1785,18 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
     }
 
     std::vector<int32_t> cb0_history;
+    FILE* eos_trace = nullptr;
+    if (const char* p = std::getenv("CRISPASR_BREEZE_EOS_TRACE"))
+        eos_trace = std::fopen(p, "a");
+    struct TraceCloser {
+        FILE*& f;
+        ~TraceCloser() {
+            if (f) {
+                std::fprintf(f, "end\n");
+                std::fclose(f);
+            }
+        }
+    } trace_closer{eos_trace};
 
     for (int f = 0; f < opt.max_frames; f++) {
         breeze_cfg::combine(bb_rows.data(), n_logits, branches, bb_logits.data());
@@ -1792,6 +1804,23 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
             std::memcpy(opt.dump_cb0_logits, bb_logits.data(), bb_logits.size() * sizeof(float));
         mask_reserved(bb_logits.data(), n_logits, hp);
         breeze_cfg::apply_repetition_penalty(bb_logits.data(), n_logits, cb0_history, opt.repetition_penalty);
+        if (eos_trace) {
+            // #609 diagnostic: probability and rank of the EOS class at the
+            // sampling temperature, per frame.
+            const int eos = (int)hp.backbone_eos_token_id;
+            const float t = bb_temp > 0.0f ? bb_temp : 1.0f;
+            float mx = -INFINITY;
+            for (int i = 0; i < n_logits; i++)
+                mx = std::max(mx, bb_logits[(size_t)i]);
+            double sum = 0.0;
+            int rank = 0;
+            for (int i = 0; i < n_logits; i++) {
+                sum += std::exp((bb_logits[(size_t)i] - mx) / t);
+                if (bb_logits[(size_t)i] > bb_logits[(size_t)eos])
+                    rank++;
+            }
+            fprintf(eos_trace, "%d %.6g %d\n", f, std::exp((bb_logits[(size_t)eos] - mx) / t) / sum, rank);
+        }
         const int32_t cb0 =
             sample_logits(bb_logits.data(), n_logits, bb_temp, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
         if (cb0 == (int32_t)hp.backbone_eos_token_id)
