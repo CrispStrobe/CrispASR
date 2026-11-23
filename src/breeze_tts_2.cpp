@@ -309,6 +309,8 @@ struct breeze_tts_2_context {
 
     uint64_t rng_state = 0xbadc0ffee0ddf00dULL;
     int max_new_tokens = 0;
+    // Text-length budget for sampled synthesis, see length_budget() (#609).
+    bool length_guard = true;
 
     // Diagnostics: codes from the most recent synthesis.
     std::vector<std::vector<int32_t>> last_codes;
@@ -1750,9 +1752,11 @@ static bool backbone_forward(breeze_tts_2_context* c, const float* embeds, int T
 // every sampled frame.
 static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledPrompt>& prompts,
                            const std::vector<breeze_cfg::Branch>& branches, const GenOptions& opt,
-                           std::vector<std::vector<int32_t>>& out_frames) {
+                           std::vector<std::vector<int32_t>>& out_frames, bool* ended_on_eos = nullptr) {
     const auto& hp = c->model.hp;
     const int d = (int)hp.bb_d_model;
+    if (ended_on_eos)
+        *ended_on_eos = false;
     const int n_logits = (int)hp.lm_head_out; // 2052: 2051 codes + the EOS class
     const int n_cb = (int)hp.num_codebooks;
     const int n_branch = (int)branches.size();
@@ -1785,6 +1789,18 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
     }
 
     std::vector<int32_t> cb0_history;
+    FILE* eos_trace = nullptr;
+    if (const char* p = std::getenv("CRISPASR_BREEZE_EOS_TRACE"))
+        eos_trace = std::fopen(p, "a");
+    struct TraceCloser {
+        FILE*& f;
+        ~TraceCloser() {
+            if (f) {
+                std::fprintf(f, "end\n");
+                std::fclose(f);
+            }
+        }
+    } trace_closer{eos_trace};
 
     for (int f = 0; f < opt.max_frames; f++) {
         breeze_cfg::combine(bb_rows.data(), n_logits, branches, bb_logits.data());
@@ -1792,10 +1808,30 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
             std::memcpy(opt.dump_cb0_logits, bb_logits.data(), bb_logits.size() * sizeof(float));
         mask_reserved(bb_logits.data(), n_logits, hp);
         breeze_cfg::apply_repetition_penalty(bb_logits.data(), n_logits, cb0_history, opt.repetition_penalty);
+        if (eos_trace) {
+            // #609 diagnostic: probability and rank of the EOS class at the
+            // sampling temperature, per frame.
+            const int eos = (int)hp.backbone_eos_token_id;
+            const float t = bb_temp > 0.0f ? bb_temp : 1.0f;
+            float mx = -INFINITY;
+            for (int i = 0; i < n_logits; i++)
+                mx = std::max(mx, bb_logits[(size_t)i]);
+            double sum = 0.0;
+            int rank = 0;
+            for (int i = 0; i < n_logits; i++) {
+                sum += std::exp((bb_logits[(size_t)i] - mx) / t);
+                if (bb_logits[(size_t)i] > bb_logits[(size_t)eos])
+                    rank++;
+            }
+            fprintf(eos_trace, "%d %.6g %d\n", f, std::exp((bb_logits[(size_t)eos] - mx) / t) / sum, rank);
+        }
         const int32_t cb0 =
             sample_logits(bb_logits.data(), n_logits, bb_temp, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
-        if (cb0 == (int32_t)hp.backbone_eos_token_id)
+        if (cb0 == (int32_t)hp.backbone_eos_token_id) {
+            if (ended_on_eos)
+                *ended_on_eos = true;
             break;
+        }
         cb0_history.push_back(cb0);
 
         std::vector<int32_t> frame;
@@ -1809,8 +1845,11 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
         for (int i = 0; i < n_cb; i++)
             if (frame[(size_t)i] != (int32_t)hp.codebook_pad_token_id)
                 all_pad = false;
-        if (all_pad)
+        if (all_pad) {
+            if (ended_on_eos)
+                *ended_on_eos = true;
             break;
+        }
         out_frames.push_back(frame);
 
         if (*std::max_element(n_past.begin(), n_past.end()) + 1 > c->bb_kv_max_ctx) {
@@ -1968,6 +2007,8 @@ extern "C" struct breeze_tts_2_context* breeze_tts_2_init_from_file(const char* 
     }
 
     c->max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : (int)hp.s_max_new_tokens;
+    if (const char* e = getenv("CRISPASR_BT2_LENGTH_GUARD"))
+        c->length_guard = atoi(e) != 0;
 
     const int te_ctx = std::min<int>((int)hp.te_max_pos, 2048);
     if (!alloc_kv(c, &c->te_kv_ctx, &c->te_kv_buf, &c->te_kv_k, &c->te_kv_v, (int)hp.te_head_dim, te_ctx,
@@ -2035,12 +2076,37 @@ extern "C" void breeze_tts_2_set_n_threads(struct breeze_tts_2_context* ctx, int
     if (core_cpu_backend::is_cpu(ctx->backend))
         core_cpu_backend::set_n_threads(ctx->backend, n);
 }
+extern "C" void breeze_tts_2_set_length_guard(struct breeze_tts_2_context* ctx, int enable) {
+    if (ctx)
+        ctx->length_guard = enable != 0;
+}
+
 extern "C" void breeze_tts_2_set_max_new_tokens(struct breeze_tts_2_context* ctx, int n) {
     if (ctx)
         ctx->max_new_tokens = n > 0 ? n : (int)ctx->model.hp.s_max_new_tokens;
 }
 
 namespace {
+
+// Frame budget for one sampled attempt, from the length of the text (#609).
+//
+// The model sometimes misses EOS and keeps talking: it recites the instruction
+// or babbles until max_new_tokens (60 s at the default). Upstream's Python
+// does the same at the same rate, and CFG makes it worse, so this is the
+// model, not the port. Its end-of-speech probability is LOW where the text
+// should end in those runs (<= 0.09 in all nine traced), so no EOS threshold
+// can catch them; only the length can.
+//
+// Calibration (T4, 130 runs, English, reporter's payloads): a normal read takes
+// ~4 frames per text token (Chinese comes out the same, ~1.5 chars per token),
+// at most ~10 on two-word headings, where pauses dominate. Runaways ran to
+// 140-1500 frames. 40 + 10/token leaves ~2x headroom over the slowest normal
+// read, so hitting it means a runaway, not slow speech.
+static int length_budget(const breeze_tts_2_context* c, const char* text) {
+    std::vector<int32_t> ids;
+    tokenize_with_specials(c->model, text, ids);
+    return 40 + 10 * (int)ids.size();
+}
 
 // Shared body for every synthesis entry point. cfg_scale only matters when an
 // instruction is given, see core/breeze_cfg.h.
@@ -2108,8 +2174,33 @@ static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* 
     opt.dump_cb0_logits = out_cb0_logits;
 
     std::vector<std::vector<int32_t>> frames;
-    if (!generate_codes(c, prompts, branches, opt, frames))
-        return nullptr;
+    // Length guard (#609): a sampled attempt that runs past the text's budget
+    // without EOS is a runaway. Sample again — the RNG has moved on, so the
+    // retry differs and the result stays reproducible for a given seed. Only
+    // if every guarded attempt overruns is the text given the full cap, so
+    // genuinely slow speech is never cut off.
+    const int full_cap = opt.max_frames;
+    const int budget = (!greedy && frame_cap <= 0 && c->length_guard) ? length_budget(c, text) : 0;
+    const int guarded_attempts = (budget > 0 && budget < full_cap) ? 3 : 0;
+    bool done = false;
+    for (int attempt = 0; attempt < guarded_attempts && !done; attempt++) {
+        opt.max_frames = budget;
+        bool eos = false;
+        if (!generate_codes(c, prompts, branches, opt, frames, &eos))
+            return nullptr;
+        done = eos;
+        if (!eos)
+            fprintf(stderr,
+                    "breeze_tts_2: attempt %d ran past the text's %d-frame budget without ending "
+                    "(model runaway, #609)%s\n",
+                    attempt + 1, budget,
+                    attempt + 1 < guarded_attempts ? "; resampling" : "; one last try at the full cap");
+    }
+    if (!done) {
+        opt.max_frames = full_cap;
+        if (!generate_codes(c, prompts, branches, opt, frames))
+            return nullptr;
+    }
     c->last_codes = frames;
     if (out_frames)
         *out_frames = frames;
