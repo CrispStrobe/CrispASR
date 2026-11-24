@@ -45,6 +45,9 @@ void vibevoice_free(struct vibevoice_context* ctx);
 // Set an exact ASR generation cap. n <= 0 restores the duration-scaled
 // default (at least 512 tokens, or 8 tokens per second of input audio).
 void vibevoice_set_max_new_tokens(struct vibevoice_context* ctx, int n);
+// ASR frequency penalty: each generated token's logit is lowered by
+// penalty * (times it was generated so far). 0 (the default) disables it.
+void vibevoice_set_frequency_penalty(struct vibevoice_context* ctx, float penalty);
 int vibevoice_resolve_max_new_tokens(int configured, int n_samples);
 
 // Runtime setter for the DPM-Solver++ inference step count

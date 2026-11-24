@@ -15,6 +15,7 @@
 
 #include "vibevoice.h"
 #include "vibevoice_backend_policy.h"
+#include "core/gpu_layers.h"
 #include "core/attention.h"
 #include "core/bpe.h"
 #include "core/vibevoice_tts_tokenizer.h"
@@ -151,6 +152,8 @@ struct vibevoice_context {
     ggml_tensor* kv_v = nullptr;
     int kv_max_ctx = 0;
     int kv_n_used = 0;
+    // ASR frequency penalty (session set_frequency_penalty, #610). 0 = off.
+    float asr_frequency_penalty = 0.0f;
     // KV cache for TTS negative path (CFG)
     ggml_context* kv_neg_ctx = nullptr;
     ggml_backend_buffer_t kv_neg_buf = nullptr;
@@ -410,10 +413,8 @@ extern "C" struct vibevoice_context* vibevoice_init_from_file(const char* path_m
     // path is what gets split. The light base-LM layers in TTS mode
     // (4 layers used only for base-hidden splicing) stay on GPU.
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const bool tts_mode = hp.tts_n_layers > 0;
     const char* split_prefix = tts_mode ? "tts_lm.layers." : "lm.layers.";
     const int total_layers = tts_mode ? hp.tts_n_layers : hp.n_lm_layers;
@@ -505,6 +506,11 @@ extern "C" void vibevoice_set_tts_steps(struct vibevoice_context* ctx, int steps
     if (steps > 100)
         steps = 100;
     ctx->params.tts_steps = steps;
+}
+
+extern "C" void vibevoice_set_frequency_penalty(struct vibevoice_context* ctx, float penalty) {
+    if (ctx)
+        ctx->asr_frequency_penalty = penalty > 0.0f ? penalty : 0.0f;
 }
 
 extern "C" void vibevoice_set_max_new_tokens(struct vibevoice_context* ctx, int n) {
@@ -929,7 +935,8 @@ static ggml_cgraph* build_tokenizer_encoder_graph(vibevoice_context* ctx, const 
 // @ 24kHz overflows the CUDA kernel launch ("invalid argument"). 300s is
 // comfortably under that, with ~2.3x margin for any other similarly-shaped
 // op, and needs only ~12 chunks for a full 60-minute recording.
-// Override: CRISPASR_VIBEVOICE_ENCODER_CHUNK_SECONDS (default 300).
+// Override: CRISPASR_VIBEVOICE_ENCODER_CHUNK_SECONDS (default 300; on a GPU the
+// window halves down to 30 s when the encoder graph does not fit, #610).
 static constexpr int VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES_DEFAULT = 300 * 24000;
 
 // Left-context audio prepended to every chunk after the first, in samples.
@@ -941,13 +948,23 @@ static constexpr int VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES_DEFAULT = 300 * 24000;
 // Override: CRISPASR_VIBEVOICE_ENCODER_CONTEXT_SECONDS (default 10).
 static constexpr int VIBEVOICE_ENCODER_LEFT_CONTEXT_SAMPLES_DEFAULT = 10 * 24000;
 
-static int vibevoice_encoder_max_chunk_samples() {
+// Smallest window the out-of-memory retry in run_encoder_stage halves down to.
+static constexpr int VIBEVOICE_ENCODER_MIN_CHUNK_SAMPLES = 30 * 24000;
+
+// `explicit_out` reports whether the user set the window, which disables the
+// out-of-memory retry (the user asked for exactly this window).
+static int vibevoice_encoder_max_chunk_samples(bool* explicit_out = nullptr) {
     const char* v = getenv("CRISPASR_VIBEVOICE_ENCODER_CHUNK_SECONDS");
     if (v && v[0]) {
         int s = atoi(v);
-        if (s > 0)
+        if (s > 0) {
+            if (explicit_out)
+                *explicit_out = true;
             return s * 24000;
+        }
     }
+    if (explicit_out)
+        *explicit_out = false;
     return VIBEVOICE_ENCODER_MAX_CHUNK_SAMPLES_DEFAULT;
 }
 
@@ -1080,6 +1097,9 @@ static std::vector<float> run_encoder_stage_one_call(vibevoice_context* ctx, con
 // before it gets here, and RMS normalisation is idempotent, so it is unaffected.
 // Disable with CRISPASR_VIBEVOICE_NO_INPUT_NORM=1 to compare against the old
 // behaviour.
+static std::vector<float> run_encoder_stage_window(vibevoice_context* ctx, const char* prefix, const float* samples,
+                                                   int n_samples, int max_chunk, int* out_T, int* out_vae_dim);
+
 static std::vector<float> run_encoder_stage(vibevoice_context* ctx, const char* prefix, const float* samples,
                                             int n_samples, int* out_T, int* out_vae_dim) {
     std::vector<float> normalized;
@@ -1096,7 +1116,30 @@ static std::vector<float> run_encoder_stage(vibevoice_context* ctx, const char* 
         if (const char* dir = crispasr_env::get("CRISPASR_VIBEVOICE_TTS_DUMP"))
             vibevoice_dump_f32(dir, "tts_voice_encoder_input", samples, n_samples);
     }
-    const int max_chunk = vibevoice_encoder_max_chunk_samples();
+    // #610: the default 300 s window needs ~8 GB of encoder activations on a
+    // GPU, so a long call on a 12 GB card failed outright. When the graph
+    // cannot be allocated, retry with half the window down to 30 s. The
+    // encoder is causal and every window after the first carries 10 s of
+    // left context, so a smaller window yields the same features.
+    bool window_explicit = false;
+    int max_chunk = vibevoice_encoder_max_chunk_samples(&window_explicit);
+    const bool can_shrink = !window_explicit && ctx->backend && ctx->backend != ctx->backend_cpu;
+    while (true) {
+        std::vector<float> res =
+            run_encoder_stage_window(ctx, prefix, samples, n_samples, max_chunk, out_T, out_vae_dim);
+        if (!res.empty() || !can_shrink || max_chunk <= VIBEVOICE_ENCODER_MIN_CHUNK_SAMPLES ||
+            n_samples <= VIBEVOICE_ENCODER_MIN_CHUNK_SAMPLES)
+            return res;
+        max_chunk = std::max(VIBEVOICE_ENCODER_MIN_CHUNK_SAMPLES, std::min(max_chunk, n_samples) / 2);
+        fprintf(stderr,
+                "vibevoice: %s: encoder failed (likely out of GPU memory); retrying with a %d s window "
+                "(CRISPASR_VIBEVOICE_ENCODER_CHUNK_SECONDS sets it)\n",
+                prefix, max_chunk / 24000);
+    }
+}
+
+static std::vector<float> run_encoder_stage_window(vibevoice_context* ctx, const char* prefix, const float* samples,
+                                                   int n_samples, int max_chunk, int* out_T, int* out_vae_dim) {
     const int left_ctx = vibevoice_encoder_left_context_samples();
     const int n_chunks = (n_samples + max_chunk - 1) / max_chunk;
     if (n_chunks <= 1)
@@ -2064,7 +2107,23 @@ static char* vibevoice_transcribe_impl(struct vibevoice_context* ctx, const floa
     // Qwen2.5 (~152k); softmax is gated behind out_p so the legacy
     // text-only path stays bit-identical to before.
     const bool capture_probs = (out_token_ids && out_token_probs);
-    auto pick = [&](const std::vector<float>& lg, float* out_p) -> int {
+    // Opt-in frequency penalty (#610): subtract penalty * times generated from
+    // each logit, so a greedy repetition loop can be broken. Off by default,
+    // which keeps the pick bit-identical to plain argmax.
+    const float freq_pen = ctx->asr_frequency_penalty;
+    std::vector<int> token_counts(freq_pen > 0.0f ? (size_t)hp.vocab_size : 0);
+    std::vector<float> penalized;
+    auto pick = [&](const std::vector<float>& lg_in, float* out_p) -> int {
+        const std::vector<float>* lgp = &lg_in;
+        if (freq_pen > 0.0f) {
+            penalized = lg_in;
+            const size_t n = std::min(penalized.size(), token_counts.size());
+            for (size_t i = 0; i < n; i++)
+                if (token_counts[i] > 0)
+                    penalized[i] -= freq_pen * (float)token_counts[i];
+            lgp = &penalized;
+        }
+        const std::vector<float>& lg = *lgp;
         int best = 0;
         float bv = lg[0];
         for (int i = 1; i < (int)lg.size(); i++)
@@ -2091,8 +2150,13 @@ static char* vibevoice_transcribe_impl(struct vibevoice_context* ctx, const floa
     std::vector<float> output_probs;
     float prob = 0.0f;
     int cur_token = pick(logits, capture_probs ? &prob : nullptr);
+    auto count_token = [&](int tok) {
+        if (tok >= 0 && (size_t)tok < token_counts.size())
+            token_counts[(size_t)tok]++;
+    };
     if (!is_stop(cur_token)) {
         output_tokens.push_back(cur_token);
+        count_token(cur_token);
         if (capture_probs)
             output_probs.push_back(prob);
     }
@@ -2119,6 +2183,7 @@ static char* vibevoice_transcribe_impl(struct vibevoice_context* ctx, const floa
         if (is_stop(cur_token))
             break;
         output_tokens.push_back(cur_token);
+        count_token(cur_token);
         if (capture_probs)
             output_probs.push_back(prob);
 

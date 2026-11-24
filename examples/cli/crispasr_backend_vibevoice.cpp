@@ -206,6 +206,8 @@ public:
         // through the transcribe path at all, which is part of why the knob
         // looked inert from outside (#369).
         vibevoice_set_seed(ctx_, (uint32_t)params.seed);
+        // --frequency-penalty breaks greedy repetition loops (#610); 0 = off.
+        vibevoice_set_frequency_penalty(ctx_, params.frequency_penalty);
         const char* context = params.context.empty() ? nullptr : params.context.c_str();
         char* text = vibevoice_transcribe_with_context(ctx_, vv_pcm, vv_n, context);
         if (!text)
@@ -275,11 +277,12 @@ public:
             // empty so the caller reports no transcript — falling through here
             // would hand back the raw JSON, which is how "[Silence]" reached the
             // user's transcript in the first place.
-            if (!utts.empty())
+            // An answer cut off before any Content is a transcript too; its raw
+            // JSON is never segment text (#610).
+            if (!utts.empty() || core_vibevoice::looks_like_transcript(raw))
                 return out;
-            // Nothing parsed — the model answered in prose, or the decode was
-            // cut before the first complete object. Fall through and hand back
-            // the raw string rather than dropping the transcript.
+            // Nothing parsed and not a transcript — the model answered in
+            // prose. Hand back the raw string rather than dropping it.
         }
 
         crispasr_segment seg;

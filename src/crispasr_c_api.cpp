@@ -25,6 +25,7 @@
 #include "core/tts_ref_cache.h"     // #334: reuse the CLI-side reference-transcript cache
 #include "session_autochunk.h"      // fix/session-long-audio: pure auto-chunk applicability decision
 #include "core/asr_sensitivity.h"   // §W7 sensitivity presets
+#include "core/gpu_layers.h"        // core_gpu_layers::Scope (#610)
 #include "core/ngram_loop_fix.h"
 #include "core/asr_time_order.h"
 #include "core/segment_hygiene.h" // §W2/§W5/§W6 opt-in segment cleanup    // fix/session-long-audio: collapse decode loops in merged chunks (issue #218)
@@ -4826,6 +4827,9 @@ CA_EXPORT crispasr_session* crispasr_session_open_with_params(const char* model_
     g_open_verbosity_tls = verbosity;
     g_open_flash_attn_tls = flash_attn;
     g_open_n_gpu_layers_tls = n_gpu_layers;
+    // The layer-offload backends resolve their GPU layer count through
+    // core_gpu_layers during the model load (#610).
+    core_gpu_layers::Scope gpu_layers_scope(n_gpu_layers);
 
     crispasr_session* s = nullptr;
     if (backend_name && backend_name[0] != '\0') {
@@ -8037,6 +8041,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // (CLI: --context; here the comma-separated hotword list is spliced
         // into the prompt's "with extra info:" slot, PR #223 / issue #224).
         const char* vv_context = s->hotwords.empty() ? nullptr : s->hotwords.c_str();
+        vibevoice_set_frequency_penalty(s->vibevoice_ctx, s->frequency_penalty); // #610
         vibevoice_result* vr = vibevoice_transcribe_with_probs_and_context(s->vibevoice_ctx, vv_pcm, vv_n, vv_context);
         if (!vr || !vr->text) {
             if (vr)
@@ -8087,8 +8092,10 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             const std::vector<std::vector<int>> tok_of = core_vibevoice::assign_tokens(utts, tok_texts);
             // The blob parsed as a transcript. Recorded BEFORE the filter so a
             // response carrying only non-speech markers reports "no speech"
-            // rather than falling through to the raw JSON blob (#369).
-            parsed = !utts.empty();
+            // rather than falling through to the raw JSON blob (#369). An
+            // answer cut off before any Content is a transcript too: its raw
+            // JSON is never segment text (#610).
+            parsed = !utts.empty() || core_vibevoice::looks_like_transcript(raw_text);
             for (size_t u = 0; u < utts.size(); u++) {
                 if (core_vibevoice::is_non_speech_marker(utts[u].text))
                     continue;
@@ -8124,6 +8131,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
                 seg_toks.reserve(tok_of[u].size());
                 for (int idx : tok_of[u])
                     seg_toks.push_back(toks[(size_t)idx]);
+                // Same loop collapse as the Content text (#610).
+                filter_tokens_by_ngram_collapse(seg_toks);
                 seg.words = emit_words_from_tokens(seg_toks);
                 seg.tokens = std::move(seg_toks);
                 r->segments.push_back(std::move(seg));

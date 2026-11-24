@@ -57,9 +57,82 @@ TEST_CASE("a truncated decode keeps every complete utterance", "[unit][vibevoice
                             R"({"Start":1.0,"End":2.0,"Speaker":1,"Content":"second"},)"
                             R"({"Start":2.0,"End":3.0,"Speaker":0,"Content":"thi)";
     auto u = parse(raw);
-    REQUIRE(u.size() == 2); // a strict JSON parse would yield ZERO here
+    REQUIRE(u.size() == 3); // a strict JSON parse would yield ZERO here
     REQUIRE(u[0].text == "first");
     REQUIRE(u[1].text == "second");
+    REQUIRE_FALSE(u[1].truncated);
+    // #610: the cut fell inside a Content, so its decoded part is kept.
+    REQUIRE(u[2].text == "thi");
+    REQUIRE(u[2].truncated);
+    REQUIRE(u[2].speaker == 0);
+}
+
+// #610: the shapes reported from Japanese drama audio, where a repetition loop
+// ran into the 512-token limit inside a Content.
+static std::string repeat(const std::string& s, int n) {
+    std::string out;
+    for (int i = 0; i < n; i++)
+        out += s;
+    return out;
+}
+
+TEST_CASE("#610: a first object cut off in a loop keeps its text, loop collapsed", "[unit][vibevoice]") {
+    const std::string raw = R"([{"Start":0,"End":10.43,"Speaker":0,"Content":")" + repeat("あ、", 270);
+    auto u = parse(raw);
+    REQUIRE(u.size() == 1);
+    REQUIRE(u[0].truncated);
+    REQUIRE(u[0].start_s == 0.0);
+    REQUIRE(u[0].end_s == 10.43);
+    REQUIRE(u[0].raw_text == repeat("あ、", 270));
+    REQUIRE(u[0].text.size() < 30); // collapsed, not 540 characters
+    REQUIRE(u[0].text.rfind("あ、", 0) == 0);
+}
+
+TEST_CASE("#610: lines decoded before the loop are not lost", "[unit][vibevoice]") {
+    const std::string said = "何してるの。早く行こうよ。わかった。";
+    const std::string raw = R"([{"Start":0,"End":3.1,"Speaker":0,"Content":"[Human Sounds]"},)"
+                            R"({"Start":3.1,"End":22.6,"Speaker":1,"Content":")" +
+                            said + repeat("うわ、", 148);
+    auto u = parse(raw);
+    REQUIRE(u.size() == 2);
+    REQUIRE(u[1].truncated);
+    REQUIRE(u[1].text.rfind(said, 0) == 0); // the three lines survive
+    REQUIRE(u[1].text.size() < said.size() + 40);
+}
+
+TEST_CASE("#610: a Latin annotation loop collapses on the word path", "[unit][vibevoice]") {
+    const std::string raw = R"([{"Start":0,"End":29.55,"Speaker":0,"Content":")" + repeat("[Gasp] ", 120);
+    auto u = parse(raw);
+    REQUIRE(u.size() == 1);
+    REQUIRE(u[0].text == "[Gasp] [Gasp] [Gasp]");
+}
+
+TEST_CASE("#610: a loop inside a complete Content collapses too", "[unit][vibevoice]") {
+    const std::string raw =
+        R"([{"Start":0,"End":10.39,"Speaker":0,"Content":")" + repeat("何の話だよ。", 40) + R"("}])";
+    auto u = parse(raw);
+    REQUIRE(u.size() == 1);
+    REQUIRE_FALSE(u[0].truncated);
+    REQUIRE(u[0].text == repeat("何の話だよ。", 2));
+}
+
+TEST_CASE("#610: clean Content passes through byte for byte", "[unit][vibevoice]") {
+    const std::string c = "Two  spaces,\ta tab and a\nnewline stay as they are.";
+    auto u = parse(R"([{"Start":0,"End":1,"Speaker":0,"Content":")" + c + R"("}])");
+    REQUIRE(u.size() == 1);
+    REQUIRE(u[0].text == "Two  spaces,\ta tab and a\nnewline stay as they are.");
+    REQUIRE(u[0].text == u[0].raw_text);
+}
+
+TEST_CASE("#610: a cut before any Content is still a transcript, never raw text", "[unit][vibevoice]") {
+    using core_vibevoice::looks_like_transcript;
+    REQUIRE(parse(R"([{"Start":0,"End":1.5,"Spea)").empty());
+    REQUIRE(looks_like_transcript(R"([{"Start":0,"End":1.5,"Spea)"));
+    REQUIRE(looks_like_transcript(" [\n {\"Start\":0"));
+    REQUIRE(looks_like_transcript("["));
+    REQUIRE_FALSE(looks_like_transcript("And so, my fellow Americans."));
+    REQUIRE_FALSE(looks_like_transcript("[Music] and then she said"));
+    REQUIRE_FALSE(looks_like_transcript(""));
 }
 
 TEST_CASE("escapes inside Content are unescaped", "[unit][vibevoice]") {
@@ -158,8 +231,7 @@ TEST_CASE("a token straddling a boundary is claimed by both spans it covers", "[
 // It reached users' transcripts as literal text over plainly non-silent audio,
 // and because there WAS text the CLI's "no text produced for N s of non-silent
 // audio" warning could not fire, so it was invisible as well as wrong.
-TEST_CASE("vibevoice transcript: the model's own [Silence] is not transcript text",
-          "[unit][vibevoice]") {
+TEST_CASE("vibevoice transcript: the model's own [Silence] is not transcript text", "[unit][vibevoice]") {
     REQUIRE(core_vibevoice::is_non_speech_marker("[Silence]"));
     REQUIRE(core_vibevoice::is_non_speech_marker("  [silence]  "));
     REQUIRE(core_vibevoice::is_non_speech_marker("[SILENCE]"));
@@ -171,11 +243,10 @@ TEST_CASE("vibevoice transcript: the model's own [Silence] is not transcript tex
 // Deliberately narrow: only a WHOLE bracketed token from the observed set. Over-
 // reaching here deletes real content, which is a worse failure than the one
 // being fixed.
-TEST_CASE("vibevoice transcript: real speech is never mistaken for a marker",
-          "[unit][vibevoice]") {
+TEST_CASE("vibevoice transcript: real speech is never mistaken for a marker", "[unit][vibevoice]") {
     REQUIRE_FALSE(core_vibevoice::is_non_speech_marker("내일 오전에 회의 자료를 보내주세요."));
-    REQUIRE_FALSE(core_vibevoice::is_non_speech_marker("[Music]"));      // may be wanted
-    REQUIRE_FALSE(core_vibevoice::is_non_speech_marker("[Laughter]"));   // may be wanted
+    REQUIRE_FALSE(core_vibevoice::is_non_speech_marker("[Music]"));    // may be wanted
+    REQUIRE_FALSE(core_vibevoice::is_non_speech_marker("[Laughter]")); // may be wanted
     REQUIRE_FALSE(core_vibevoice::is_non_speech_marker("The silence was total."));
     REQUIRE_FALSE(core_vibevoice::is_non_speech_marker("[Silence] and then she spoke."));
     REQUIRE_FALSE(core_vibevoice::is_non_speech_marker(""));
@@ -187,20 +258,18 @@ TEST_CASE("vibevoice transcript: real speech is never mistaken for a marker",
 // falls back to handing over the raw JSON, which is exactly how "[Silence]"
 // reached the transcript.
 TEST_CASE("vibevoice transcript: a markers-only answer still parses", "[unit][vibevoice]") {
-    const auto utts = core_vibevoice::parse(
-        R"([{"Start time":0.0,"End time":6.01,"Speaker ID":0,"Content":"[Silence]"}])");
+    const auto utts =
+        core_vibevoice::parse(R"([{"Start time":0.0,"End time":6.01,"Speaker ID":0,"Content":"[Silence]"}])");
     REQUIRE(utts.size() == 1);
     REQUIRE(core_vibevoice::is_non_speech_marker(utts[0].text));
     REQUIRE_FALSE(core_vibevoice::parse("the model answered in prose").size() > 0);
 }
 
 // A marker between two real utterances must not take them with it.
-TEST_CASE("vibevoice transcript: a marker between utterances drops only itself",
-          "[unit][vibevoice]") {
-    const auto utts = core_vibevoice::parse(
-        R"([{"Start":0.0,"End":1.0,"Speaker":0,"Content":"hello"},)"
-        R"({"Start":1.0,"End":2.0,"Speaker":0,"Content":"[Silence]"},)"
-        R"({"Start":2.0,"End":3.0,"Speaker":1,"Content":"world"}])");
+TEST_CASE("vibevoice transcript: a marker between utterances drops only itself", "[unit][vibevoice]") {
+    const auto utts = core_vibevoice::parse(R"([{"Start":0.0,"End":1.0,"Speaker":0,"Content":"hello"},)"
+                                            R"({"Start":1.0,"End":2.0,"Speaker":0,"Content":"[Silence]"},)"
+                                            R"({"Start":2.0,"End":3.0,"Speaker":1,"Content":"world"}])");
     REQUIRE(utts.size() == 3);
     int kept = 0;
     for (const auto& u : utts)

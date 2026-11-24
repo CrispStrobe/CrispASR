@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "ngram_loop_fix.h"
+
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -39,10 +41,12 @@
 namespace core_vibevoice {
 
 struct Utterance {
-    double start_s = -1.0; // <0 when the model omitted it
-    double end_s = -1.0;   // <0 when the model omitted it
-    int speaker = -1;      // <0 when the model omitted it
-    std::string text;      // "Content", unescaped
+    double start_s = -1.0;  // <0 when the model omitted it
+    double end_s = -1.0;    // <0 when the model omitted it
+    int speaker = -1;       // <0 when the model omitted it
+    std::string text;       // "Content", unescaped, repetition loops collapsed
+    std::string raw_text;   // "Content" exactly as decoded (token mapping)
+    bool truncated = false; // Content was cut off by the token limit
 };
 
 namespace detail {
@@ -198,6 +202,20 @@ inline bool parse_seconds(const std::string& v, double& out) {
     return true;
 }
 
+// Collapse a repetition loop (core_ngram::fix_loops). fix_loops re-joins
+// words with single spaces, so its output is used only when it actually
+// removed something; clean Content passes through byte for byte.
+inline std::string collapse_loops(const std::string& text) {
+    std::string fixed = core_ngram::fix_loops(text);
+    std::string normalized;
+    for (const std::string& w : core_ngram::split_words(text)) {
+        if (!normalized.empty())
+            normalized += ' ';
+        normalized += w;
+    }
+    return fixed == normalized ? text : fixed;
+}
+
 } // namespace detail
 
 // True when an utterance's Content is one of the model's own NON-SPEECH
@@ -277,8 +295,17 @@ inline std::vector<Utterance> parse(const std::string& raw) {
             while (i < raw.size() && ((unsigned char)raw[i] <= ' ' || raw[i] == ':'))
                 i++;
             std::string val;
+            const bool is_content = detail::iequals(key, "Content") || detail::iequals(key, "Text");
             if (i < raw.size() && raw[i] == '"') {
                 if (!detail::read_string(raw, i, val)) {
+                    // #610: a decode that ends inside a Content (usually a
+                    // repetition loop running into the token limit) still
+                    // carries everything said before the loop. Keep it.
+                    if (is_content) {
+                        u.raw_text = val;
+                        u.truncated = true;
+                        has_content = true;
+                    }
                     truncated = true;
                     break;
                 }
@@ -286,8 +313,8 @@ inline std::vector<Utterance> parse(const std::string& raw) {
                 val = detail::read_bare(raw, i);
             }
 
-            if (detail::iequals(key, "Content") || detail::iequals(key, "Text")) {
-                u.text = val;
+            if (is_content) {
+                u.raw_text = val;
                 has_content = true;
             } else if (detail::iequals(key, "Speaker") || detail::iequals(key, "Speaker ID") ||
                        detail::iequals(key, "SpeakerID")) {
@@ -300,17 +327,37 @@ inline std::vector<Utterance> parse(const std::string& raw) {
                 detail::parse_seconds(val, u.end_s);
             }
         }
-        // A truncated object is dropped, but everything decoded before it is
-        // kept — that is the whole reason this is not a strict JSON parse.
+        // Everything decoded before a truncation is kept — that is the whole
+        // reason this is not a strict JSON parse. A cut-off object is kept
+        // only when the cut fell inside its Content (#610).
+        if (has_content && (!truncated || u.truncated)) {
+            u.text = detail::collapse_loops(u.raw_text);
+            out.push_back(std::move(u));
+        }
         if (truncated)
             break;
-        if (has_content)
-            out.push_back(std::move(u));
     }
     // "Content" is what makes this a transcript rather than some other JSON the
     // model happened to emit; with nothing carrying text, report no match so
     // the caller keeps the raw string.
     return out;
+}
+
+// True when `raw` is a VibeVoice transcript answer even if parse() found no
+// usable utterance in it (cut off before any Content). Callers must then
+// report no text rather than hand the raw JSON back as the transcript (#610).
+inline bool looks_like_transcript(const std::string& raw) {
+    size_t i = 0;
+    while (i < raw.size() && (unsigned char)raw[i] <= ' ')
+        i++;
+    if (i < raw.size() && raw[i] == '[') {
+        i++;
+        while (i < raw.size() && (unsigned char)raw[i] <= ' ')
+            i++;
+        if (i >= raw.size() || raw[i] == '{')
+            return true;
+    }
+    return raw.find("\"Content\"") != std::string::npos;
 }
 
 // Assign decode tokens to utterances.
@@ -342,7 +389,7 @@ inline std::vector<std::vector<int>> assign_tokens(const std::vector<Utterance>&
     }
     size_t search_from = 0;
     for (size_t u = 0; u < utts.size(); u++) {
-        const std::string& needle = utts[u].text;
+        const std::string& needle = utts[u].raw_text.empty() ? utts[u].text : utts[u].raw_text;
         if (needle.empty())
             continue;
         size_t pos = joined.find(needle, search_from);
