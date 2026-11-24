@@ -14,18 +14,23 @@ on the vector kernel, up to 1.44), so T4 clock drift is in those numbers.
 
 Results: /kaggle/working/fa_ab.json.
 """
-import json, math, re, subprocess, sys, time
+import json, math, os, re, subprocess, sys, time
 from pathlib import Path
 
 WORK = Path("/kaggle/working")
 TMP = Path("/kaggle/temp"); TMP.mkdir(parents=True, exist_ok=True)
 RES = WORK / "fa_ab.json"
 CULPRIT = "bd37ba0dfd4bbedc63d2178f844e9488a52d5b04"
+# A/B revisions; the timing ratio is B / A. Default: the bisect culprit against its parent.
+# AB_A / AB_B override them, e.g. our ggml HEAD against a candidate fix.
+REV_A = os.environ.get("AB_A", CULPRIT + "^")
+REV_B = os.environ.get("AB_B", CULPRIT)
 ROUNDS = 5
 FILTERS = {
     "hs512_decode_f16": r"hsk=512,hsv=512,nh=8,nr23=\[[48],1\],kv=(4096|8192|16384),nb=1,.*type_K=f16",
     "hs512_prefill_f16": r"hsk=512,hsv=512,.*nb=(512|4096),.*type_K=f16",
     "hs256_decode_f16": r"hsk=256,hsv=256,.*nb=1,.*type_K=f16",
+    "hs256_prefill_f16": r"hsk=256,hsv=256,.*nb=(512|4096),.*type_K=f16",
     "hs256_decode_q8_0": r"hsk=256,hsv=256,.*nb=1,.*type_K=q8_0",  # vector kernel: control, untouched by the commit
     "hs128_decode_f16": r"hsk=128,hsv=128,.*nb=1,.*type_K=f16",   # control
 }
@@ -51,11 +56,12 @@ flags = ["-G Ninja", "-DCMAKE_BUILD_TYPE=Release", "-DGGML_NATIVE=ON", "-DGGML_B
 JOBS = kh.safe_build_jobs(gpu=True)
 
 bins = {}
-for tag, rev in [("parent", CULPRIT + "^"), ("culprit", CULPRIT)]:
+for tag, rev in [("parent", REV_A), ("culprit", REV_B)]:
     src, bld = TMP / f"ggml_{tag}", TMP / f"b_{tag}"
     if not src.exists():
         subprocess.run(["git", "clone", "-q", "https://github.com/CrispStrobe/ggml.git", str(src)], check=True)
         sh(f"git -C {src} fetch -q origin crispstrobe-ops")
+        sh(f"git -C {src} fetch -q origin {rev.rstrip('^')}")
     sh(f"git -C {src} checkout -q -f {rev}")
     res[f"{tag}_rev"] = sh(f"git -C {src} rev-parse HEAD").stdout.strip()
     kh.step(f"build_{tag}")
