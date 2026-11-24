@@ -315,6 +315,20 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Issue #610 VibeVoice GPU parts — local Apple-silicon Metal check, open (2026-11-24)
+
+- Source: main `3ec6affb3` and later. CPU-proven (truncation, frequency penalty; CI + heavy-cpu green). Not yet run on any GPU: (a) the encoder out-of-memory retry in `run_encoder_stage` (`src/vibevoice.cpp`, halves the 300 s window down to 30 s when the graph cannot be allocated, only on a non-CPU backend and only when `CRISPASR_VIBEVOICE_ENCODER_CHUNK_SECONDS` is unset); (b) session `n_gpu_layers` reaching the loader via `core_gpu_layers::resolve()` (`src/core/gpu_layers.h`).
+- Why a Mac: the Kaggle weekly GPU quota is exhausted (2026-11-24). The prepared Kaggle kernel `tools/kaggle/vibevoice-610-gpu/` (local, uncommitted) is the CUDA version of the same check; push it once after the quota resets.
+- Feasibility: (b) works on Metal as-is (Metal backend != CPU backend, so the layer split runs). (a) needs a real allocation failure; on unified memory that happens only when one buffer exceeds `maxBufferLength` (logged as `max_buffer_size` / `recommendedMaxWorkingSetSize` at load). A 300 s window needs ~8 GB of encoder activations, so an 8–16 GB Mac should fail cleanly; a 32 GB+ Mac will probably not, and then (a) stays CUDA-only. A Metal pass does not prove the CUDA failure path (`cudaMalloc` failure -> gallocr) — record it as Metal evidence only.
+- Build: `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DGGML_METAL=ON && cmake --build build --target crispasr-cli crispasr-lib`. Model `cstr/vibevoice-asr-GGUF` / `vibevoice-asr-q4_k.gguf`. Input: `samples/jfk.wav` tiled to 320 s (16 kHz mono).
+- Steps and acceptance:
+  1. Record `sysctl hw.memsize` and the Metal `max_buffer_size` line.
+  2. Control: `CRISPASR_VIBEVOICE_ENCODER_CHUNK_SECONDS=300 crispasr --backend vibevoice -m <model> -f long320.wav -np -nt -n 300` must FAIL (non-zero or empty). If it succeeds, the Mac cannot reach (a): stop, note it, leave (a) to Kaggle.
+  3. Same command without the env var must print `encoder failed (likely out of GPU memory); retrying with a N s window`, exit 0 and contain "ask not what your country".
+  4. Unsqueezed `jfk.wav` (11 s) must print no retry line (no false trigger).
+  5. Python `Session(model, backend="vibevoice", use_gpu=True, n_gpu_layers=8)` with `CRISPASR_LIB_PATH=build/src/libcrispasr.dylib`: stderr has `vibevoice: layer offload (lm.layers.): gpu=[0,8)`, transcript contains the JFK sentence. Same with `n_gpu_layers=None`: no offload line. `CRISPASR_N_GPU_LAYERS=8` without the argument: offload line (old path still works).
+- Done when steps 1–5 are recorded here with the Mac model/RAM and commit; then post a short follow-up on #610 (ask the maintainer first).
+
 ### Issue #589 generated semantic feedback — gated implementation Codex (2026-11-14)
 
 - Base `6b98da68a`; isolated `issue589-feedback`. Added upstream's generated
