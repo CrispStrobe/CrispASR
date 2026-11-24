@@ -66,6 +66,7 @@ if not CR.exists():
 sys.path.insert(0, str(CR / "tools" / "kaggle"))
 import kaggle_harness as kh
 kh.init_progress()
+HF = kh.resolve_hf_token() or None   # before the build: the progress mirror needs it
 kh.install_build_toolchain()
 res = {"started": time.strftime("%F %T"), "seeds": SEEDS, "arms": {}, "runs": []}
 save = lambda: RES.write_text(json.dumps(res, indent=1))
@@ -99,7 +100,6 @@ CLI = str(B / "bin" / "crispasr")
 
 sh(f"{sys.executable} -m pip install -q huggingface_hub soundfile")
 from huggingface_hub import hf_hub_download, snapshot_download
-HF = kh.resolve_hf_token() or None
 M = TMP / "models"; M.mkdir(exist_ok=True)
 ASR = hf_hub_download("cstr/parakeet-tdt-0.6b-v3-GGUF", "parakeet-tdt-0.6b-v3-q4_k.gguf", local_dir=str(M), token=HF)
 
@@ -161,7 +161,7 @@ def arm(name):
             res["arms"][name] = {"status": "skipped: out of time"}; save(); return fn
         t_start = time.time()
         res["arms"][name] = {"status": "running", "t0": time.strftime("%T")}; save()
-        kh.step("arm", name=name, free_gb=free_gb())
+        kh.step("arm", arm=name, free_gb=free_gb())
         t_end = time.time() + ARM_BUDGET
         try:
             info = fn(t_end) or {}
@@ -174,7 +174,7 @@ def arm(name):
         summ = summarize().get(name, {})
         save()
         # One line per finished arm on the progress mirror: status plus its scores so far.
-        kh.step("arm_done", name=name, status=res["arms"][name]["status"],
+        kh.step("arm_done", arm=name, status=res["arms"][name]["status"],
                 error=res["arms"][name].get("error", "")[-300:], n=summ.get("n", 0), ok=summ.get("ok", 0),
                 runaway=summ.get("runaway", 0), any_extra=summ.get("any_extra", 0), max_dur=summ.get("max_dur", 0),
                 minutes=res["arms"][name]["minutes"], free_gb=res["arms"][name]["free_gb_after"])
