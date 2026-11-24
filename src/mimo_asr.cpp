@@ -27,6 +27,7 @@
 //       generation. We can ignore them for ASR.
 //
 #include "mimo_asr.h"
+#include "core/gpu_layers.h"
 #include "core/mimo_prompt.h"
 
 #include "core/attention.h"
@@ -424,10 +425,8 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
     // both halves of the split go to CPU buffers because the GPU half
     // would hit the same prefill bug.
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)hp.llm_layers;
     const bool do_split = ctx->backend_cpu && ctx->backend_cpu != ctx->backend && n_gpu_layers_env >= 0 &&
                           n_gpu_layers_env < total_layers;

@@ -8,6 +8,7 @@
 #include "voxtral4b.h"
 
 #include "voxtral_tekken_vocab.h" // #338 active-vocabulary bound
+#include "core/gpu_layers.h"
 #include "core/crispasr_env.h"
 
 #ifndef M_PI
@@ -303,10 +304,8 @@ static bool voxtral4b_load_model(voxtral4b_model& model, voxtral4b_vocab& vocab,
     // can fit models larger than their GPU. -1 (default) or any value
     // >= n_layers preserves the legacy single-backend load.
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)model.hparams.llm_n_layers;
     const bool do_split =
         backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;

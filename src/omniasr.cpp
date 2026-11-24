@@ -5,6 +5,7 @@
 // Input: raw 16kHz PCM (no mel features needed).
 
 #include "omniasr.h"
+#include "core/gpu_layers.h"
 #include "core/attention.h"
 #include "core/cpu_ops.h" // core_cpu::to_f32 (quantized-safe weight read)
 #include "core/beam_decode.h"
@@ -523,10 +524,8 @@ extern "C" struct omniasr_context* omniasr_init_from_file(const char* path_model
     // are a fixed-depth post-encoder head, not transformer blocks.
     core_gguf::WeightLoad wl;
     const char* arch = hp.model_type == 1 ? "omniasr-llm" : "omniasr-ctc";
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)hp.n_dec;
     const bool do_split = hp.model_type == 1 && ctx->backend_cpu && ctx->backend_cpu != ctx->backend &&
                           n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;

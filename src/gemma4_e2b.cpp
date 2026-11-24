@@ -8,6 +8,7 @@
 // Tokenizer: BPE (262K vocab) stored in GGUF.
 
 #include "gemma4_e2b.h"
+#include "core/gpu_layers.h"
 #include "core/attention.h"
 #include "core/bpe.h"
 #include "core/ffn.h"
@@ -1825,10 +1826,8 @@ extern "C" struct gemma4_e2b_context* gemma4_e2b_init_from_file(const char* path
     // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total LLM
     // layers, route llm.layers.<il>.* with il >= N onto the CPU backend.
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)lhp.num_layers;
     const bool do_split = ctx->backend_cpu && ctx->backend_cpu != ctx->backend && n_gpu_layers_env >= 0 &&
                           n_gpu_layers_env < total_layers;

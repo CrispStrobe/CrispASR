@@ -14,6 +14,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+#include "core/gpu_layers.h"
 #include "core/attention.h"
 #include "core/beam_decode.h"
 #include "core/ffn.h"
@@ -346,10 +347,8 @@ extern "C" struct glm_asr_context* glm_asr_init_from_file(const char* path_model
     // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total layers,
     // route llm.blk.<il>.* with il >= N onto the CPU backend.
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)hp.llm_n_layers;
     const bool do_split = ctx->backend_cpu && ctx->backend_cpu != ctx->backend && n_gpu_layers_env >= 0 &&
                           n_gpu_layers_env < total_layers;

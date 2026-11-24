@@ -13,6 +13,7 @@
 // See qwen3-asr-todo.md for the full plan.
 
 #include "higgs_stt.h"
+#include "core/gpu_layers.h"
 #include "core/crispasr_env.h"
 #include "../crisp_audio/include/crisp_audio.h"
 
@@ -395,10 +396,8 @@ static bool higgs_stt_load_model(higgs_stt_model& model, higgs_stt_vocab& vocab,
     // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total layers,
     // route layers [N..total) onto the CPU backend.
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)model.hparams.llm_n_layers;
     const bool do_split =
         backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;

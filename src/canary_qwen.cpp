@@ -34,6 +34,7 @@
 // degenerate-window gate + instruction-echo safety net in the transcribe path.
 
 #include "canary_qwen.h"
+#include "core/gpu_layers.h"
 #include "core/crispasr_env.h"
 #include "canary_qwen_echo.h"
 
@@ -334,9 +335,8 @@ static bool canary_qwen_load_model(canary_qwen_model& model, canary_qwen_vocab& 
 
     // ---- pass 2: tensor data ----
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS"))
-        n_gpu_layers_env = std::atoi(s);
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)model.hparams.llm_n_layers;
     const bool do_split =
         backend_cpu && backend_cpu != backend && n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;

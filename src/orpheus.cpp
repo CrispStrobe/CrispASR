@@ -24,6 +24,7 @@
 //      the SNAC C++ decoder for 24 kHz mono PCM.
 
 #include "orpheus.h"
+#include "core/gpu_layers.h"
 #include "core/bpe.h"
 #include "core/ffn.h"
 #include "core/gguf_loader.h"
@@ -390,10 +391,8 @@ extern "C" struct orpheus_context* orpheus_init_from_file(const char* path_model
     // PLAN #69a: when CRISPASR_N_GPU_LAYERS is set and < total layers,
     // route talker.blk.<il>.* with il >= N onto the CPU backend.
     core_gguf::WeightLoad wl;
-    int n_gpu_layers_env = -1;
-    if (const char* s = std::getenv("CRISPASR_N_GPU_LAYERS")) {
-        n_gpu_layers_env = std::atoi(s);
-    }
+    // Session n_gpu_layers, else CRISPASR_N_GPU_LAYERS (#610).
+    const int n_gpu_layers_env = core_gpu_layers::resolve();
     const int total_layers = (int)c->hp.n_layers;
     const bool do_split =
         c->backend_cpu && c->backend_cpu != c->backend && n_gpu_layers_env >= 0 && n_gpu_layers_env < total_layers;
