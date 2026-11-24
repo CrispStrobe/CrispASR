@@ -25,6 +25,10 @@ Arms (each isolated: a failed build or install is recorded and skipped):
              smoke case first, the arm only if that is fast enough
 
 Results: /kaggle/working/bt2_609_ports.json, rewritten after every run.
+Per run also: peak RSS of the synthesizing processes and peak GPU memory above idle
+(sampled every 0.25 s). Per arm, after the 24 cases, one long read (~70 words, timing
+and memory only), and a least-squares fit of wall time vs audio length: intercept ~
+load/startup, slope ~ generation seconds per audio second.
 """
 import glob, json, os, re, shutil, subprocess, sys, time, wave, zipfile
 from pathlib import Path
@@ -98,7 +102,7 @@ with kh.build_heartbeat("build_ours", interval_s=120):
     kh.sh_with_progress(f"cmake --build {B} -j{kh.safe_build_jobs(gpu=True)} --target crispasr-cli")
 CLI = str(B / "bin" / "crispasr")
 
-sh(f"{sys.executable} -m pip install -q huggingface_hub soundfile")
+sh(f"{sys.executable} -m pip install -q huggingface_hub soundfile psutil")
 from huggingface_hub import hf_hub_download, snapshot_download
 M = TMP / "models"; M.mkdir(exist_ok=True)
 ASR = hf_hub_download("cstr/parakeet-tdt-0.6b-v3-GGUF", "parakeet-tdt-0.6b-v3-q4_k.gguf", local_dir=str(M), token=HF)
@@ -125,8 +129,58 @@ def record(arm, p, voice, seed, wav, secs, extra=None):
     res["runs"].append(rec); save()
     print(arm, p["id"], voice, seed, dur, rec["extra_words"], flush=True)
     kh.step("run", arm=arm, id=p["id"], voice=voice, seed=seed, dur=dur, extra=rec["extra_words"], s=rec["s"],
-            asr=text[:160], err=(rec.get("err") or "")[-200:])
+            asr=text[:160], err=(rec.get("err") or "")[-200:], rss_mb=rec.get("rss_peak_mb"), gpu_mb=rec.get("gpu_peak_mb"))
     return rec
+
+
+def gpu_used_mb():
+    r = sh("nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits", timeout=20)
+    try:
+        return sum(int(x) for x in r.stdout.split())
+    except ValueError:
+        return None
+
+
+GPU_IDLE = gpu_used_mb()   # nothing of ours loaded yet; per-run GPU figures are relative to this
+res["gpu_idle_mb"] = GPU_IDLE; save()
+
+
+class Peak:
+    """Peak RSS of all our child processes (CLI or the persistent MLX worker) and peak GPU
+    memory above idle, sampled every 0.25 s while one case is synthesized. The parakeet
+    scoring runs after, outside the window. Kaggle containers hide GPU per-process usage,
+    so GPU is device total minus GPU_IDLE."""
+    def __enter__(self):
+        import psutil, threading
+        self.rss = 0; self.gpu = 0; self.stop = False
+        me = psutil.Process()
+        def loop():
+            while not self.stop:
+                try:
+                    self.rss = max(self.rss, sum(c.memory_info().rss for c in me.children(recursive=True)))
+                except Exception:
+                    pass
+                g = gpu_used_mb()
+                if g is not None and GPU_IDLE is not None:
+                    self.gpu = max(self.gpu, g - GPU_IDLE)
+                time.sleep(0.25)
+        self.t = threading.Thread(target=loop, daemon=True); self.t.start()
+        return self
+
+    def __exit__(self, *a):
+        self.stop = True; self.t.join(5)
+
+    def result(self):
+        return {"rss_peak_mb": round(self.rss / 2**20), "gpu_peak_mb": self.gpu}
+
+
+# One long read per arm (after the 24 cases) so wall time vs audio length has a spread:
+# the fit's intercept approximates load/startup, its slope the generation speed.
+LONG = {"id": "long", "instructions": None,
+        "input": "The morning was cold and clear, and the road along the river was almost empty. "
+                 "We walked for an hour without saying much, watching the light move across the water, "
+                 "until the bridge came into view and the first carts of the market rolled past us. "
+                 "By noon the town was loud with voices, and we had forgotten how quiet the morning had been."}
 
 
 def run_cases(arm, synth, t_arm_end, cases=None):
@@ -139,18 +193,28 @@ def run_cases(arm, synth, t_arm_end, cases=None):
                     res["arms"][arm]["truncated"] = True; save()
                     return
                 wav = str(OUT / f"{arm}_{p['id']}_{voice}_{s}.wav")
-                t0 = time.time()
-                try:
-                    r = synth(p, voice, wav, vw, vt, s)
-                    extra = {}
-                    if isinstance(r, subprocess.CompletedProcess) and r.returncode:
-                        extra = {"rc": r.returncode, "err": (r.stderr or "")[-600:]}
-                except Exception as e:
-                    extra = {"err": repr(e)[-600:]}
-                record(arm, p, voice, s, wav, time.time() - t0, extra)
+                one_case(arm, synth, p, voice, vw, vt, s, wav)
                 done += 1
                 if done % 6 == 0:
                     mirror()
+    if cases is None and time.time() < min(t_arm_end, T_END):
+        long = LONG | {"instructions": PAYLOADS[1]["instructions"]}
+        vw, vt = VOICES["Piedmont"]
+        one_case(arm, synth, long, "Piedmont", vw, vt, SEEDS[0], str(OUT / f"{arm}_long.wav"))
+        mirror()
+
+
+def one_case(arm, synth, p, voice, vw, vt, s, wav):
+    t0 = time.time()
+    with Peak() as pk:
+        try:
+            r = synth(p, voice, wav, vw, vt, s)
+            extra = {}
+            if isinstance(r, subprocess.CompletedProcess) and r.returncode:
+                extra = {"rc": r.returncode, "err": (r.stderr or "")[-600:]}
+        except Exception as e:
+            extra = {"err": repr(e)[-600:]}
+    record(arm, p, voice, s, wav, time.time() - t0, extra | pk.result())
 
 
 def arm(name):
@@ -193,6 +257,12 @@ def summarize():
     summ = {}
     for r in res["runs"]:
         a = summ.setdefault(r["arm"], {"n": 0, "ok": 0, "runaway": 0, "any_extra": 0, "max_dur": 0, "by_id": {}})
+        if r.get("rss_peak_mb") is not None:
+            a["rss_peak_mb"] = max(a.get("rss_peak_mb", 0), r["rss_peak_mb"])
+            a["gpu_peak_mb"] = max(a.get("gpu_peak_mb", 0), r.get("gpu_peak_mb") or 0)
+        if r["id"] == "long":   # timing/memory only; not one of the #609 cases
+            a["long"] = {"wall_s": r["s"], "dur": r.get("dur"), "extra_words": r["extra_words"]}
+            continue
         a["n"] += 1
         if r.get("dur"):
             a["ok"] += 1
@@ -202,6 +272,12 @@ def summarize():
         a["any_extra"] += r["extra_words"] > 0
         a["by_id"].setdefault(r["id"], [0, 0])
         a["by_id"][r["id"]][0] += bad; a["by_id"][r["id"]][1] += 1
+    for name, a in summ.items():   # wall = load + slope * audio seconds, least squares over finished runs
+        pts = [(r["dur"], r["s"]) for r in res["runs"] if r["arm"] == name and r.get("dur") and not r.get("rc")]
+        if len(pts) >= 3 and max(x for x, _ in pts) > min(x for x, _ in pts):
+            mx = sum(x for x, _ in pts) / len(pts); my = sum(y for _, y in pts) / len(pts)
+            k = sum((x - mx) * (y - my) for x, y in pts) / sum((x - mx) ** 2 for x, _ in pts)
+            a["fit_load_s"] = round(my - k * mx, 2); a["fit_s_per_audio_s"] = round(k, 3)
     res["summary"] = summ
     save()
     return summ

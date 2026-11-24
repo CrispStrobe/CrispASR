@@ -10,5 +10,5 @@ CR = Path("/kaggle/temp/CrispASR")
 if not CR.exists():
     subprocess.run(["git", "clone", "--depth", "1", "--recurse-submodules", "--shallow-submodules",
                     "https://github.com/CrispStrobe/CrispASR.git", str(CR)], check=True)
-os.environ.setdefault("ARMS", "hoppou,audiocpp,qwentts,mlxaudio,rishikksh,vanch")
+os.environ.setdefault("ARMS", "ours,hoppou,audiocpp,qwentts,mlxaudio,rishikksh,vanch")
 runpy.run_path(str(CR / "tools" / "kaggle" / "bt2-609-ports" / "bt2_609_ports.py"), run_name="__main__")
