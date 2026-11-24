@@ -175,13 +175,18 @@ def arm(name):
         save()
         # One line per finished arm on the progress mirror: status plus its scores so far.
         kh.step("arm_done", arm=name, status=res["arms"][name]["status"],
-                error=res["arms"][name].get("error", "")[-300:], n=summ.get("n", 0), ok=summ.get("ok", 0),
+                error=clip(res["arms"][name].get("error", "")), n=summ.get("n", 0), ok=summ.get("ok", 0),
                 runaway=summ.get("runaway", 0), any_extra=summ.get("any_extra", 0), max_dur=summ.get("max_dur", 0),
                 minutes=res["arms"][name]["minutes"], free_gb=res["arms"][name]["free_gb_after"])
         print("ARM", name, json.dumps(res["arms"][name]), json.dumps(summ), flush=True)
         mirror()
         return fn
     return deco
+
+
+def clip(e):
+    # The head names the failing step and the first error; the tail is often configure chatter.
+    return e if len(e) <= 900 else e[:700] + " ... " + e[-200:]
 
 
 def summarize():
@@ -238,6 +243,23 @@ def must(r, what):
     return r
 
 
+def patch_cuda_driver(src):
+    """Vendored ggml copies link CUDA::cuda_driver unconditionally; Kaggle's CUDA 13
+    FindCUDAToolkit does not define it, so configure fails (our own ggml carries the
+    same fallback, ggml/src/ggml-cuda/CMakeLists.txt). Link libcuda by path, or build
+    without the VMM pool when there is none (performance is irrelevant here)."""
+    lib = next((p for pat in ["/usr/lib/x86_64-linux-gnu/libcuda.so", "/usr/lib/x86_64-linux-gnu/libcuda.so.1",
+                              "/usr/local/cuda/lib64/stubs/libcuda.so",
+                              "/usr/local/cuda/targets/x86_64-linux/lib/stubs/libcuda.so",
+                              "/usr/local/cuda*/**/libcuda.so"]
+                for p in glob.glob(pat, recursive=True)), None)
+    hits = [f for f in Path(src).rglob("CMakeLists.txt") if "ggml-cuda" in f.parts and "CUDA::cuda_driver" in f.read_text()]
+    for f in hits:
+        t = f.read_text()
+        f.write_text(t.replace("CUDA::cuda_driver", lib) if lib else "set(GGML_CUDA_NO_VMM ON)\n" + t)
+    res.setdefault("cuda_driver_patch", {})[str(src)] = {"lib": lib, "files": [str(f) for f in hits]}; save()
+
+
 def find_bin(root, name):
     hits = [p for p in Path(root).rglob(name) if p.is_file() and os.access(p, os.X_OK)]
     if not hits:
@@ -266,6 +288,7 @@ def _(t_end):
 def _(t_end):
     src = TMP / "src_hoppou"
     clone("https://github.com/HoppouAI/Breeze-TTS-2.cpp.git", src, submodules=True)
+    patch_cuda_driver(src)
     bd = src / "build"
     must(sh(f"cmake -S {src} -B {bd} -G Ninja -DCMAKE_BUILD_TYPE=Release -DBREEZE_VULKAN=OFF -DBREEZE_CUDA=ON "
             f"-DCMAKE_CUDA_ARCHITECTURES=75 -DBREEZE_BUILD_SERVER=OFF -DBREEZE_MP3=OFF -DBREEZE_BUILD_SHARED=OFF",
@@ -285,6 +308,7 @@ def _(t_end):
 def _(t_end):
     src = TMP / "src_audiocpp"
     clone("https://github.com/0xShug0/audio.cpp.git", src, submodules=True)
+    patch_cuda_driver(src)
     with kh.build_heartbeat("build_audiocpp", interval_s=120):
         must(sh(f"bash scripts/build_linux.sh --deployment-build --backend cuda --cuda-arch 75 "
                 f"--model-set custom --models breeze_tts --target audiocpp_cli", cwd=src, timeout=5400), "build")
@@ -303,6 +327,7 @@ def _(t_end):
 def _(t_end):
     src = TMP / "src_qwentts"
     clone("https://github.com/ljchang/qwentts.cpp.git", src, branch="breeze", submodules=True)
+    patch_cuda_driver(src)
     bd = src / "build"
     must(sh(f"cmake -S {src} -B {bd} -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75",
             timeout=1800), "configure")
@@ -325,7 +350,12 @@ mlx_state = {}
 def mlx_env():
     if "ok" in mlx_state:
         return mlx_state["ok"]
-    must(sh(f"{sys.executable} -m venv {MV}"), "venv")
+    # Kaggle's python has no ensurepip, so `python -m venv` fails; virtualenv bundles pip.
+    shutil.rmtree(MV, ignore_errors=True)
+    if sh(f"{sys.executable} -m venv {MV}").returncode:
+        shutil.rmtree(MV, ignore_errors=True)
+        must(sh(f"{sys.executable} -m pip install -q virtualenv", timeout=600), "virtualenv install")
+        must(sh(f"{sys.executable} -m virtualenv -q {MV}", timeout=600), "venv")
     log = []
     for spec in ('"mlx[cuda12]"', '"mlx[cuda]"'):
         r = sh(f"{MPY} -m pip install -q {spec}", timeout=1800)
