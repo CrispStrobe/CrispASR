@@ -1,3 +1,8 @@
+## 2026-11-24 — CUDA FA: head size 512 decode back to pre-sync speed on Turing
+
+- **Regression from the ggml sync:** upstream `bd37ba0d` (FA MMA support for padded head sizes) made hs512 f16 decode 19 % slower on T4 (alternating A/B, 5 rounds, 1.181–1.199; prefill +3.6 %; hs256/hs128/q8_0 unchanged). The new `min(..., DKQ/2)` / `min(..., DV)` bounds are no-ops when the head size needs no padding, but they change nvcc's register allocation: `flash_attn_ext_f16<512,512,1,8>` spills 96 B instead of 48 B at 255 registers, `<512,512,16,2>` 136 B.
+- **Fix** (ggml `7c0a9284`, CrispASR patch): `DKQp == DKQ` / `DVp == DV` select the old expressions at compile time; padded head sizes keep upstream's code. Stack back to 48 B for both; T4 A/B against our previous ggml pin: hs512 decode ×0.841 (0.837–0.843), hs512 prefill ×1.004, hs256 decode ×0.997, hs256 prefill ×0.999, hs128 ×1.002. Tool: `tools/kaggle/ggml-cuda-fa-fix-ab` (`AB_A`/`AB_B` revs for `ggml-cuda-fa-ab`).
+
 ## 2026-11-23 — bt2-tts: runaway guard and per-request cap (#609)
 
 - **Breeze TTS 2 runaways (#609):** the model sometimes misses EOS and keeps talking after the text — it recites the instruction, then babbles to `max_new_tokens`. Upstream's own Python (`breezeblue-ai/breeze-tts` a43d19e, bf16) does the same at the same rate on the reporter's payloads (48 identical cases, parakeet round trip, runaway = 4+ extra words: ours 5, upstream 6 at CFG 1; ours 30, upstream 28 at CFG 4), so this is the model, and CFG 4 makes it far worse with a long instruction. EOS traces (`CRISPASR_BREEZE_EOS_TRACE`) show the end-of-speech probability is low (≤ 0.09) where the text should end in every runaway, so no EOS threshold can catch them.
