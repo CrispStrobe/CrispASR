@@ -6,6 +6,7 @@
 #include "firered_vad.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
+#include "core/cpu_linear.h"
 #include "core/crispasr_env.h"
 #include "core/parallel_for.h"
 #include "ggml.h"
@@ -22,23 +23,16 @@
 #include <thread>
 #include <vector>
 
-// §193 Accelerate cblas_sgemm for all cpu_linear calls. Elsewhere use the
-// <cblas.h> (OpenBLAS) the build found (HAVE_BLAS): the scalar fallback below is
-// a single-threaded double-accumulate loop, ~8x slower on long audio.
-// Set FIRERED_VAD_FORCE_SCALAR=1 to validate scalar fallback.
-#if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
-#if defined(HAVE_ACCELERATE)
-#include <Accelerate/Accelerate.h>
-#else
-#include <cblas.h>
-#endif
+// §193 / PR #611: cpu_linear uses cblas_sgemm (Accelerate on Apple, the
+// OpenBLAS/MKL crispasr-cpu-blas found elsewhere); without BLAS the scalar
+// double-accumulate loop is ~8x slower on long audio.
+// Set CRISPASR_FIRERED_VAD_FORCE_SCALAR=1 to validate the scalar fallback.
 static bool firered_vad_use_scalar() {
     static int v = -1;
     if (v < 0)
         v = (crispasr_env::get("CRISPASR_FIRERED_VAD_FORCE_SCALAR") != nullptr) ? 1 : 0;
     return v != 0;
 }
-#endif
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -141,26 +135,7 @@ static void read_f32(ggml_tensor* t, std::vector<float>& out) {
 // Linear: out[i] = sum_j w[i*K+j] * x[j] + b[i], for each time step
 // out[T,N] = x[T,K] @ w[N,K]^T + b[N]  (w is row-major [N,K])
 static void cpu_linear(const float* x, const float* w, const float* b, float* out, int T, int K, int N) {
-#if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
-    if (!firered_vad_use_scalar()) {
-        // w stored as [N,K] → CblasTrans to get x[T,K] @ w^T[K,N] → out[T,N]
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, T, N, K, 1.0f, x, K, w, K, 0.0f, out, N);
-        if (b) {
-            for (int t = 0; t < T; t++)
-                for (int n = 0; n < N; n++)
-                    out[t * N + n] += b[n];
-        }
-        return;
-    }
-#endif
-    for (int t = 0; t < T; t++) {
-        for (int n = 0; n < N; n++) {
-            double s = 0;
-            for (int k = 0; k < K; k++)
-                s += x[t * K + k] * w[n * K + k];
-            out[t * N + n] = (float)s + (b ? b[n] : 0.0f);
-        }
-    }
+    core_cpu_linear::run(x, w, b, out, T, K, N, firered_vad_use_scalar());
 }
 
 static void cpu_relu(float* x, int n) {

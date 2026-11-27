@@ -7315,3 +7315,17 @@ target_link_libraries(vibevoice-negative-history-probe PRIVATE crispasr-core ggm
 include(${PROJECT_SOURCE_DIR}/cmake/SanitizedPythonTests.cmake)
 crispasr_preload_asan_for_python_tests(
     gguf-detector-metadata haas-dispatch-entrypoints test-quantizer-io)
+
+# ─── test-cpu-linear — core_cpu_linear BLAS vs scalar parity (PR #611) ───────
+# Links crispasr-cpu-blas like firered-vad; asserts the BLAS path is compiled
+# in exactly when CMake found CPU BLAS. No model required.
+add_executable(test-cpu-linear test-cpu-linear.cpp)
+target_include_directories(test-cpu-linear PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-cpu-linear PRIVATE Catch2::Catch2WithMain crispasr-cpu-blas)
+if(CRISPASR_CPU_BLAS_AVAILABLE)
+    target_compile_definitions(test-cpu-linear PRIVATE CRISPASR_EXPECT_CPU_BLAS=1)
+endif()
+catch_discover_tests(test-cpu-linear
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;firered"
+)
