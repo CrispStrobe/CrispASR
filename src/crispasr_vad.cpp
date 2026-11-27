@@ -12,8 +12,9 @@
 #include "core/audio_chunking.h"
 #include "core/vad_failover.h" // §W4: detect an obviously-broken VAD result
 
-#include "firered_vad.h" // FireRedVAD (DFSMN) — alternative to Silero
-#include "crispasr.h"    // whisper_vad_* API (Silero VAD)
+#include "firered_vad.h"         // FireRedVAD (DFSMN) — alternative to Silero
+#include "crispasr.h"            // whisper_vad_* API (Silero VAD)
+#include "core/silero_context.h" // crispasr_silero_enable_context
 #if __has_include("marblenet_vad.h")
 #include "marblenet_vad.h" // NVIDIA MarbleNet VAD (1D separable CNN)
 #define CA_HAVE_MARBLENET_VAD 1
@@ -137,6 +138,13 @@ static whisper_vad_context* silero_vad_get_cached_locked(const char* vad_model_p
     g_silero_cache_ctx = whisper_vad_init_from_file_with_params(vad_model_path, vcp);
     if (g_silero_cache_ctx) {
         g_silero_cache_path = vad_model_path;
+        // Opt-in: feed each window the previous 64 samples, as silero-vad's
+        // Python does. The default path (inherited from whisper.cpp) reflects
+        // instead and differs from upstream by up to ~0.3 in probability; the
+        // switch exists to measure whether matching upstream segments better.
+        const char* e = std::getenv("CRISPASR_SILERO_SOURCE_CONTEXT");
+        if (e && *e && *e != '0' && !crispasr_silero_enable_context(g_silero_cache_ctx))
+            fprintf(stderr, "crispasr[vad]: CRISPASR_SILERO_SOURCE_CONTEXT ignored (model is not 512/64)\n");
     }
     return g_silero_cache_ctx;
 }

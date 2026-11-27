@@ -18,6 +18,7 @@ import io
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -34,7 +35,8 @@ MODELS = {
     "v6.2": ("ggml-org/whisper-vad", "ggml-silero-v6.2.0.bin", "9ffd54a1e1ee413ddf265af9913beaf518d1639b", "6.2.0"),
     "v6.3": ("cstr/silero-vad-GGUF", "ggml-silero-v6.3.0.bin", "baa429e63d02402131ff3ed4369e9b40d4981627", "6.3"),
 }
-ARMS = [("v6.2", 0.5), ("v6.3", 0.5), ("v6.3", 0.45), ("v6.3", 0.4), ("v6.3", 0.35)]
+ARMS = [("v6.2", 0.5, 0), ("v6.3", 0.5, 0), ("v6.3", 0.45, 0), ("v6.3", 0.4, 0), ("v6.3", 0.35, 0),
+        ("v6.2", 0.5, 1), ("v6.3", 0.5, 1)]  # third: CRISPASR_SILERO_SOURCE_CONTEXT
 
 
 def build_shared():
@@ -205,19 +207,30 @@ def main():
         C.save(res)
 
     # 2. product CLI per arm
-    for k, th in ARMS:
-        name = f"{k}@{th}"
+    for k, th, sc in ARMS:
+        name = f"{k}@{th}" + ("+ctx" if sc else "")
+        env = dict(os.environ, CRISPASR_SILERO_SOURCE_CONTEXT=str(sc))
         agg = {"recall": [], "false": [], "split": {}, "wer_ref": [], "wer_hyp": []}
         for f in files:
             exp = C.SCRATCH / f"{f['path'].stem}-{name}.json"
             # --vad-export-raw exits after writing the segments, so the
             # transcript needs its own run with the same VAD settings.
-            C.run([b, "-m", asr, "-f", f["path"], "--vad", "-vm", vad[k], "-vt", str(th), "--vad-export-raw",
-                   exp, "-np", "-t", NT], C.OUT / f"vad-{name}-{f['path'].stem}.log", check=False, timeout=1800)
+            rv = C.run([b, "-m", asr, "-f", f["path"], "--vad", "-vm", vad[k], "-vt", str(th), "--vad-export-raw",
+                   exp, "-np", "-t", NT], C.OUT / f"vad-{name}-{f['path'].stem}.log", check=False, timeout=1800,
+                  env=env)
             r = C.run([b, "-m", asr, "-f", f["path"], "--vad", "-vm", vad[k], "-vt", str(th), "-np", "-nt", "-t", NT],
-                      C.OUT / f"cli-{name}-{f['path'].stem}.log", check=False, timeout=1800)
+                      C.OUT / f"cli-{name}-{f['path'].stem}.log", check=False, timeout=1800, env=env)
             sl = json.loads(exp.read_text())["crispasr_vad"]["slices"] if exp.exists() else []
             m = seg_metrics([(s["start"], s["end"]) for s in sl], f)
+            # The VAD's own segments, before CrispASR's short/close merge.
+            raw = [(int(float(x) * SR), int(float(y) * SR))
+                   for x, y in re.findall(r"VAD segment \d+: start = ([\d.]+), end = ([\d.]+)", rv.stderr)]
+            mr = seg_metrics(raw, f)
+            agg.setdefault("raw_recall", []).append(mr["recall"])
+            agg.setdefault("raw_false", []).append(mr["false"])
+            agg.setdefault("raw_n", []).append(len(raw))
+            for g, v in mr["split"].items():
+                agg.setdefault("raw_split", {}).setdefault(g, []).extend(v)
             agg["recall"].append(m["recall"])
             agg["false"].append(m["false"])
             for g, v in m["split"].items():
@@ -228,7 +241,12 @@ def main():
             "recall": float(np.mean(agg["recall"])), "false": float(np.mean(agg["false"])),
             "split": {str(g): f"{sum(v)}/{len(v)}" for g, v in sorted(agg["split"].items())},
             "wer": C.wer(" ".join(agg["wer_ref"]), " ".join(agg["wer_hyp"])),
+            "raw_recall": float(np.mean(agg["raw_recall"])), "raw_false": float(np.mean(agg["raw_false"])),
+            "raw_segments": int(sum(agg["raw_n"])),
+            "raw_split": {str(g): f"{sum(v)}/{len(v)}" for g, v in sorted(agg["raw_split"].items())},
         }
+        if not agg["raw_n"] or sum(agg["raw_n"]) == 0:
+            raise SystemExit(f"{name}: no raw VAD segments parsed from the log")
         C.save(res)
 
     if all(a["wer"] > 0.9 for a in res["arms"].values()):
@@ -238,12 +256,18 @@ def main():
     for k, rows in res["parity"].items():
         lines.append(f"| {k} | {', '.join(f'{r['max_abs_ctx']:.2e}' for r in rows)} | "
                      f"{', '.join(f'{r['max_abs_product']:.3f}' for r in rows)} |")
-    lines += ["", "### Product `--vad` on 12 long files (72 utterances, pauses 0.08–1.5 s)", "",
+    lines += ["", "### Product `--vad` slices (after merge) on 12 long files (72 utterances, pauses 0.08–1.5 s)", "",
               "| model@threshold | speech recall | false speech | WER | pauses split: " +
               " / ".join(f"{g}s" for g in GAPS) + " |", "|---|---|---|---|---|"]
     for name, a in res["arms"].items():
         lines.append(f"| {name} | {a['recall']:.3f} | {a['false']:.3f} | {a['wer']:.3f} | "
                      f"{' / '.join(a['split'].get(str(g), '-') for g in GAPS)} |")
+    lines += ["", "### Raw VAD segments (before CrispASR's short/close merge)", "",
+              "| model@threshold | segments | speech recall | false speech | pauses split: " +
+              " / ".join(f"{g}s" for g in GAPS) + " |", "|---|---|---|---|---|"]
+    for name, a in res["arms"].items():
+        lines.append(f"| {name} | {a['raw_segments']} | {a['raw_recall']:.3f} | {a['raw_false']:.3f} | "
+                     f"{' / '.join(a['raw_split'].get(str(g), '-') for g in GAPS)} |")
     C.summary(lines)
 
 
