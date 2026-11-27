@@ -38,7 +38,8 @@ def convert_silero_vad(output_path, print_tensors=True):
         fout.write(model_type.encode("utf-8"))
 
         version_parts = silero_version.split(".")
-        major, minor, patch = map(int, version_parts)
+        version_parts += ["0"] * (3 - len(version_parts))
+        major, minor, patch = map(int, version_parts[:3])
         print(f"Version: {major}.{minor}.{patch}")
         fout.write(struct.pack("i", major))
         fout.write(struct.pack("i", minor))
@@ -184,7 +185,7 @@ def convert_silero_vad(output_path, print_tensors=True):
             # Write tensor data
             data.tofile(fout)
 
-            print(f"  Wrote {data.size * (2 if ftype==1 else 4)} bytes")
+            print(f"  Wrote {data.size * (2 if ftype == 1 else 4)} bytes")
 
     print(f"\nDone! Model has been converted to GGML format: {output_file}")
     print(f"File size: {os.path.getsize(output_file)} bytes")
