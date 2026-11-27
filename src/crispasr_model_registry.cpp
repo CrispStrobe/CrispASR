@@ -1920,16 +1920,16 @@ constexpr ExtraCompanion k_confucius4_tts_extras[] = {
 
 // Source full-file recipe requires Silero's speech-boundary windows.
 constexpr ExtraCompanion k_index_echo_extras[] = {
-    {"ggml-silero-v6.2.0.bin",
-     "https://huggingface.co/ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin"},
+    {"ggml-silero-v6.3.0.bin",
+     "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.3.0.bin"},
     {nullptr, nullptr},
 };
 
 // hikari: its streaming policy's wait penalty is driven by Silero's speech
 // probability; without it the model hardly ever emits (jfk 0-4 s: 48/48 WAIT).
 constexpr ExtraCompanion k_hikari_extras[] = {
-    {"ggml-silero-v6.2.0.bin",
-     "https://huggingface.co/ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin"},
+    {"ggml-silero-v6.3.0.bin",
+     "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.3.0.bin"},
     {nullptr, nullptr},
 };
 

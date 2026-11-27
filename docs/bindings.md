@@ -237,7 +237,7 @@ from crispasr import (
 sess = Session("parakeet-tdt-0.6b-v3-q4_k.gguf")
 sess.set_max_new_tokens(256)       # AR backends; <= 0 clears
 sess.set_frequency_penalty(0.4)    # AR backends; <= 0 disables
-segs = sess.transcribe_vad(pcm, "silero-v6.2.0.bin")  # stitched VAD pass
+segs = sess.transcribe_vad(pcm, "silero-v6.3.0.bin")  # stitched VAD pass
 
 # Run each shared post-step standalone
 lang = detect_language_pcm(pcm, model_path="ggml-tiny.bin")
@@ -280,7 +280,7 @@ use crispasr::{
 let sess = Session::open("cohere-transcribe-q4_k.gguf")?;   // or open_with_backend(path, "cohere", 4)
 sess.set_max_new_tokens(256)?;
 sess.set_frequency_penalty(0.4)?;
-let segs = sess.transcribe_vad(&pcm, "silero-v6.2.0.bin", None)?;
+let segs = sess.transcribe_vad(&pcm, "silero-v6.3.0.bin", None)?;
 
 let bundle = registry_default_bundle("canary")?.unwrap();
 assert!(!bundle.requires_acceptance); // obtain explicit acceptance when true
@@ -353,7 +353,7 @@ sess, _ := whisper.SessionOpen("parakeet.gguf", 4)   // or SessionOpenExplicit(p
 defer sess.Close()
 _ = sess.SetMaxNewTokens(256)
 _ = sess.SetFrequencyPenalty(0.4)
-res, _ := sess.TranscribeVAD(pcm, 16000, "silero-v6.2.0.bin")   // or sess.Transcribe(pcm)
+res, _ := sess.TranscribeVAD(pcm, 16000, "silero-v6.3.0.bin")   // or sess.Transcribe(pcm)
 ```
 
 Module: `bindings/go` (package name `whisper`); the whisper-only high-level

@@ -3765,14 +3765,14 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
                 std::string dir = model_path;
                 const size_t cut = dir.find_last_of("/\\");
                 dir = cut == std::string::npos ? std::string(".") : dir.substr(0, cut);
-                const std::string near = dir + "/ggml-silero-v6.2.0.bin";
+                const std::string near = dir + "/ggml-silero-v6.3.0.bin";
                 if (FILE* f = std::fopen(near.c_str(), "rb")) {
                     std::fclose(f);
                     vp = near;
                 } else {
-                    vp = crispasr_managed_download("ggml-silero-v6.2.0.bin",
+                    vp = crispasr_managed_download("ggml-silero-v6.3.0.bin",
                                                    "https://huggingface.co/ggml-org/whisper-vad/resolve/"
-                                                   "9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin",
+                                                   "main/ggml-silero-v6.3.0.bin",
                                                    "", true, "hikari VAD");
                 }
             }

@@ -13,8 +13,8 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir, 
     from huggingface_hub import hf_hub_download
     from crispasr import Session
     # Keep the third companion beside the primary, exercising runtime autoload.
-    vad_revision = '9ffd54a1e1ee413ddf265af9913beaf518d1639b'
-    vad_path = Path(hf_hub_download('ggml-org/whisper-vad', 'ggml-silero-v6.2.0.bin',
+    vad_revision = 'main'
+    vad_path = Path(hf_hub_download('ggml-org/whisper-vad', 'ggml-silero-v6.3.0.bin',
                                   revision=vad_revision, local_dir=models / 'vad-companion'))
     oracle = json.loads((models / reference_subdir / 'pipeline.json').read_text())
     if model_prefix == 'index-echo-9b' and oracle.get('complete') is not True:

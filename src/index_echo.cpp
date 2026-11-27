@@ -316,7 +316,7 @@ index_echo_context* index_echo_init_from_file(const char* path, index_echo_conte
     std::string arch = core_gguf::kv_str(meta, "general.architecture", "");
     std::string companion = core_gguf::kv_str(meta, "index_echo.decoder_file", "");
     std::string connector = core_gguf::kv_str(meta, "index_echo.connector_type", "residual");
-    std::string vad_file = core_gguf::kv_str(meta, "index_echo.vad_file", "ggml-silero-v6.2.0.bin");
+    std::string vad_file = core_gguf::kv_str(meta, "index_echo.vad_file", "ggml-silero-v6.3.0.bin");
     core_gguf::free_metadata(meta);
     if (arch != "index_echo" || (connector != "residual" && connector != "projection") || companion.empty() ||
         std::filesystem::path(companion).is_absolute() ||

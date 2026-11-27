@@ -218,7 +218,7 @@ document (issue #228).
 
 | Flag | Meaning |
 |---|---|
-| `--vad` | Enable Silero VAD. Auto-downloads `ggml-silero-v6.2.0.bin` (~885 KB) to `~/.cache/crispasr/` on first use |
+| `--vad` | Enable Silero VAD. Auto-downloads `ggml-silero-v6.3.0.bin` (~885 KB) to `~/.cache/crispasr/` on first use |
 | `-vm FNAME`, `--vad-model FNAME` | Override the VAD model: a path, or one of `auto`, `silero`, `firered`, `marblenet`, `webrtc`, `whisper-vad` (default: auto) |
 | `-vt F` | VAD threshold (default 0.5) |
 | `-vspd N` | VAD min speech duration (ms, default 250) |
@@ -550,10 +550,10 @@ into one output segment, so it is off by default.
 
 # Or point at an existing GGUF
 ./build/bin/crispasr --backend parakeet -m parakeet.gguf -f long_audio.wav \
-    --vad-model ~/models/ggml-silero-v6.2.0.bin -osrt
+    --vad-model ~/models/ggml-silero-v6.3.0.bin -osrt
 ```
 
-The cached model lives at `~/.cache/crispasr/ggml-silero-v6.2.0.bin`
+The cached model lives at `~/.cache/crispasr/ggml-silero-v6.3.0.bin`
 (~885 KB). If you don't pass `--vad`, whisper falls back to fixed
 30-second chunking (`-ck 30`). Backends with `CAP_UNBOUNDED_INPUT`
 (parakeet, canary, canary-qwen, nemotron, wav2vec2, firered-asr,

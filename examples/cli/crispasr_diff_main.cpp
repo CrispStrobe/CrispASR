@@ -6627,7 +6627,7 @@ int main(int argc, char** argv) {
         if (kv["vad"] == "1") {
             const char* vp = std::getenv("HIKARI_VAD_MODEL");
             if (!vp || !*vp) {
-                fprintf(stderr, "hikari: the reference ran with VAD; set HIKARI_VAD_MODEL=<ggml-silero-v6.2.0.bin>\n");
+                fprintf(stderr, "hikari: the reference ran with VAD; set HIKARI_VAD_MODEL=<ggml-silero-v6.3.0.bin>\n");
                 hikari_free(ctx);
                 return 4;
             }

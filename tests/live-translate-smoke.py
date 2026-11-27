@@ -15,7 +15,7 @@ argv). It runs the real CLI on real models and checks what comes out:
         [--wav samples/jfk.wav]
 
 DIR must hold parakeet-tdt-0.6b-v3-q4_k.gguf, opus-mt-en-de-q8_0.gguf,
-opus-mt-de-en-q8_0.gguf and ggml-silero-v6.2.0.bin.
+opus-mt-de-en-q8_0.gguf and ggml-silero-v6.3.0.bin.
 """
 import argparse
 import json
@@ -75,7 +75,7 @@ def main() -> int:
 
     m = args.models
     need = ["parakeet-tdt-0.6b-v3-q4_k.gguf", "opus-mt-en-de-q8_0.gguf", "opus-mt-de-en-q8_0.gguf",
-            "ggml-silero-v6.2.0.bin"]
+            "ggml-silero-v6.3.0.bin"]
     for f in need:
         if not (m / f).exists():
             fail(f"missing model {m / f}")
@@ -100,7 +100,7 @@ def main() -> int:
 
     cmd = [args.crispasr, "--stream", "--stream-json", "-m", str(m / "parakeet-tdt-0.6b-v3-q4_k.gguf"), "--backend",
            "parakeet", "-l", "en", "--tr-tl", "de", "--translate-model", str(m / "opus-mt-en-de-q8_0.gguf"),
-           "--vad-model", str(m / "ggml-silero-v6.2.0.bin")]
+           "--vad-model", str(m / "ggml-silero-v6.3.0.bin")]
 
     # 2. stdin redirected from a file.
     with open(raw, "rb") as f:

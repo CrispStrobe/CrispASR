@@ -106,7 +106,7 @@ assert cli.is_file() and test_nemotron.is_file() and test_partial.is_file()
 # ---------------------------------------------------------------------------
 model = hf_hub_download('cstr/nemotron-3.5-asr-streaming-GGUF',
                         'nemotron-3.5-asr-streaming-0.6b-q4_k.gguf', local_dir=SCRATCH / 'models')
-vad = hf_hub_download('ggml-org/whisper-vad', 'ggml-silero-v6.2.0.bin', local_dir=SCRATCH / 'models')
+vad = hf_hub_download('ggml-org/whisper-vad', 'ggml-silero-v6.3.0.bin', local_dir=SCRATCH / 'models')
 results['model'] = {'repo': 'cstr/nemotron-3.5-asr-streaming-GGUF', 'file': Path(model).name,
                     'bytes': Path(model).stat().st_size}
 save()

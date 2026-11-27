@@ -77,11 +77,11 @@ First, you need to download a VAD model:
 
 ```
 $ # Execute the commands below in the project root dir.
-$ ./models/download-vad-model.sh silero-v6.2.0
+$ ./models/download-vad-model.sh silero-v6.3.0
 ```
 
 Create `eval.conf` with the following content:
 
 ```
-CRISPASR_FLAGS = --no-prints --language en --output-txt --vad --vad-model ../../models/ggml-silero-v6.2.0.bin
+CRISPASR_FLAGS = --no-prints --language en --output-txt --vad --vad-model ../../models/ggml-silero-v6.3.0.bin
 ```

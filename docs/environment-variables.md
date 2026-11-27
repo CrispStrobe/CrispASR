@@ -873,7 +873,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 ### hikari
 
-- `HIKARI_VAD_MODEL` — Silero file for the policy's speech probability (default: `ggml-silero-v6.2.0.bin` next to the model, else the managed download; CLI also `--vad-model`).
+- `HIKARI_VAD_MODEL` — Silero file for the policy's speech probability (default: `ggml-silero-v6.3.0.bin` next to the model, else the managed download; CLI also `--vad-model`).
 - `HIKARI_VAD` — `0` turns Silero off (the model then rarely emits; for A/B only).
 - `HIKARI_WP_BASE`, `HIKARI_WP_BOOST`, `HIKARI_WP_DECAY`, `HIKARI_REP`, `HIKARI_CTX`, `HIKARI_TAIL_MS` — the upstream client's policy knobs (defaults 0, 0.6, 0.3, 40, 337 tokens, 2000 ms).
 - `HIKARI_STRIDE` / `CRISPASR_HIKARI_REFRESH_STRIDE` — strided window refresh interval $K$ for streaming (default: 16 strided, `0` = exact sliding baseline).

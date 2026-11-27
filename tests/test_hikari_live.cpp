@@ -3,7 +3,7 @@
 //
 // Required:
 //   CRISPASR_MODEL_HIKARI=/path/to/hikari-medium-f16.gguf (or -q8_0)
-// Silero VAD: ggml-silero-v6.2.0.bin next to the model (where -m auto puts
+// Silero VAD: ggml-silero-v6.3.0.bin next to the model (where -m auto puts
 // it), or HIKARI_VAD_MODEL. Without it the policy's wait penalty never rises
 // and translation comes back empty — which is what the German case guards:
 // the C ABI used to open hikari without Silero and returned "" for en->de.

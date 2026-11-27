@@ -42,7 +42,7 @@ tower, not the decoder. The decoder omits the absent MTP branch and contains
 exactly the 24 text blocks used by the released speech inference path. Vision
 weights are omitted.
 
-For speech-boundary windows, also put `ggml-silero-v6.2.0.bin` from
+For speech-boundary windows, also put `ggml-silero-v6.3.0.bin` from
 [ggml-org/whisper-vad](https://huggingface.co/ggml-org/whisper-vad) beside them,
 or pass `--vad-model`. Silero uses its separate MIT license. Without Silero,
 CrispASR uses bounded 60-second windows. The source recipe keeps context from
@@ -56,7 +56,7 @@ Build CrispASR with the Index-Echo backend, then download a matching pair:
 hf download cstr/index-echo-2b-GGUF \
   index-echo-2b-q8_0.gguf index-echo-2b-decoder-q8_0.gguf \
   --local-dir models/index-echo
-hf download ggml-org/whisper-vad ggml-silero-v6.2.0.bin \
+hf download ggml-org/whisper-vad ggml-silero-v6.3.0.bin \
   --local-dir models/index-echo
 ./build/bin/crispasr --backend index-echo \
   -m models/index-echo/index-echo-2b-q8_0.gguf \

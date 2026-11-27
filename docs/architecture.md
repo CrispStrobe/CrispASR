@@ -377,7 +377,7 @@ The primary `index_echo` GGUF contains the tower, frontend constants and
 connector. `index_echo.decoder_file` names a sibling standard Qwen3.5 GGUF;
 both files must be present. The 2B F16 and Q8_0 cohorts have matching companion names; its Q4 experiments
 are rejected. The 9B publication contains F16 only: all three Q8 candidates
-change exact output and remain private. A sibling `ggml-silero-v6.2.0.bin`, or an explicit `--vad-model`, enables
+change exact output and remain private. A sibling `ggml-silero-v6.3.0.bin`, or an explicit `--vad-model`, enables
 the released speech-window merge recipe (300 ms silence, 300/500 ms padding,
 60 s maximum, short-tail merge). Without that companion, inference uses
 bounded 60 s windows. The shared native Silero classifier feeds the released

@@ -158,7 +158,7 @@ public:
             {
                 const size_t cut = p.model.find_last_of("/\\");
                 near =
-                    (cut == std::string::npos ? std::string(".") : p.model.substr(0, cut)) + "/ggml-silero-v6.2.0.bin";
+                    (cut == std::string::npos ? std::string(".") : p.model.substr(0, cut)) + "/ggml-silero-v6.3.0.bin";
                 if (FILE* f = std::fopen(near.c_str(), "rb"))
                     std::fclose(f);
                 else
