@@ -12,6 +12,14 @@ upload. Before switching the default (PR #612):
   matched to upstream references run with v6.2, so the --vad default does not reach them.
 - Threshold and quality: tools/ci-heavy/vad_v63_eval.py (parity vs silero-vad Python,
   recall / false speech / pause splits / parakeet WER for v6.2@0.5 vs v6.3@0.5..0.35).
+- Result (heavy-cpu 46049678414, 12 long LibriSpeech files, 72 utterances):
+  v6.3@0.5 WER 0.036 vs v6.2@0.5 0.044; post-merge recall 0.980/0.981, false speech
+  0.368/0.377. Raw segments: v6.3 cuts less non-speech (0.123 vs 0.154) and splits
+  short pauses more often (0.25 s: 8/10 vs 6/10). Lower thresholds buy no WER (0.043).
+  Keep threshold 0.5 for v6.3. Source context (CRISPASR_SILERO_SOURCE_CONTEXT=1) brings
+  probs to ~1e-3 of Python but changes no product metric; leave it opt-in.
+  Remaining for the default switch: user call on URL (our cstr pin vs ggml-org once
+  whisper-vad#2 lands); small sample, so treat the WER gain as "no regression".
 
 ### ASR final checkpoint / handoff (2026-11-18)
 
