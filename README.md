@@ -80,7 +80,7 @@ and unzip it:
 | **Windows + NVIDIA** | `crispasr-windows-x86_64-cuda.zip` | Self-contained; a CUDA Toolkit install is **not** required. CUDA 12.6 legacy build: `…-cuda126.zip` (Pascal/Volta and newer, through Hopper); CUDA-13-native build: `…-cuda13.zip` (Turing+) |
 | **macOS, Apple Silicon** | `crispasr-macos-arm64.tar.gz` | Metal GPU + Accelerate; `crispasr-macos.tar.gz` is the arm64 compatibility alias |
 | **macOS, Intel** | `crispasr-macos-x86_64.tar.gz` | CPU + Accelerate; requires AVX2/FMA/F16C (Haswell or newer). Older Intel Mac → `crispasr-macos-x86_64-cpu-legacy.tar.gz` |
-| **Linux** | `crispasr-linux-x86_64.tar.gz` | `…-cuda.tar.gz` / `…-vulkan.tar.gz` for GPU |
+| **Linux** | `crispasr-linux-x86_64.tar.gz` | `…-cuda.tar.gz` / `…-vulkan.tar.gz` for GPU. The CUDA tarballs need the CUDA runtime libraries (`libcudart` + `libcublas`, not the full toolkit) — see [install.md](docs/install.md#prebuilt-linux-tarballs--which-one-to-download-355) |
 
 Prefer to build it yourself? See [Install & build](#install--build). The `-vulkan`
 build requires the Vulkan driver and does **not** fall back to CPU; the Linux

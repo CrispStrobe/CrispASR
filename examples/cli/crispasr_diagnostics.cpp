@@ -1,6 +1,7 @@
 // crispasr_diagnostics.cpp — see header for the why.
 
 #include "crispasr_diagnostics.h"
+#include "crispasr_gpu_plugin_hint.h"
 
 #include "ggml-backend.h"
 
@@ -363,30 +364,6 @@ std::string try_load(const std::filesystem::path& p) {
 #endif
 }
 
-std::string hint_for(const char* stem, const std::string& err) {
-    const bool cuda = std::strcmp(stem, "cuda") == 0;
-    const bool hip = std::strcmp(stem, "hip") == 0;
-    std::string h;
-    if (cuda && err.find("libcuda.so") != std::string::npos)
-        return "the NVIDIA driver library is not visible (in a container: run with --gpus all / the NVIDIA runtime)";
-    if (cuda && (err.find("cudart") != std::string::npos || err.find("cublas") != std::string::npos)) {
-        const bool v13 = err.find(".so.13") != std::string::npos || err.find("64_13") != std::string::npos;
-        const bool v12 = err.find(".so.12") != std::string::npos || err.find("64_12") != std::string::npos;
-        const char* major = v13 ? "13" : v12 ? "12" : "";
-        h = std::string("this package needs the CUDA ") + (major[0] ? major : "") +
-            " runtime libraries (libcudart + libcublas" + (major[0] ? std::string(" .so.") + major : "") +
-            "). The NVIDIA driver alone does not ship them, and the distro 'nvidia-cuda-toolkit' "
-            "package is usually an older CUDA. Install them from NVIDIA's repository";
-        if (major[0])
-            h += std::string(", e.g. `sudo apt install cuda-cudart-") + major + "-0 libcublas-" + major + "-0`";
-        h += ", or use the CrispASR CUDA package that matches the CUDA major you have";
-        return h;
-    }
-    if (hip && err.find("lib") != std::string::npos)
-        return "this package needs the ROCm runtime with hipBLAS/rocBLAS of the matching major version "
-               "(ROCm 6: crispasr-linux-x86_64-hip, ROCm 7: crispasr-linux-x86_64-hip7)";
-    return "";
-}
 
 } // namespace
 
@@ -419,7 +396,7 @@ int crispasr_report_unloaded_gpu_plugins(FILE* out, bool compact) {
             if (err.empty())
                 err = "the library loads, but its backend registered no device (driver too old for this "
                       "runtime, no supported GPU, or the device is hidden by *_VISIBLE_DEVICES)";
-            const std::string hint = hint_for(kind.stem, err);
+            const std::string hint = crispasr_gpu_plugin_hint(kind.stem, err);
             if (compact) {
                 std::fprintf(out, "crispasr: warning: %s backend not available, running on CPU: %s\n", kind.reg_name,
                              err.c_str());

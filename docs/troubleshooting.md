@@ -8,6 +8,7 @@ isn't here, open an issue with the [checklist at the bottom](#what-to-put-in-a-b
 - [Get more output first](#get-more-output-first)
 - [It printed the banner, then nothing happened](#it-printed-the-banner-then-nothing-happened)
 - [Is it the GPU?](#is-it-the-gpu)
+  - [Linux CUDA tarball runs on the CPU (#606)](#linux-cuda-tarball-runs-on-the-cpu-606)
 - [`model '...' not found locally`](#model--not-found-locally)
 - [Windows: which download, and the CUDA DLLs](#windows-which-download-and-the-cuda-dlls)
 - [A backend refuses to start](#a-backend-refuses-to-start)
@@ -160,6 +161,23 @@ do *not* silently fall back to CPU. The Linux `-cuda` / `-cuda13` tarballs *do*
 fall back since v0.8.30 (dynamic backend loading) — see
 [install.md](install.md#prebuilt-linux-tarballs--which-one-to-download-355).
 Passing `--no-gpu` to such a build is fine; it just uses the CPU path.
+
+---
+
+### Linux CUDA tarball runs on the CPU (#606)
+
+The `-cuda` / `-cuda13` tarballs load the GPU through `libggml-cuda.so`, which
+needs the CUDA **runtime** libraries of the package's major version
+(`libcudart` + `libcublas`, `.so.12` or `.so.13`). The driver does not ship them,
+and the distro `nvidia-cuda-toolkit` is usually an older CUDA. Check:
+
+```bash
+ldd libggml-cuda.so | grep "not found"   # in the unpacked folder
+crispasr --diag                           # names the missing library and the fix
+```
+
+Install the two libraries from NVIDIA's CUDA repository as shown in
+[install.md](install.md#prebuilt-linux-tarballs--which-one-to-download-355).
 
 ---
 

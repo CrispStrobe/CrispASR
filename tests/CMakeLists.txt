@@ -7329,3 +7329,12 @@ catch_discover_tests(test-cpu-linear
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit;firered"
 )
+
+# ─── test-gpu-plugin-hint — GPU plugin load-failure advice wording (#606) ────
+add_executable(test-gpu-plugin-hint test-gpu-plugin-hint.cpp)
+target_include_directories(test-gpu-plugin-hint PRIVATE ${PROJECT_SOURCE_DIR}/examples/cli)
+target_link_libraries(test-gpu-plugin-hint PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-gpu-plugin-hint
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;diag"
+)

@@ -44,15 +44,25 @@ libraries of the package's major version**: `libcudart` and `libcublas`
 (`.so.12` for `crispasr-linux-x86_64-cuda`, `.so.13` for `-cuda13`). The driver
 alone does not ship them, and the distro's `nvidia-cuda-toolkit` package is
 usually an older CUDA (11.5 on Ubuntu 22.04, 12.0 on 24.04), so installing it
-does not help the CUDA 13 package (#606). Add NVIDIA's CUDA repository
-(developer.nvidia.com/cuda-downloads, "deb (network)") and install only the two
-runtime libraries, e.g. for CUDA 13:
+does not help the CUDA 13 package (#606). The `CUDA Version` that `nvidia-smi`
+prints is the newest CUDA the *driver* supports, not an installed runtime.
+
+Install only the two runtime libraries from NVIDIA's CUDA repository. On Ubuntu
+(replace `ubuntu2404` with your release: `ubuntu2204`, `ubuntu2404`, `ubuntu2604`;
+Debian: `debian12`):
 
 ```bash
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt update
 sudo apt install cuda-cudart-13-0 libcublas-13-0
 ```
 
-(`cuda-cudart-12-8 libcublas-12-8` for the CUDA 12 package). A container gets
+Any 13.x works for the `-cuda13` package (`13-0`, or the newest your repository
+offers, e.g. `cuda-cudart-13-5 libcublas-13-5`); the library names carry only the
+major version. Check with `ldd libggml-cuda.so | grep "not found"` in the
+unpacked folder: it should print nothing.
+For the CUDA 12 package install `cuda-cudart-12-8 libcublas-12-8` (any 12.x). A container gets
 the driver through `--gpus all` / `runtime: nvidia`. `crispasr --diag` names the
 exact library that is missing when the CUDA backend does not load, and a normal
 run prints a one-line warning instead of switching to the CPU silently.
