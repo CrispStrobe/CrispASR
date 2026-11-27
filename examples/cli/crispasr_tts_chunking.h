@@ -24,9 +24,9 @@
 
 // Split text on sentence terminators (`.!?` ASCII; `。` U+3002 CJK
 // ideographic full stop; `।` U+0964 Devanagari danda) when followed
-// by whitespace or end-of-input. Any chunk exceeding `max_chars` is
-// further split on whitespace boundaries so no piece can blow past
-// the cap (protects against run-on input with no punctuation).
+// by whitespace or end-of-input. Any sentence exceeding `max_chars` is
+// further split by crispasr_tts_split_long_sentence() so no piece can blow
+// past the cap (protects against run-on input with no punctuation).
 //
 // Each returned chunk is trimmed of surrounding whitespace; empty
 // pieces are dropped. Empty / whitespace-only input → empty vector.
@@ -45,6 +45,17 @@
 //     of one sentence belongs to the next chunk). Cosmetic — synthesis
 //     ignores quote characters.
 std::vector<std::string> crispasr_tts_split_sentences(const std::string& text, std::size_t max_chars = 600);
+
+// Split ONE sentence that is longer than max_chars into pieces of at most
+// max_chars bytes (#609). Breaks go at the strongest clause boundary that
+// keeps the pieces balanced: ; : ? ! or a dash first, then a comma, then any
+// space, and a space after a '.' that did not end the sentence ("M.", "Mr.")
+// only as a last resort; a text with no space at all is cut at a UTF-8
+// character boundary. Pieces are trimmed; joined with single spaces they give
+// back the trimmed input. A sentence within the cap comes back unchanged.
+// CRISPASR_TTS_CLAUSE_SPLIT=0 restores the old split at the last space before
+// the cap.
+std::vector<std::string> crispasr_tts_split_long_sentence(const std::string& sentence, std::size_t max_chars);
 
 // Server policy wrapper around crispasr_tts_split_sentences. VibeVoice
 // voice cloning intentionally stays single-shot because chunking breaks

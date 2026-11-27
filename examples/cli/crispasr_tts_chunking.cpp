@@ -4,10 +4,13 @@
 // See crispasr_tts_chunking.h for the design rationale (issue #66).
 
 #include "crispasr_tts_chunking.h"
+#include "core/env_gate.h"
 #include "crispasr_sentence_end.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
+#include <string>
 
 namespace {
 
@@ -89,6 +92,208 @@ void whitespace_split(const std::string& chunk, std::size_t max_chars, std::vect
 
 } // namespace
 
+namespace {
+
+// --- #609: splitting one over-long sentence ------------------------------
+//
+// How natural a break between two pieces of the same sentence is. A piece is
+// synthesised as its own generation, so a break mid-phrase ("... where the
+// priest and" | "his mistress ...") makes the model start or end a reading
+// in the middle of a clause, and it dropped the word at the start of the
+// second piece. Prefer the boundaries a reader pauses at.
+enum BreakClass : int {
+    BREAK_ABBREV = 0, // a space after a '.' that did not end the sentence: "M." | "Krempe"
+    BREAK_SPACE = 1,  // any other space
+    BREAK_COMMA = 2,
+    BREAK_CLAUSE = 3, // ; : ? ! (inside the sentence), a dash, or ." inside a quotation
+};
+
+struct Break {
+    std::size_t pos; // byte offset where the next piece starts
+    int cls;
+};
+
+bool is_ws(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+// Break class of the 3-byte punctuation mark at s[i..i+3), or -1: the em/en
+// dash, and the CJK marks that carry no space after them (fullwidth comma and
+// ideographic comma; fullwidth semicolon, colon, '!' and '?').
+int wide_mark_class(const std::string& s, std::size_t i) {
+    if (i + 3 > s.size())
+        return -1;
+    const unsigned char a = (unsigned char)s[i], b = (unsigned char)s[i + 1], c = (unsigned char)s[i + 2];
+    if (a == 0xE2 && b == 0x80 && (c == 0x94 || c == 0x93)) // U+2014, U+2013
+        return BREAK_CLAUSE;
+    if (a == 0xEF && b == 0xBC) {
+        if (c == 0x8C) // U+FF0C
+            return BREAK_COMMA;
+        if (c == 0x9B || c == 0x9A || c == 0x81 || c == 0x9F) // U+FF1B U+FF1A U+FF01 U+FF1F
+            return BREAK_CLAUSE;
+    }
+    if (a == 0xE3 && b == 0x80 && c == 0x81) // U+3001
+        return BREAK_COMMA;
+    return -1;
+}
+
+// Length of a closing quote/bracket at s[i] (0 if none): ASCII " ' ) ], and
+// U+201D, U+2019, U+300D, U+300F, U+FF09.
+std::size_t closer_at(const std::string& s, std::size_t i) {
+    if (i >= s.size())
+        return 0;
+    const char c = s[i];
+    if (c == '"' || c == '\'' || c == ')' || c == ']')
+        return 1;
+    if (i + 3 > s.size())
+        return 0;
+    const unsigned char a = (unsigned char)s[i], b = (unsigned char)s[i + 1], d = (unsigned char)s[i + 2];
+    if ((a == 0xE2 && b == 0x80 && (d == 0x9D || d == 0x99)) || (a == 0xE3 && b == 0x80 && (d == 0x8D || d == 0x8F)) ||
+        (a == 0xEF && b == 0xBC && d == 0x89))
+        return 3;
+    return 0;
+}
+
+// Length of a closing quote/bracket ending at s[end-1] (0 if none).
+std::size_t closer_len(const std::string& s, std::size_t end) {
+    if (end >= 1 && closer_at(s, end - 1) == 1)
+        return 1;
+    if (end >= 3 && closer_at(s, end - 3) == 3)
+        return 3;
+    return 0;
+}
+
+// True when s[i..] starts with a lowercase coordinating conjunction word.
+bool starts_with_conjunction(const std::string& s, std::size_t i) {
+    static const char* const words[] = {"and", "but", "or", "nor", "yet", "so", "for"};
+    for (const char* w : words) {
+        const std::size_t len = std::char_traits<char>::length(w);
+        if (s.compare(i, len, w) == 0 && (i + len >= s.size() || !std::isalpha((unsigned char)s[i + len])))
+            return true;
+    }
+    return false;
+}
+
+std::vector<Break> break_candidates(const std::string& s) {
+    std::vector<Break> out;
+    const std::size_t n = s.size();
+    std::size_t i = 0;
+    while (i < n) {
+        if (!is_ws(s[i])) {
+            // An unspaced dash ("syndic\u2014he") or CJK mark is a break right
+            // after it (and after any closing quote that follows it).
+            const int wide = wide_mark_class(s, i);
+            if (wide < 0) {
+                i++;
+                continue;
+            }
+            std::size_t b = i + 3;
+            while (std::size_t k = closer_at(s, b))
+                b += k;
+            if (b < n && !is_ws(s[b]))
+                out.push_back({b, wide});
+            i += 3;
+            continue;
+        }
+        const std::size_t ws0 = i;
+        while (i < n && is_ws(s[i]))
+            i++;
+        if (ws0 == 0 || i >= n)
+            continue; // leading / trailing whitespace is not a break
+        std::size_t j = ws0;
+        bool closed = false;
+        while (std::size_t k = closer_len(s, j)) {
+            j -= k;
+            closed = true;
+        }
+        int cls = BREAK_SPACE;
+        if (j > 0) {
+            const char c = s[j - 1];
+            if (c == ';' || c == ':' || c == '?' || c == '!')
+                cls = BREAK_CLAUSE;
+            else if (c == ',')
+                cls = BREAK_COMMA;
+            else if (c == '.')
+                cls = closed ? BREAK_CLAUSE : BREAK_ABBREV;
+            else if (j >= 3 && wide_mark_class(s, j - 3) >= 0)
+                cls = wide_mark_class(s, j - 3);
+            else if (c == '-' && j >= 2 && (s[j - 2] == '-' || is_ws(s[j - 2])))
+                cls = BREAK_CLAUSE; // "--" or a spaced " - "; not "brother-in-law"
+        }
+        // "; and the waves ..." continues the clause before it: rank it with
+        // the commas, so a break before a fresh clause ("; I have seen ...")
+        // wins.
+        if (cls == BREAK_CLAUSE && starts_with_conjunction(s, i))
+            cls = BREAK_COMMA;
+        out.push_back({i, cls});
+    }
+    return out;
+}
+
+} // namespace
+
+std::vector<std::string> crispasr_tts_split_long_sentence(const std::string& sentence, std::size_t max_chars) {
+    std::vector<std::string> out;
+    const std::string s = trim(sentence);
+    if (s.empty())
+        return out;
+    if (max_chars == 0 || s.size() <= max_chars) {
+        out.push_back(s);
+        return out;
+    }
+    if (core_env::explicitly_off("CRISPASR_TTS_CLAUSE_SPLIT")) {
+        whitespace_split(s, max_chars, out);
+        return out;
+    }
+    const std::vector<Break> cands = break_candidates(s);
+    const std::size_t n = s.size();
+    // A piece is one generation behind the full prompt; a few words alone are
+    // what made bt2-tts read its instruction aloud (#594). Keep every piece
+    // at least a quarter of the cap when the text allows it.
+    const std::size_t min_piece = std::max<std::size_t>(1, max_chars / 4);
+    std::size_t start = 0;
+    while (n - start > max_chars) {
+        const std::size_t remaining = n - start;
+        const std::size_t k = (remaining + max_chars - 1) / max_chars; // pieces still needed, >= 2
+        const std::size_t target = start + remaining / k;              // balanced break
+        const std::size_t fit_lo = n - (k - 1) * max_chars;            // the rest must fit in k-1 pieces
+        const std::size_t fit_hi = start + max_chars;                  // this piece must fit
+        auto pick = [&](std::size_t lo, std::size_t hi) -> std::size_t {
+            std::size_t best = 0, best_d = 0;
+            int best_cls = -1;
+            for (const Break& b : cands) {
+                if (b.pos <= start || b.pos < lo || b.pos > hi)
+                    continue;
+                const std::size_t d = b.pos > target ? b.pos - target : target - b.pos;
+                if (b.cls > best_cls || (b.cls == best_cls && d < best_d)) {
+                    best = b.pos;
+                    best_d = d;
+                    best_cls = b.cls;
+                }
+            }
+            return best;
+        };
+        const std::size_t tail_hi = n > min_piece ? n - min_piece : 0;
+        std::size_t cut = pick(std::max(fit_lo, start + min_piece), std::min(fit_hi, tail_hi));
+        if (cut == 0)
+            cut = pick(fit_lo, fit_hi);
+        if (cut == 0) {
+            // No space anywhere in reach: cut at the cap, on a character boundary.
+            cut = fit_hi;
+            while (cut > start + 1 && ((unsigned char)s[cut] & 0xC0) == 0x80)
+                cut--;
+        }
+        std::string piece = trim(s.substr(start, cut - start));
+        if (!piece.empty())
+            out.push_back(std::move(piece));
+        start = cut;
+    }
+    std::string tail = trim(s.substr(start));
+    if (!tail.empty())
+        out.push_back(std::move(tail));
+    return out;
+}
+
 std::vector<std::string> crispasr_tts_split_sentences(const std::string& text, std::size_t max_chars) {
     std::vector<std::string> result;
     if (text.empty())
@@ -106,8 +311,8 @@ std::vector<std::string> crispasr_tts_split_sentences(const std::string& text, s
             // "Dr.", "z. B.") does not end the sentence; see crispasr_sentence_end.h.
             if (is_space_or_end(text, i + term_len) && (text[i] != '.' || crispasr_period_ends_sentence(text, i))) {
                 std::string chunk = trim(text.substr(chunk_start, i + term_len - chunk_start));
-                if (!chunk.empty())
-                    whitespace_split(chunk, max_chars, result);
+                for (auto& piece : crispasr_tts_split_long_sentence(chunk, max_chars))
+                    result.push_back(std::move(piece));
                 chunk_start = i + term_len;
                 i = chunk_start;
                 continue;
@@ -119,9 +324,8 @@ std::vector<std::string> crispasr_tts_split_sentences(const std::string& text, s
     }
     // Tail (input that doesn't end with a terminator).
     if (chunk_start < text.size()) {
-        std::string tail = trim(text.substr(chunk_start));
-        if (!tail.empty())
-            whitespace_split(tail, max_chars, result);
+        for (auto& piece : crispasr_tts_split_long_sentence(text.substr(chunk_start), max_chars))
+            result.push_back(std::move(piece));
     }
     return result;
 }

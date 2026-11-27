@@ -146,6 +146,7 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | Variable | Purpose |
 |----------|---------|
 | `CRISPASR_SENTENCE_ABBREV` | Default ON. TTS long-form chunking and `--split-on-punct` subtitles use live translation's sentence-end rule for `.`, so ordinals, initials and known abbreviations (`am 3. Oktober`, `z. B.`, `Dr.`, `Mr.`) stay inside the sentence. On 1,776 UD German GSD sentences this cut false splits from 72 to 8. `0` restores the bare `. ` rule. |
+| `CRISPASR_TTS_CLAUSE_SPLIT` | Default ON. A sentence longer than the TTS chunk cap (600 bytes) is broken at the strongest clause boundary (`;` `:` `?` `!`, a dash or a CJK fullwidth mark, then a comma, then a space; a clause mark followed by *and/but/or/...* ranks as a comma), keeping every piece at least a quarter of the cap, instead of at the last space before the cap. Each piece is one generation, and bt2-tts dropped the first word after a mid-phrase cut (#609). `0` restores the old split. |
 
 ### Alignment and VAD sanity checks
 
@@ -379,6 +380,18 @@ suffixes.
 ### BERT encoder
 
 - `CRISPASR_BERT_ENCODER_BENCH`
+
+### Breeze TTS 2 (bt2-tts)
+
+- `CRISPASR_BT2_LENGTH_GUARD` — default on. A sampled attempt that runs past
+  40 + 10 frames per text token without ending is resampled (up to 3 tries,
+  then the full cap), because the model sometimes misses EOS (#609). `0` turns
+  it off.
+- `CRISPASR_BREEZE_EOS_TRACE=<path>` — append the per-frame end-of-speech
+  probability and rank to `<path>` (diagnostic).
+- `CRISPASR_BREEZE_BENCH` — per-stage timings on stderr.
+- `CRISPASR_BREEZE_QUANT_TEXT_EMBD` — `crispasr-quantize` only: also quantize
+  the 302 M-parameter text embedding (kept at source precision by default).
 
 ### BTC chord recognition
 

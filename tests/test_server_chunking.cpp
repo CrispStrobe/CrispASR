@@ -321,3 +321,230 @@ TEST_CASE("pack_sentences joins greedily and keeps an oversize sentence alone", 
     REQUIRE(bal == std::vector<std::string>{"Aaaa. Bbbb. Cccc.", "Dddd. Ee."});
     REQUIRE(crispasr_tts_pack_sentences({}, 8).empty());
 }
+
+// #609 (chunk 000522): a sentence longer than max_chars used to be cut at the
+// last whitespace before the cap, i.e. mid-phrase. The bt2-tts server then
+// synthesised "... the base of the mountain, where the priest and" and
+// "his mistress were overwhelmed ..." as two separate generations, and the
+// model dropped "his" at the start of the second one. Over-long sentences now
+// break at the strongest clause boundary (; : dash, then comma) in a window
+// that keeps the pieces balanced, and fall back to whitespace only when the
+// sentence has no punctuation to break at. CRISPASR_TTS_CLAUSE_SPLIT=0
+// restores the old whitespace split.
+namespace {
+
+// Frankenstein (1818), vol. III ch. 1: the only sentence in the book longer
+// than 600 bytes, as the #609 reporter's corpus spells it (ASCII quotes).
+const char* k_long_sentence =
+    "\"I have seen,\" he said, \"the most beautiful scenes of my own country; I have visited the lakes of Lucerne "
+    "and Uri, where the snowy mountains descend almost perpendicularly to the water, casting black and "
+    "impenetrable shades, which would cause a gloomy and mournful appearance were it not for the most verdant "
+    "islands that relieve the eye by their gay appearance; I have seen this lake agitated by a tempest, when the "
+    "wind tore up whirlwinds of water and gave you an idea of what the water-spout must be on the great ocean; "
+    "and the waves dash with fury the base of the mountain, where the priest and his mistress were overwhelmed by "
+    "an avalanche and where their dying voices are still said to be heard amid the pauses of the nightly wind; I "
+    "have seen the mountains of La Valais, and the Pays de Vaud; but this country, Victor, pleases me more than all "
+    "those wonders.";
+
+void set_clause_split_env(const char* v) {
+#if defined(_WIN32)
+    _putenv_s("CRISPASR_TTS_CLAUSE_SPLIT", v ? v : "");
+#else
+    if (v)
+        setenv("CRISPASR_TTS_CLAUSE_SPLIT", v, 1);
+    else
+        unsetenv("CRISPASR_TTS_CLAUSE_SPLIT");
+#endif
+}
+
+bool ends_with(const std::string& s, const std::string& tail) {
+    return s.size() >= tail.size() && s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+}
+
+// Last character of a piece, ignoring closing quotes.
+char last_mark(const std::string& s) {
+    std::size_t i = s.size();
+    while (i > 0 && (s[i - 1] == '"' || s[i - 1] == '\''))
+        i--;
+    return i > 0 ? s[i - 1] : '\0';
+}
+
+bool valid_utf8(const std::string& s) {
+    std::size_t i = 0;
+    while (i < s.size()) {
+        const unsigned char c = (unsigned char)s[i];
+        std::size_t len = c < 0x80 ? 1 : (c & 0xE0) == 0xC0 ? 2 : (c & 0xF0) == 0xE0 ? 3 : (c & 0xF8) == 0xF0 ? 4 : 0;
+        if (len == 0 || i + len > s.size())
+            return false;
+        for (std::size_t k = 1; k < len; k++)
+            if (((unsigned char)s[i + k] & 0xC0) != 0x80)
+                return false;
+        i += len;
+    }
+    return true;
+}
+
+} // namespace
+
+TEST_CASE("#609: an over-long sentence breaks at clause punctuation, not mid-phrase", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    const std::string s = k_long_sentence;
+    REQUIRE(s.size() > 600);
+    const auto pieces = crispasr_tts_split_long_sentence(s, 600);
+    REQUIRE(pieces.size() == 2);
+    std::string joined;
+    for (const auto& p : pieces) {
+        REQUIRE(!p.empty());
+        REQUIRE(p.size() <= 600);
+        REQUIRE(p.size() >= 150); // never a short fragment behind the instruction (#594)
+        joined += (joined.empty() ? "" : " ") + p;
+    }
+    REQUIRE(joined == s); // nothing lost or reordered
+    // Every piece but the last ends at a semicolon, the strongest break here.
+    REQUIRE(last_mark(pieces[0]) == ';');
+    REQUIRE(!ends_with(pieces[0], "where the priest and"));
+    REQUIRE(pieces[1].rfind("his mistress", 0) != 0);
+}
+
+TEST_CASE("#609 negative control: CRISPASR_TTS_CLAUSE_SPLIT=0 reproduces the mid-phrase cut", "[unit][chunking]") {
+    // Proves the test above can fail: the old whitespace split is exactly the
+    // boundary the reporter heard as a dropped word.
+    set_clause_split_env("0");
+    const auto pieces = crispasr_tts_split_long_sentence(k_long_sentence, 600);
+    set_clause_split_env(nullptr);
+    REQUIRE(pieces.size() == 2);
+    REQUIRE(ends_with(pieces[0], "where the priest and"));
+    REQUIRE(pieces[1].rfind("his mistress were overwhelmed", 0) == 0);
+}
+
+TEST_CASE("#609: the bt2-tts chunk plan of the 000522 paragraph has no mid-phrase boundary", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    const std::string para = std::string("He felt as if he had been transported to Fairy-land and enjoyed a happiness "
+                                         "seldom tasted by man. ") +
+                             k_long_sentence +
+                             " The mountains of Switzerland are more majestic and strange, but there is a charm in "
+                             "the banks of this divine river that I never before saw equalled.";
+    const auto chunks = crispasr_tts_plan_chunks_for_backend(para, "bt2-tts", 600);
+    REQUIRE(chunks.size() >= 2);
+    std::string joined;
+    for (const auto& c : chunks) {
+        REQUIRE(c.size() <= 600);
+        const char m = last_mark(c);
+        INFO("chunk: " << c);
+        REQUIRE((m == '.' || m == '!' || m == '?' || m == ';' || m == ':' || m == ','));
+        joined += (joined.empty() ? "" : " ") + c;
+    }
+    REQUIRE(joined == para);
+}
+
+TEST_CASE("#609: clause breaks outrank commas, commas outrank bare spaces", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    // 4 x 30-byte clauses; the semicolon is off-centre, the comma central.
+    const std::string a = "alpha beta gamma delta epsilon"; // 30 bytes
+    const std::string s1 = a + "; " + a + ", " + a + " " + a + ".";
+    auto p1 = crispasr_tts_split_long_sentence(s1, 100);
+    REQUIRE(p1.size() == 2);
+    REQUIRE(last_mark(p1[0]) == ';');
+    // No clause mark: the comma nearest the middle wins over plain spaces.
+    const std::string s2 = a + " " + a + ", " + a + " " + a + ".";
+    auto p2 = crispasr_tts_split_long_sentence(s2, 100);
+    REQUIRE(p2.size() == 2);
+    REQUIRE(last_mark(p2[0]) == ',');
+    // Em dash (U+2014) counts as a clause break, with or without spaces.
+    const std::string s3 = a + " " + a + "\xe2\x80\x94" + a + " " + a + ".";
+    auto p3 = crispasr_tts_split_long_sentence(s3, 100);
+    REQUIRE(p3.size() == 2);
+    REQUIRE(ends_with(p3[0], "\xe2\x80\x94"));
+}
+
+TEST_CASE("#609: a clause mark before a conjunction ranks with the commas", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    const std::string a = "alpha beta gamma delta epsilon"; // 30 bytes
+    // "; and" sits nearer the balanced middle than "; we", but only the
+    // second starts a fresh clause.
+    const std::string s = a + " " + a + "; we " + a + "; and " + a + " " + a + ".";
+    auto p = crispasr_tts_split_long_sentence(s, 120);
+    REQUIRE(p.size() == 2);
+    REQUIRE(p[1].rfind("we ", 0) == 0);
+    // The real sentence: the break lands before "I have seen this lake",
+    // not before "and the waves dash".
+    auto q = crispasr_tts_split_long_sentence(k_long_sentence, 600);
+    REQUIRE(q.size() == 2);
+    REQUIRE(q[1].rfind("I have seen this lake", 0) == 0);
+}
+
+TEST_CASE("#609: a period the sentence splitter kept (M., Mr.) is the last resort", "[unit][chunking]") {
+    // The last space before the 100-byte cap follows "M.", so the old greedy
+    // cut synthesised "... M." and "Krempe ..." as two generations.
+    const std::string s = std::string(40, 'x') + " " + std::string(55, 'y') + " M. Krempe and the rest of it.";
+    set_clause_split_env("0");
+    auto old_pieces = crispasr_tts_split_long_sentence(s, 100);
+    set_clause_split_env(nullptr);
+    REQUIRE(ends_with(old_pieces[0], " M.")); // negative control: the old rule does split there
+    auto p = crispasr_tts_split_long_sentence(s, 100);
+    REQUIRE(p.size() == 2);
+    REQUIRE(!ends_with(p[0], "M."));
+    REQUIRE(p[1].find("M. Krempe") != std::string::npos);
+}
+
+TEST_CASE("#609: a sentence just over the cap does not leave a tiny tail", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    std::string s;
+    while (s.size() < 590)
+        s += "word, ";
+    s += "end of it all.";
+    REQUIRE(s.size() > 600);
+    set_clause_split_env("0");
+    auto old_pieces = crispasr_tts_split_long_sentence(s, 600);
+    set_clause_split_env(nullptr);
+    REQUIRE(old_pieces.back().size() < 150); // negative control: the old cut leaves a fragment
+    auto p = crispasr_tts_split_long_sentence(s, 600);
+    REQUIRE(p.size() == 2);
+    for (const auto& piece : p) {
+        REQUIRE(piece.size() <= 600);
+        REQUIRE(piece.size() >= 150);
+    }
+}
+
+TEST_CASE("#609: the hard cut of a blob without spaces never splits a UTF-8 character", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    std::string blob;
+    for (int i = 0; i < 100; i++)
+        blob += "\xc3\xa9";                              // é, 2 bytes: 200 bytes, no whitespace
+    auto p = crispasr_tts_split_long_sentence(blob, 51); // odd cap: a byte cut would land mid-character
+    REQUIRE(p.size() >= 4);
+    std::string joined;
+    for (const auto& piece : p) {
+        REQUIRE(piece.size() <= 51);
+        REQUIRE(valid_utf8(piece));
+        joined += piece;
+    }
+    REQUIRE(joined == blob);
+}
+
+TEST_CASE("#609: CJK sentences without spaces break after fullwidth punctuation", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    // 30 x "\u5b57" (3 bytes each) = 90 bytes per clause; no spaces anywhere.
+    std::string clause;
+    for (int i = 0; i < 30; i++)
+        clause += "\xe5\xad\x97";
+    const std::string comma = "\xef\xbc\x8c";     // U+FF0C FULLWIDTH COMMA
+    const std::string semicolon = "\xef\xbc\x9b"; // U+FF1B FULLWIDTH SEMICOLON
+    const std::string s = clause + comma + clause + semicolon + clause + comma + clause + "\xe3\x80\x82";
+    auto p = crispasr_tts_split_long_sentence(s, 240);
+    REQUIRE(p.size() == 2);
+    REQUIRE(ends_with(p[0], semicolon)); // the clause mark beats the commas
+    std::string joined;
+    for (const auto& piece : p) {
+        REQUIRE(piece.size() <= 240);
+        REQUIRE(valid_utf8(piece));
+        joined += piece;
+    }
+    REQUIRE(joined == s);
+}
+
+TEST_CASE("#609: short sentences pass through the long-sentence splitter unchanged", "[unit][chunking]") {
+    set_clause_split_env(nullptr);
+    REQUIRE(crispasr_tts_split_long_sentence("Hello there.", 600) == std::vector<std::string>{"Hello there."});
+    REQUIRE(crispasr_tts_split_long_sentence("   ", 600).empty());
+}
