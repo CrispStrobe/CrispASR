@@ -3190,7 +3190,7 @@ int main(int argc, char** argv) {
             wparams.suppress_nst = params.suppress_nst;
 
             // Resolve `--vad` without `--vad-model` to the canonical
-            // ggml-silero-v6.2.0.bin in the cache, downloading on first
+            // ggml-silero-v6.3.0.bin in the cache, downloading on first
             // use — matches the auto-cache UX of every non-whisper
             // backend (#33). Path must outlive whisper_full(); kept on
             // this stack frame.

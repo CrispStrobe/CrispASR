@@ -22,7 +22,7 @@ struct whisper_params; // fwd decl
 
 // Resolve the user-supplied VAD model path. When the user passed `--vad`
 // without `--vad-model` (or with `--vad-model auto|default`), download
-// the canonical ggml-silero-v6.2.0.bin into the crispasr cache dir on
+// the canonical ggml-silero-v6.3.0.bin into the crispasr cache dir on
 // first use. Returns empty if VAD was not requested at all.
 //
 // Both the unified slicer and the whisper backend call this so users
@@ -38,7 +38,7 @@ std::string crispasr_resolve_vad_model(const whisper_params& p);
 // 'marblenet', 'webrtc' and 'auto'/'default', so four working options were
 // undiscoverable. Add a keyword here and in crispasr_resolve_vad_model().
 inline const char* crispasr_vad_model_keywords() {
-    return "auto, silero, silero-v6.3, firered, marblenet, webrtc, whisper-vad";
+    return "auto, silero, silero-v6.3, silero-v6.2, firered, marblenet, webrtc, whisper-vad";
 }
 
 // Returns true if the resolved VAD model is a FireRedVAD model (not Silero).

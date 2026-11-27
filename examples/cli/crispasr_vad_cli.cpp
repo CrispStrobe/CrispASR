@@ -18,10 +18,11 @@
 namespace {
 constexpr const char* kVadSileroUrl = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin";
 constexpr const char* kVadSileroFile = "ggml-silero-v6.2.0.bin";
-// Silero VAD v6.3 (opt-in): stricter than v6.2 at the same threshold, so it is
-// not the default until thresholds and the Silero-driven backends (hikari,
-// index-echo) are re-checked. Pinned to the commit; byte-identical to the
-// ggml-org/whisper-vad#2 upload (sha256 93ecafbf...cffdbd1).
+// Silero VAD v6.3 is the default (tools/ci-heavy/vad_v63_eval.py: WER 0.036 vs
+// 0.044 for v6.2, less false speech, same threshold 0.5). v6.2 stays reachable
+// via `-vm silero-v6.2`; hikari and index-echo pin their own v6.2 file. Pinned to
+// the commit; byte-identical to the ggml-org/whisper-vad#2 upload (sha256
+// 93ecafbf...cffdbd1).
 constexpr const char* kVadSilero63Url =
     "https://huggingface.co/cstr/silero-vad-GGUF/resolve/baa429e63d02402131ff3ed4369e9b40d4981627/"
     "ggml-silero-v6.3.0.bin";
@@ -54,15 +55,15 @@ std::string crispasr_resolve_vad_model(const whisper_params& p) {
     if (!want_vad)
         return "";
     // Explicit path (not a keyword) — use as-is
-    if (!v.empty() && v != "auto" && v != "default" && v != "silero" && v != "silero-v6.3" && v != "firered" &&
-        v != "whisper-vad" && v != "marblenet" && v != "webrtc")
+    if (!v.empty() && v != "auto" && v != "default" && v != "silero" && v != "silero-v6.2" && v != "silero-v6.3" &&
+        v != "firered" && v != "whisper-vad" && v != "marblenet" && v != "webrtc")
         return v;
     // `--vad -vm webrtc` → WebRTC GMM VAD (no model file, pure algorithmic, BSD-3)
     if (v == "webrtc")
         return "webrtc";
-    // `--vad -vm silero-v6.3` → auto-download Silero VAD v6.3 (885 KB, opt-in)
-    if (v == "silero-v6.3")
-        return crispasr_cache::ensure_cached_file(kVadSilero63File, kVadSilero63Url, p.no_prints, "crispasr[vad]",
+    // `--vad -vm silero-v6.2` → previous default, Silero VAD v6.2 (885 KB)
+    if (v == "silero-v6.2")
+        return crispasr_cache::ensure_cached_file(kVadSileroFile, kVadSileroUrl, p.no_prints, "crispasr[vad]",
                                                   p.cache_dir);
     // `--vad -vm firered` → auto-download FireRedVAD (2.4 MB, F1=97.57%)
     if (v == "firered")
@@ -76,8 +77,9 @@ std::string crispasr_resolve_vad_model(const whisper_params& p) {
     if (v == "whisper-vad")
         return crispasr_cache::ensure_cached_file(kVadWhisperFile, kVadWhisperUrl, p.no_prints, "crispasr[vad]",
                                                   p.cache_dir);
-    // Default / auto / silero → Silero VAD (885 KB)
-    return crispasr_cache::ensure_cached_file(kVadSileroFile, kVadSileroUrl, p.no_prints, "crispasr[vad]", p.cache_dir);
+    // Default / auto / silero / silero-v6.3 → Silero VAD v6.3 (885 KB)
+    return crispasr_cache::ensure_cached_file(kVadSilero63File, kVadSilero63Url, p.no_prints, "crispasr[vad]",
+                                              p.cache_dir);
 }
 
 bool crispasr_vad_is_firered(const whisper_params& p) {

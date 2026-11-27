@@ -1,4 +1,4 @@
-### Silero VAD v6.3 — opt-in, default stays v6.2 (2026-11-27)
+### Silero VAD v6.3 — now the `--vad` default (2026-11-27)
 
 `-vm silero-v6.3` downloads `ggml-silero-v6.3.0.bin` from cstr/silero-vad-GGUF
 (pinned commit). Our conversion is byte-identical to the open ggml-org/whisper-vad#2
@@ -18,8 +18,9 @@ upload. Before switching the default (PR #612):
   short pauses more often (0.25 s: 8/10 vs 6/10). Lower thresholds buy no WER (0.043).
   Keep threshold 0.5 for v6.3. Source context (CRISPASR_SILERO_SOURCE_CONTEXT=1) brings
   probs to ~1e-3 of Python but changes no product metric; leave it opt-in.
-  Remaining for the default switch: user call on URL (our cstr pin vs ggml-org once
-  whisper-vad#2 lands); small sample, so treat the WER gain as "no regression".
+  Switched: default downloads our pinned cstr copy; `-vm silero-v6.2` keeps the old one.
+  Could move the URL to ggml-org once
+  whisper-vad#2 lands. Small sample, so treat the WER gain as "no regression".
 
 ### ASR final checkpoint / handoff (2026-11-18)
 
