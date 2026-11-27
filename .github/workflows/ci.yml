@@ -398,6 +398,7 @@ jobs:
           CRISPASR_LIB="$PWD/$library" python3 tests/test_python_wrapper_operations.py -v
           python3 tests/test_python_speaker_primitives.py -v
           python3 tests/test_python_audio_utilities.py -v
+          python3 tests/test_convert_silero_version.py -v
           python3 tools/check-python-api-coverage.py --library "$PWD/$library"
           python3 tests/test_python_legacy_pointer.py -v
           CRISPASR_LIB_PATH="$PWD/$library" python3 -m pytest -q tests/test_binding_parity.py tests/test_python_binding_utils.py tests/test_python_helpers.py tests/test_python_audio_resample.py

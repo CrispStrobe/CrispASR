@@ -1,11 +1,30 @@
 import os
 import struct
 import argparse
-import numpy as np
-from silero_vad import load_silero_vad, __version__ as silero_version
+import re
+
+
+def parse_version(version):
+    """silero-vad __version__ -> (major, minor, patch).
+
+    6.3 reports "6.3" (two parts) where 6.2 reported "6.2.0"; missing parts
+    are 0 and a suffix such as "rc1" on a part is ignored.
+    """
+    parts = []
+    for p in str(version).split(".")[:3]:
+        m = re.match(r"\d+", p)
+        if not m:
+            raise ValueError(f"unparseable silero-vad version {version!r}")
+        parts.append(int(m.group(0)))
+    parts += [0] * (3 - len(parts))
+    return tuple(parts)
 
 
 def convert_silero_vad(output_path, print_tensors=True):
+    import numpy as np
+    from silero_vad import load_silero_vad, __version__ as silero_version
+
+    major, minor, patch = parse_version(silero_version)
     model = load_silero_vad()
     state_dict = model.state_dict()
 
@@ -20,7 +39,7 @@ def convert_silero_vad(output_path, print_tensors=True):
             cleaned_dict[clean_key] = value
 
     base, ext = os.path.splitext(output_path)
-    output_file = f"{base}-v{silero_version}-ggml{ext}"
+    output_file = f"{base}-v{major}.{minor}.{patch}-ggml{ext}"
     print(f"Saving GGML Silero-VAD model to {output_file}")
 
     print("\nTensor info for debugging:")
@@ -37,9 +56,6 @@ def convert_silero_vad(output_path, print_tensors=True):
         fout.write(struct.pack("i", str_len))
         fout.write(model_type.encode("utf-8"))
 
-        version_parts = silero_version.split(".")
-        version_parts += ["0"] * (3 - len(version_parts))
-        major, minor, patch = map(int, version_parts[:3])
         print(f"Version: {major}.{minor}.{patch}")
         fout.write(struct.pack("i", major))
         fout.write(struct.pack("i", minor))
