@@ -210,9 +210,12 @@ def main():
         agg = {"recall": [], "false": [], "split": {}, "wer_ref": [], "wer_hyp": []}
         for f in files:
             exp = C.SCRATCH / f"{f['path'].stem}-{name}.json"
-            r = C.run([b, "-m", asr, "-f", f["path"], "--vad", "-vm", vad[k], "-vt", str(th), "--vad-export-raw",
-                       exp, "-np", "-nt", "-t", NT], C.OUT / f"cli-{name}-{f['path'].stem}.log", check=False,
-                      timeout=1800)
+            # --vad-export-raw exits after writing the segments, so the
+            # transcript needs its own run with the same VAD settings.
+            C.run([b, "-m", asr, "-f", f["path"], "--vad", "-vm", vad[k], "-vt", str(th), "--vad-export-raw",
+                   exp, "-np", "-t", NT], C.OUT / f"vad-{name}-{f['path'].stem}.log", check=False, timeout=1800)
+            r = C.run([b, "-m", asr, "-f", f["path"], "--vad", "-vm", vad[k], "-vt", str(th), "-np", "-nt", "-t", NT],
+                      C.OUT / f"cli-{name}-{f['path'].stem}.log", check=False, timeout=1800)
             sl = json.loads(exp.read_text())["crispasr_vad"]["slices"] if exp.exists() else []
             m = seg_metrics([(s["start"], s["end"]) for s in sl], f)
             agg["recall"].append(m["recall"])
@@ -228,6 +231,8 @@ def main():
         }
         C.save(res)
 
+    if all(a["wer"] > 0.9 for a in res["arms"].values()):
+        raise SystemExit("every arm has WER > 0.9: the transcript capture is broken, not the VAD")
     lines = ["## Silero VAD v6.3 vs v6.2", "", "### Parity vs silero-vad Python (max |Δp| per file)", "",
              "| model | ours, source context | product path (no context) |", "|---|---|---|"]
     for k, rows in res["parity"].items():
