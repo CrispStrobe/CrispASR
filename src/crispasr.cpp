@@ -5909,9 +5909,23 @@ struct whisper_vad_segments* whisper_vad_segments_from_probs(struct whisper_vad_
             } else {
                 speeches.push_back({curr_speech_start, curr_sample});
 
+                // silero-vad v6.3 (#813): a forced cut with no silence to cut at
+                // used to drop the speech that continued after it, until the
+                // probability climbed back over `threshold`. Upstream now keeps
+                // it in the next segment unless the cut falls inside a pause.
+                // CRISPASR_VAD_LEGACY_MAX_SPLIT=1 restores the old behaviour.
+                static const bool legacy_split = [] {
+                    const char* e = std::getenv("CRISPASR_VAD_LEGACY_MAX_SPLIT");
+                    return e && *e && *e != '0';
+                }();
+                const bool in_pause = temp_end != 0 || curr_prob < neg_threshold;
                 prev_end = next_start = temp_end = 0;
-                is_speech_segment = false;
-                has_curr_speech = false;
+                if (legacy_split || in_pause) {
+                    is_speech_segment = false;
+                    has_curr_speech = false;
+                } else {
+                    curr_speech_start = curr_sample;
+                }
                 continue;
             }
         }

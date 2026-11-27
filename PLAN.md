@@ -5,10 +5,13 @@
 upload. Before switching the default (PR #612):
 - Re-check the default `--vad-threshold`: upstream says v6.3 is slightly stricter at
   the same threshold.
-- Re-run hikari and index-echo with v6.3 (both were tuned on v6.2).
-- Compare our segmentation against upstream v6.3 fixes #813 (speech across a forced
-  max-duration split), #818 (overlap with large speech_pad_ms), #805 (negative threshold
-  floor 0.01) and #806 (empty chunks), and port what applies with unit tests.
+- Upstream segmentation fixes: #813 ported (test-vad-max-split, legacy gate
+  CRISPASR_VAD_LEGACY_MAX_SPLIT); #805 was already in place; #818 (VADIterator) and #806
+  (collect_chunks) are in Python helpers we do not port.
+- hikari and index-echo pin their own ggml-silero-v6.2.0.bin (sibling file / GGUF key),
+  matched to upstream references run with v6.2, so the --vad default does not reach them.
+- Threshold and quality: tools/ci-heavy/vad_v63_eval.py (parity vs silero-vad Python,
+  recall / false speech / pause splits / parakeet WER for v6.2@0.5 vs v6.3@0.5..0.35).
 
 ### ASR final checkpoint / handoff (2026-11-18)
 

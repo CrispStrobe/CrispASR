@@ -402,6 +402,18 @@ target_compile_definitions(${VAD_TEST} PRIVATE
 add_test(NAME ${VAD_TEST} COMMAND ${VAD_TEST})
 set_tests_properties(${VAD_TEST} PROPERTIES LABELS "unit")
 
+# Speech across a forced --vad-max-speech-duration-s cut (silero-vad #813);
+# the legacy run is the negative control and must see the old gap.
+add_executable(test-vad-max-split test-vad-max-split.cpp)
+target_include_directories(test-vad-max-split PRIVATE ../include ../ggml/include ../examples)
+target_link_libraries(test-vad-max-split PRIVATE common)
+target_compile_definitions(test-vad-max-split PRIVATE
+    VAD_MODEL_PATH="${PROJECT_SOURCE_DIR}/models/for-tests-silero-v6.2.0-ggml.bin")
+add_test(NAME test-vad-max-split COMMAND test-vad-max-split)
+add_test(NAME test-vad-max-split-legacy COMMAND test-vad-max-split)
+set_tests_properties(test-vad-max-split-legacy PROPERTIES ENVIRONMENT "CRISPASR_VAD_LEGACY_MAX_SPLIT=1")
+set_tests_properties(test-vad-max-split test-vad-max-split-legacy PROPERTIES LABELS "unit")
+
 #VAD test full uses crispasr_full with VAD enabled
 set(VAD_TEST test-vad-full)
 add_executable(${VAD_TEST} ${VAD_TEST}.cpp)
