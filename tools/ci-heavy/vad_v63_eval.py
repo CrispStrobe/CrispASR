@@ -179,7 +179,7 @@ def seg_metrics(segs, f):
 
 
 def main():
-    C.run([sys.executable, "-m", "pip", "install", "-q", "torch", "packaging", "--index-url",
+    C.run([sys.executable, "-m", "pip", "install", "-q", "torch", "torchaudio", "packaging", "--index-url",
            "https://download.pytorch.org/whl/cpu", "--extra-index-url", "https://pypi.org/simple"],
           C.OUT / "pip-torch.log")
     b, lib_path = build_shared()
