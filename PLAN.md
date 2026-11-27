@@ -1,3 +1,15 @@
+### Silero VAD v6.3 — opt-in, default stays v6.2 (2026-11-27)
+
+`-vm silero-v6.3` downloads `ggml-silero-v6.3.0.bin` from cstr/silero-vad-GGUF
+(pinned commit). Our conversion is byte-identical to the open ggml-org/whisper-vad#2
+upload. Before switching the default (PR #612):
+- Re-check the default `--vad-threshold`: upstream says v6.3 is slightly stricter at
+  the same threshold.
+- Re-run hikari and index-echo with v6.3 (both were tuned on v6.2).
+- Compare our segmentation against upstream v6.3 fixes #813 (speech across a forced
+  max-duration split), #818 (overlap with large speech_pad_ms), #805 (negative threshold
+  floor 0.01) and #806 (empty chunks), and port what applies with unit tests.
+
 ### ASR final checkpoint / handoff (2026-11-18)
 
 - Final user instruction authorizes the normal checkpoint push. See

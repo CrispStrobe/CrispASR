@@ -218,8 +218,8 @@ document (issue #228).
 
 | Flag | Meaning |
 |---|---|
-| `--vad` | Enable Silero VAD. Auto-downloads `ggml-silero-v6.2.0.bin` (~885 KB) to `~/.cache/crispasr/` on first use |
-| `-vm FNAME`, `--vad-model FNAME` | Override the VAD model: a path, or one of `auto`, `silero`, `firered`, `marblenet`, `webrtc`, `whisper-vad` (default: auto) |
+| `--vad` | Enable Silero VAD. Auto-downloads `ggml-silero-v6.2.0.bin` (~885 KB) to `~/.cache/crispasr/` on first use. `-vm silero-v6.3` opts into Silero v6.3, which is stricter at the same threshold |
+| `-vm FNAME`, `--vad-model FNAME` | Override the VAD model: a path, or one of `auto`, `silero`, `silero-v6.3`, `firered`, `marblenet`, `webrtc`, `whisper-vad` (default: auto) |
 | `-vt F` | VAD threshold (default 0.5) |
 | `-vspd N` | VAD min speech duration (ms, default 250) |
 | `-vsd N` | VAD min silence duration (ms, default 100) |

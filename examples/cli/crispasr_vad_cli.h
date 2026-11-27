@@ -38,7 +38,7 @@ std::string crispasr_resolve_vad_model(const whisper_params& p);
 // 'marblenet', 'webrtc' and 'auto'/'default', so four working options were
 // undiscoverable. Add a keyword here and in crispasr_resolve_vad_model().
 inline const char* crispasr_vad_model_keywords() {
-    return "auto, silero, firered, marblenet, webrtc, whisper-vad";
+    return "auto, silero, silero-v6.3, firered, marblenet, webrtc, whisper-vad";
 }
 
 // Returns true if the resolved VAD model is a FireRedVAD model (not Silero).

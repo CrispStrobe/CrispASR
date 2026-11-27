@@ -36,7 +36,8 @@ std::string slurp(const std::string& p) {
 // path" test. Kept here deliberately: if someone adds a keyword to the
 // resolver without advertising it, this list is what they must also touch,
 // and the assertions below then force the help string to match.
-const char* kResolverKeywords[] = {"auto", "default", "silero", "firered", "whisper-vad", "marblenet", "webrtc"};
+const char* kResolverKeywords[] = {"auto",    "default",     "silero",    "silero-v6.3",
+                                   "firered", "whisper-vad", "marblenet", "webrtc"};
 
 } // namespace
 
