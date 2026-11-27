@@ -329,6 +329,11 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   5. Python `Session(model, backend="vibevoice", use_gpu=True, n_gpu_layers=8)` with `CRISPASR_LIB_PATH=build/src/libcrispasr.dylib`: stderr has `vibevoice: layer offload (lm.layers.): gpu=[0,8)`, transcript contains the JFK sentence. Same with `n_gpu_layers=None`: no offload line. `CRISPASR_N_GPU_LAYERS=8` without the argument: offload line (old path still works).
 - Done when steps 1–5 are recorded here with the Mac model/RAM and commit; then post a short follow-up on #610 (ask the maintainer first).
 
+### Issue #609 bt2-tts remaining defects — fix on main, reply drafted (2026-11-27)
+
+- Done: 2de2f9ae splits a sentence over the 600-byte TTS chunk cap at a clause boundary (000522: old cut broken in 9/28 runs, clause split 0/28; CI 46000563841, lint 46000568395 green). The other 26 defect classes are the model's, measured in HISTORY 2026-11-27 with `tools/ci-heavy/bt2_609_ab.py`; input-side guidance (write `Monsieur`, spell out elided years, no `[brackets]` around spoken text) is in the bt2-tts row of `docs/tts.md`.
+- Open: (1) the #609 reply is drafted in the session report and waits for the maintainer; (2) the server copies a request's `temperature` into the params, but the bt2 CLI/server adapter applies only the startup value (`breeze_tts_2_set_temperature` is never called per request; the session C-ABI does call it); (3) the first two words of a generation hold 5/28 of the reported defect sites; no mitigation tried.
+
 ### Issue #589 generated semantic feedback — gated implementation Codex (2026-11-14)
 
 - Base `6b98da68a`; isolated `issue589-feedback`. Added upstream's generated
