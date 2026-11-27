@@ -7338,3 +7338,13 @@ catch_discover_tests(test-gpu-plugin-hint
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit;diag"
 )
+
+# ─── test-bt2-sampling — per-call bt2-tts sampling knobs (#609 follow-up) ────
+add_executable(test-bt2-sampling test-bt2-sampling.cpp)
+target_include_directories(test-bt2-sampling PRIVATE ${PROJECT_SOURCE_DIR}/examples/cli)
+target_compile_definitions(test-bt2-sampling PRIVATE CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(test-bt2-sampling PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-bt2-sampling
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;tts"
+)

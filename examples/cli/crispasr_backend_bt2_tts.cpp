@@ -28,6 +28,7 @@
 #include "whisper_params.h"
 
 #include "breeze_tts_2.h"
+#include "crispasr_bt2_sampling.h"
 #include "core/audio_resample.h"
 #include "core/tts_voice_policy.h"
 #include "core/wav_reader.h"
@@ -93,6 +94,7 @@ public:
         cp.use_gpu = p.use_gpu; // #292-adjacent: never let this default to false
         if (p.temperature > 0.0f)
             cp.temperature = p.temperature;
+        startup_temperature_ = cp.temperature;
         cp.seed = (uint64_t)p.seed;
         cp.max_new_tokens = p.max_new_tokens_explicit ? p.max_new_tokens : 0;
         applied_cap_ = cp.max_new_tokens;
@@ -128,6 +130,15 @@ public:
             return {};
         if (p.seed != 0)
             breeze_tts_2_set_seed(ctx_, (uint64_t)p.seed);
+        // Per call (#609): the server maps a request's temperature / top_k /
+        // top_p / repetition_penalty onto these params; init only saw the
+        // startup values. Unset fields fall back to startup/checkpoint values.
+        const auto smp = crispasr_bt2_resolve_sampling(p.temperature, p.tts_top_k, p.tts_top_p,
+                                                       p.tts_repetition_penalty, startup_temperature_);
+        breeze_tts_2_set_temperature(ctx_, smp.temperature);
+        breeze_tts_2_set_topk(ctx_, smp.top_k);
+        breeze_tts_2_set_topp(ctx_, smp.top_p);
+        breeze_tts_2_set_repetition_penalty(ctx_, smp.repetition_penalty);
         // Per call (#609): the server maps a request's max_new_tokens onto the
         // params it passes here; init only saw the startup value. 0 restores
         // the checkpoint default (breeze.sampling.max_new_tokens).
@@ -213,6 +224,7 @@ private:
     std::string ref_text_;
     std::string voice_key_; // identity of the loaded reference, "" when none
     int applied_cap_ = 0;   // max_new_tokens last passed to the context (0 = checkpoint default)
+    float startup_temperature_ = 0.9f;
 };
 
 } // namespace

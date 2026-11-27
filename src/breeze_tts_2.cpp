@@ -1623,6 +1623,9 @@ static std::vector<ggml_fp16_t> build_causal_mask(int T, int Lk, int n_past) {
 // history and differ only in the backbone hidden state at position 0, and
 // their logits are combined before each pick. bb_hidden is
 // [branches.size(), dd_backbone_hidden].
+static int effective_topk(const breeze_tts_2_context* c);
+static float effective_topp(const breeze_tts_2_context* c);
+
 static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden,
                                const std::vector<breeze_cfg::Branch>& branches, int32_t cb0, float temperature,
                                std::vector<int32_t>& codes, std::vector<std::vector<float>>* out_logits,
@@ -1703,8 +1706,8 @@ static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden,
             (*out_logits)[(size_t)cbi - 1] = logits;
         std::vector<float> sampling_logits = logits;
         mask_reserved(sampling_logits.data(), vocab, hp);
-        codes[(size_t)cbi] =
-            sample_logits(sampling_logits.data(), vocab, temperature, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
+        codes[(size_t)cbi] = sample_logits(sampling_logits.data(), vocab, temperature, effective_topk(c),
+                                           effective_topp(c), c->rng_state);
     }
     return true;
 }
@@ -1712,6 +1715,20 @@ static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden,
 // ===========================================================================
 // Autoregressive generation
 // ===========================================================================
+
+// Caller sampling knobs (context params / setters); 0 or less means "use the
+// checkpoint's breeze.sampling.* value". These used to be stored and never
+// read: the samplers took hp.* directly, so breeze_tts_2_set_topk() and the
+// params' topk/topp/repetition_penalty had no effect (#609 follow-up).
+static int effective_topk(const breeze_tts_2_context* c) {
+    return c->params.topk > 0 ? c->params.topk : (int)c->model.hp.s_top_k;
+}
+static float effective_topp(const breeze_tts_2_context* c) {
+    return c->params.topp > 0.0f ? c->params.topp : c->model.hp.s_top_p;
+}
+static float effective_repetition_penalty(const breeze_tts_2_context* c) {
+    return c->params.repetition_penalty > 0.0f ? c->params.repetition_penalty : c->model.hp.s_repetition_penalty;
+}
 
 struct GenOptions {
     float temperature = 0.9f;
@@ -1826,7 +1843,7 @@ static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledP
             fprintf(eos_trace, "%d %.6g %d\n", f, std::exp((bb_logits[(size_t)eos] - mx) / t) / sum, rank);
         }
         const int32_t cb0 =
-            sample_logits(bb_logits.data(), n_logits, bb_temp, (int)hp.s_top_k, hp.s_top_p, c->rng_state);
+            sample_logits(bb_logits.data(), n_logits, bb_temp, effective_topk(c), effective_topp(c), c->rng_state);
         if (cb0 == (int32_t)hp.backbone_eos_token_id) {
             if (ended_on_eos)
                 *ended_on_eos = true;
@@ -1913,9 +1930,9 @@ extern "C" struct breeze_tts_2_context_params breeze_tts_2_context_default_param
     p.use_gpu = false;
     p.temperature = 0.9f;
     p.depth_temperature = 0.9f;
-    p.topk = 50;
-    p.topp = 1.0f;
-    p.repetition_penalty = 1.1f;
+    p.topk = 0;               // 0 = checkpoint value (breeze.sampling.top_k, 50)
+    p.topp = 0.0f;            // 0 = checkpoint value (breeze.sampling.top_p, 1.0)
+    p.repetition_penalty = 0; // 0 = checkpoint value (breeze.sampling.repetition_penalty, 1.1)
     p.seed = 0;
     p.max_new_tokens = 0;
     p.codec_path = nullptr;
@@ -2064,6 +2081,14 @@ extern "C" void breeze_tts_2_set_topk(struct breeze_tts_2_context* ctx, int k) {
     if (ctx)
         ctx->params.topk = k;
 }
+extern "C" void breeze_tts_2_set_topp(struct breeze_tts_2_context* ctx, float p) {
+    if (ctx)
+        ctx->params.topp = p;
+}
+extern "C" void breeze_tts_2_set_repetition_penalty(struct breeze_tts_2_context* ctx, float r) {
+    if (ctx)
+        ctx->params.repetition_penalty = r;
+}
 extern "C" void breeze_tts_2_set_seed(struct breeze_tts_2_context* ctx, uint64_t seed) {
     if (ctx && seed != 0)
         ctx->rng_state = seed;
@@ -2170,7 +2195,7 @@ static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* 
     // penalty-free; applying 1.1 in the greedy path would therefore diverge
     // from the fixture by construction and send the first bisect chasing a
     // difference that is ours, not the model's.
-    opt.repetition_penalty = greedy ? 1.0f : c->model.hp.s_repetition_penalty;
+    opt.repetition_penalty = greedy ? 1.0f : effective_repetition_penalty(c);
     opt.dump_cb0_logits = out_cb0_logits;
 
     std::vector<std::vector<int32_t>> frames;

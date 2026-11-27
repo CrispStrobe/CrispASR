@@ -81,9 +81,9 @@ struct breeze_tts_2_context_params {
     bool use_gpu;
     float temperature;        // backbone sampling temperature (default 0.9)
     float depth_temperature;  // depth-decoder temperature   (default 0.9)
-    int topk;                 // default 50
-    float topp;               // default 1.0
-    float repetition_penalty; // default 1.1 (infer.py:26)
+    int topk;                 // <= 0: checkpoint value (50)
+    float topp;               // <= 0: checkpoint value (1.0)
+    float repetition_penalty; // <= 0: checkpoint value (1.1, infer.py:26); greedy runs use 1.0
     uint64_t seed;            // 0 = non-deterministic
     int max_new_tokens;       // max backbone AR frames (0 = default 750)
     // Path to the qwen3-tts-tokenizer-12hz codec GGUF. Without it the runtime
@@ -145,7 +145,9 @@ void breeze_tts_2_pcm_free(float* pcm);
 
 // Runtime setters.
 void breeze_tts_2_set_temperature(struct breeze_tts_2_context* ctx, float t);
-void breeze_tts_2_set_topk(struct breeze_tts_2_context* ctx, int k);
+void breeze_tts_2_set_topk(struct breeze_tts_2_context* ctx, int k);                 // <= 0: checkpoint value
+void breeze_tts_2_set_topp(struct breeze_tts_2_context* ctx, float p);               // <= 0: checkpoint value
+void breeze_tts_2_set_repetition_penalty(struct breeze_tts_2_context* ctx, float r); // <= 0: checkpoint value
 void breeze_tts_2_set_seed(struct breeze_tts_2_context* ctx, uint64_t seed);
 void breeze_tts_2_set_n_threads(struct breeze_tts_2_context* ctx, int n);
 // n <= 0 restores the checkpoint's generation limit.
