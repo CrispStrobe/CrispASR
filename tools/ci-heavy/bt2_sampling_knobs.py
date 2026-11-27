@@ -14,7 +14,8 @@ request below produced the same audio for the same seed. Pass criteria:
 On a commit without the fix the three "differs" rows fail; that is the
 negative control.
 
-  gh workflow run heavy-cpu.yml --ref <sha> -f script=tools/ci-heavy/bt2_sampling_knobs.py -f timeout_minutes=120
+  gh workflow run heavy-cpu.yml --ref <sha> -f script=tools/ci-heavy/bt2_sampling_knobs.py \
+     -f pip=huggingface_hub -f timeout_minutes=120
 """
 import hashlib
 import json
@@ -23,6 +24,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -63,8 +65,12 @@ def speech(name, extra):
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=3600) as r:
         data = r.read()
-    (C.OUT / f"{name}.wav").write_bytes(data)
-    return hashlib.sha256(data).hexdigest()
+    out = C.OUT / f"{name}.wav"
+    out.write_bytes(data)
+    # Hash the PCM, not the file: the server embeds per-request provenance
+    # metadata, so file bytes differ even for identical audio.
+    with wave.open(str(out)) as w:
+        return hashlib.sha256(w.readframes(w.getnframes())).hexdigest()
 
 
 def main():
